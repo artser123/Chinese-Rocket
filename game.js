@@ -1077,6 +1077,22 @@ const ZDIFF = {
   hard:   { base: 70, ramp: 1.9,  cap: 270, spawn0: 2.1, spawnDecay: 0.08,  spawnMin: 0.8 },
 };
 let ZW = 0, ZH = 0;
+const zGroundY = () => ($("zombieBar").offsetTop || ZH - 90) - 28;
+const zPoliceX = () => Math.max(70, ZW * 0.14);
+const zGunTip = () => ({ x: zPoliceX() + 56 - zb.recoil, y: zGroundY() - 75 });
+// pre-generate twinkling stars + drifting fog puffs (regenerated on resize)
+let zStars = [], zFog = [];
+function zRegenAtmosphere() {
+  const gy = zGroundY();
+  zStars = Array.from({ length: 60 }, () => ({
+    x: Math.random() * ZW, y: Math.random() * gy * 0.7,
+    r: rand(0.4, 1.6), tw: rand(0, 6.28), sp: rand(1.5, 4),
+  }));
+  zFog = Array.from({ length: 6 }, () => ({
+    x: Math.random() * ZW, y: gy * (0.45 + Math.random() * 0.4),
+    r: rand(80, 180), sp: rand(6, 16), a: rand(0.04, 0.1),
+  }));
+}
 function zresize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   ZW = window.innerWidth; ZH = window.innerHeight;
@@ -1085,6 +1101,7 @@ function zresize() {
   zcanvas.style.width = ZW + "px";
   zcanvas.style.height = ZH + "px";
   zctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  zRegenAtmosphere();
 }
 window.addEventListener("resize", zresize);
 window.addEventListener("orientationchange", () => setTimeout(zresize, 200));
@@ -1092,9 +1109,6 @@ window.addEventListener("resize", () => { if (matching) applyMatchLayout(); });
 window.addEventListener("orientationchange", () => { if (matching) setTimeout(applyMatchLayout, 200); });
 zresize();
 
-const zGroundY = () => ($("zombieBar").offsetTop || ZH - 90) - 28;
-const zPoliceX = () => Math.max(70, ZW * 0.14);
-const zGunTip = () => ({ x: zPoliceX() + 56 - zb.recoil, y: zGroundY() - 75 });
 const zombieBestKey = () => `cr_best_hsk${currentLevel}_zombie_${difficulty}_${zDuration}`;
 function zSpeed() {
   const d = ZDIFF[difficulty];
@@ -1150,6 +1164,11 @@ function spawnZombie() {
   zb.zombies.push({
     word: w, x: ZW + 40, speed: zSpeed() * rand(0.9, 1.1),
     phase: rand(0, 6.28), hit: false, dead: false, fall: 0,
+    scale: rand(0.85, 1.2),
+    skin: pick(["#7fc45a", "#6aa84a", "#8fd96b", "#9ec47a"]),
+    skinDark: pick(["#4e8f2e", "#3a6a22", "#5a8033"]),
+    shirtLight: pick(["#7a5a9a", "#5a3a7a", "#6a4a8a", "#8a6aaa", "#4a5a8a"]),
+    shirtDark: pick(["#5a3a7a", "#3a2a5a", "#4a3a6a", "#6a4a8a", "#2a3a6a"]),
   });
 }
 
@@ -1201,10 +1220,21 @@ function fireZOption(i) {
     const pts = 10 + distBonus + Math.min(zb.combo - 1, 5) * 2;
     zb.score += pts;
     zb.kills++;
-    zb.recoil = 9; zb.flash = 0.07; zb.shake = 0.12;
+    zb.recoil = 9; zb.flash = 0.07; zb.shake = 0.18;
     const tip = zGunTip();
     zb.bullets.push({ x: tip.x, y: tip.y, target });
     sfx.gun();
+    // gun smoke puffs at muzzle
+    for (let i = 0; i < 5; i++) {
+      zb.particles.push({ x: tip.x + rand(-4, 4), y: tip.y + rand(-4, 4), vx: rand(40, 120), vy: rand(-30, -5),
+                          life: rand(0.5, 1.0), age: 0, r: rand(6, 12), color: "rgba(180,180,180,0.5)", smoke: true, gravity: false });
+    }
+    // foot dust under zombie
+    const gy = zGroundY();
+    for (let i = 0; i < 4; i++) {
+      zb.particles.push({ x: target.x + rand(-8, 8), y: gy + rand(-2, 2), vx: rand(-30, 30), vy: rand(-30, -10),
+                          life: rand(0.3, 0.6), age: 0, r: rand(2, 4), color: "rgba(120,100,80,0.6)", gravity: true });
+    }
     zb.floaters.push({ x: target.x, y: zGroundY() - 135, text: "+" + pts, age: 0, life: 0.9 });
     showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`, "ztoast");
     speak(zFirst(w[0]));
@@ -1233,10 +1263,22 @@ function killZombie(z) {
   z.dead = true; z.fall = 0;
   sfx.groan();
   const gy = zGroundY();
-  for (let i = 0; i < 18; i++) {
-    const a = rand(-2.6, 0.4), sp = rand(60, 220);
+  // green blood splatter (more, varied)
+  for (let i = 0; i < 26; i++) {
+    const a = rand(-2.6, 0.4), sp = rand(80, 280);
     zb.particles.push({ x: z.x, y: gy - 85, vx: Math.cos(a) * sp + 40, vy: Math.sin(a) * sp,
-                        life: rand(0.4, 0.8), age: 0, r: rand(2, 4.5), color: pick(["#7fc45a", "#4e8f2e", "#a5ff6b"]) });
+                        life: rand(0.4, 0.9), age: 0, r: rand(2, 5.5), color: pick(["#7fc45a", "#4e8f2e", "#a5ff6b", "#3a6a22"]), gravity: true });
+  }
+  // red blood splatter
+  for (let i = 0; i < 10; i++) {
+    const a = rand(-2.6, 0.4), sp = rand(60, 200);
+    zb.particles.push({ x: z.x, y: gy - 85, vx: Math.cos(a) * sp + 40, vy: Math.sin(a) * sp,
+                        life: rand(0.3, 0.7), age: 0, r: rand(1.5, 3.5), color: pick(["#a01010", "#c01818", "#7a0a0a"]), gravity: true });
+  }
+  // smoke puff at impact
+  for (let i = 0; i < 6; i++) {
+    zb.particles.push({ x: z.x + rand(-10, 10), y: gy - 85 + rand(-10, 10), vx: rand(-20, 20), vy: rand(-40, -10),
+                        life: rand(0.6, 1.2), age: 0, r: rand(8, 16), color: "rgba(120,120,120,0.5)", smoke: true, gravity: false });
   }
 }
 
@@ -1288,7 +1330,9 @@ function zUpdate(dt) {
   }
   for (let i = zb.particles.length - 1; i >= 0; i--) {
     const p = zb.particles[i];
-    p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * dt;
+    p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.gravity) p.vy += 500 * dt;
+    if (p.smoke) { p.vx *= 0.96; p.vy *= 0.96; p.r += 8 * dt; }
     if (p.age >= p.life) zb.particles.splice(i, 1);
   }
   for (let i = zb.floaters.length - 1; i >= 0; i--) {
@@ -1312,60 +1356,139 @@ function zRoundRect(c, x, y, w, h, r) {
 
 function zDrawBackground(c) {
   const gy = zGroundY();
+  // sky gradient (deeper, duskier)
   const g = c.createLinearGradient(0, 0, 0, gy);
-  g.addColorStop(0, "#070a1c"); g.addColorStop(0.65, "#1b1233"); g.addColorStop(1, "#4a1a2c");
+  g.addColorStop(0, "#05070f"); g.addColorStop(0.55, "#1a1130"); g.addColorStop(1, "#3a1626");
   c.fillStyle = g; c.fillRect(0, 0, ZW, ZH);
-  // moon
-  c.fillStyle = "#f3e9b8"; c.beginPath(); c.arc(ZW * 0.8, gy * 0.22, 26, 0, 6.28); c.fill();
-  c.fillStyle = "#e0d6a5"; c.beginPath(); c.arc(ZW * 0.8 - 8, gy * 0.22 - 6, 5, 0, 6.28); c.arc(ZW * 0.8 + 9, gy * 0.22 + 8, 4, 0, 6.28); c.fill();
-  // far buildings (parallax scrolling so the police looks like he keeps walking)
+
+  // stars (twinkle)
+  for (const s of zStars) {
+    s.tw += 0.05;
+    c.globalAlpha = 0.5 + Math.sin(s.tw) * 0.4;
+    c.fillStyle = "#e8e6ff";
+    c.beginPath(); c.arc(s.x, s.y, s.r, 0, 6.28); c.fill();
+  }
+  c.globalAlpha = 1;
+
+  // moon with glow halo
+  const mx = ZW * 0.8, my = gy * 0.22;
+  const halo = c.createRadialGradient(mx, my, 8, mx, my, 70);
+  halo.addColorStop(0, "rgba(243,233,184,0.45)"); halo.addColorStop(1, "rgba(243,233,184,0)");
+  c.fillStyle = halo; c.beginPath(); c.arc(mx, my, 70, 0, 6.28); c.fill();
+  c.fillStyle = "#f3e9b8"; c.beginPath(); c.arc(mx, my, 26, 0, 6.28); c.fill();
+  c.fillStyle = "#e0d6a5"; c.beginPath(); c.arc(mx - 8, my - 6, 5, 0, 6.28); c.arc(mx + 9, my + 8, 4, 0, 6.28); c.fill();
+
+  // far buildings (parallax) — two layers for depth
   const par = zb.scroll * 0.25, off = par % 160;
   for (let x = -off - 160; x < ZW + 160; x += 160) {
     const k = Math.round((x + par) / 160);
     const h = 50 + ((k * 37) % 7) * 16, bw = 110 + ((k * 11) % 3) * 12;
     c.fillStyle = "#11142a"; c.fillRect(x, gy - h, bw, h);
     c.fillStyle = "#c9b458";
+    let wi = 0;
     for (let wy = gy - h + 10; wy < gy - 14; wy += 16)
-      for (let wx = x + 10; wx < x + bw - 10; wx += 18)
-        if ((k * 13 + (wy | 0) + (wx | 0)) % 5 === 0) c.fillRect(wx, wy, 7, 8);
+      for (let wx = 0; wx < bw - 20; wx += 18) {
+        if (((k * 13 + wi++) % 5) === 0) c.fillRect(x + 10 + wx, wy, 7, 8);
+      }
   }
+  // near buildings (faster parallax, darker)
+  const par2 = zb.scroll * 0.5, off2 = par2 % 220;
+  for (let x = -off2 - 220; x < ZW + 220; x += 220) {
+    const k = Math.round((x + par2) / 220);
+    const h = 80 + ((k * 53) % 5) * 22, bw = 150 + ((k * 17) % 3) * 18;
+    c.fillStyle = "#0a0c1a"; c.fillRect(x, gy - h, bw, h);
+    c.fillStyle = "#ffd76a";
+    let wi = 0;
+    for (let wy = gy - h + 14; wy < gy - 18; wy += 20)
+      for (let wx = 0; wx < bw - 28; wx += 24) {
+        if (((k * 23 + wi++) % 4) === 0) c.fillRect(x + 14 + wx, wy, 8, 10);
+      }
+  }
+
+  // drifting fog
+  for (const f of zFog) {
+    f.x -= f.sp * 0.016;
+    if (f.x < -f.r) f.x = ZW + f.r;
+    const fg = c.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+    fg.addColorStop(0, `rgba(180,180,210,${f.a})`); fg.addColorStop(1, "rgba(180,180,210,0)");
+    c.fillStyle = fg; c.beginPath(); c.arc(f.x, f.y, f.r, 0, 6.28); c.fill();
+  }
+
   // fence / grass edge
   c.fillStyle = "#2f4a24"; c.fillRect(0, gy - 6, ZW, 8);
-  // road
-  c.fillStyle = "#1b1f2c"; c.fillRect(0, gy, ZW, ZH - gy);
-  const off2 = zb.scroll % 90;
+  // road with subtle gradient
+  const rg = c.createLinearGradient(0, gy, 0, ZH);
+  rg.addColorStop(0, "#1b1f2c"); rg.addColorStop(1, "#0d0f18");
+  c.fillStyle = rg; c.fillRect(0, gy, ZW, ZH - gy);
+  const off3 = zb.scroll % 90;
   c.fillStyle = "#5a5a40";
-  for (let x = -off2; x < ZW; x += 90) c.fillRect(x, gy + 18, 44, 4);
+  for (let x = -off3; x < ZW; x += 90) c.fillRect(x, gy + 18, 44, 4);
+
+  // vignette (dark edges)
+  const vg = c.createRadialGradient(ZW / 2, ZH / 2, Math.min(ZW, ZH) * 0.35, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  c.fillStyle = vg; c.fillRect(0, 0, ZW, ZH);
 }
 
 function zDrawPolice(c) {
   const x = zPoliceX(), y = zGroundY();
   const swing = zb.ending ? 0 : Math.sin(zb.walk);
-  c.save(); c.translate(x, y);
+  // ground shadow
+  c.save();
+  c.fillStyle = "rgba(0,0,0,0.45)";
+  c.beginPath(); c.ellipse(x, y + 2, 26, 6, 0, 0, 6.28); c.fill();
+  c.translate(x, y);
   c.lineCap = "round";
-  // legs
-  c.strokeStyle = "#1e2a6b"; c.lineWidth = 9;
+  // legs (with shading)
+  const lg = c.createLinearGradient(-8, -46, -8, -5);
+  lg.addColorStop(0, "#2a3a8b"); lg.addColorStop(1, "#141d52");
+  c.strokeStyle = lg; c.lineWidth = 9;
   c.beginPath(); c.moveTo(-4, -46); c.lineTo(-4 + swing * 12, -5); c.moveTo(4, -46); c.lineTo(4 - swing * 12, -5); c.stroke();
-  c.fillStyle = "#111"; c.fillRect(-4 + swing * 12 - 7, -6, 16, 6); c.fillRect(4 - swing * 12 - 7, -6, 16, 6);
+  c.fillStyle = "#0a0a0a"; c.fillRect(-4 + swing * 12 - 7, -6, 16, 6); c.fillRect(4 - swing * 12 - 7, -6, 16, 6);
   // back arm
   c.strokeStyle = "#2a45b8"; c.lineWidth = 8;
   c.beginPath(); c.moveTo(-8, -76); c.lineTo(-16, -52); c.stroke();
-  // torso
-  c.fillStyle = "#2a45b8"; zRoundRect(c, -14, -84, 28, 40, 6);
-  c.fillStyle = "#111"; c.fillRect(-14, -50, 28, 5);
+  // torso with vertical gradient + belt
+  const tg = c.createLinearGradient(-14, -84, 14, -44);
+  tg.addColorStop(0, "#3a55c8"); tg.addColorStop(1, "#1e2f88");
+  c.fillStyle = tg; zRoundRect(c, -14, -84, 28, 40, 6);
+  // belt
+  c.fillStyle = "#1a1a1a"; c.fillRect(-14, -50, 28, 5);
+  c.fillStyle = "#ffd23c"; c.fillRect(-3, -50, 6, 5); // buckle
+  // badge
   c.fillStyle = "#ffd23c"; c.beginPath(); c.arc(-6, -74, 3, 0, 6.28); c.fill();
-  // head + cap
-  c.fillStyle = "#f1c48f"; c.beginPath(); c.arc(0, -98, 12, 0, 6.28); c.fill();
-  c.fillStyle = "#222"; c.beginPath(); c.arc(5, -98, 1.8, 0, 6.28); c.fill();
+  c.fillStyle = "#b8860b"; c.beginPath(); c.arc(-6, -74, 1.4, 0, 6.28); c.fill();
+  // head (skin gradient) + face
+  const hg = c.createRadialGradient(-2, -100, 2, 0, -98, 13);
+  hg.addColorStop(0, "#f7d2a8"); hg.addColorStop(1, "#e0b07a");
+  c.fillStyle = hg; c.beginPath(); c.arc(0, -98, 12, 0, 6.28); c.fill();
+  // eyes
+  c.fillStyle = "#222"; c.beginPath(); c.arc(-4, -99, 1.6, 0, 6.28); c.arc(4, -99, 1.6, 0, 6.28); c.fill();
+  // mouth (determined)
+  c.strokeStyle = "#7a4a2a"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-4, -93); c.lineTo(4, -93); c.stroke();
+  // cap with badge
   c.fillStyle = "#1e2a6b"; c.fillRect(-13, -112, 26, 9); c.fillRect(-2, -106, 20, 4);
   c.fillStyle = "#ffd23c"; c.fillRect(-3, -111, 6, 6);
+  c.fillStyle = "#b8860b"; c.beginPath(); c.arc(0, -108, 1.5, 0, 6.28); c.fill();
   // front arm holding a pistol (with recoil)
   const r = zb.recoil;
   c.strokeStyle = "#2a45b8"; c.lineWidth = 8;
   c.beginPath(); c.moveTo(6, -76); c.lineTo(30 - r, -73); c.stroke();
+  // hand
   c.fillStyle = "#f1c48f"; c.beginPath(); c.arc(31 - r, -73, 5, 0, 6.28); c.fill();
-  c.fillStyle = "#222"; c.fillRect(30 - r, -79, 26, 7); c.fillRect(32 - r, -73, 7, 11);
+  // pistol (slide + grip + trigger guard)
+  c.fillStyle = "#1a1a1a"; c.fillRect(30 - r, -79, 28, 7); c.fillRect(32 - r, -73, 7, 11);
+  c.strokeStyle = "#2a2a2a"; c.lineWidth = 2; c.beginPath(); c.arc(36 - r, -70, 4, 0, 3.14); c.stroke();
+  // muzzle flash + light cone
   if (zb.flash > 0) {
+    const fa = zb.flash / 0.07;
+    // light cone toward zombies
+    c.globalAlpha = fa * 0.35;
+    const cone = c.createRadialGradient(60 - r, -75, 4, 60 - r, -75, 120);
+    cone.addColorStop(0, "rgba(255,230,107,0.9)"); cone.addColorStop(1, "rgba(255,230,107,0)");
+    c.fillStyle = cone;
+    c.beginPath(); c.moveTo(60 - r, -75); c.lineTo(60 - r + 120, -95); c.lineTo(60 - r + 120, -55); c.closePath(); c.fill();
+    c.globalAlpha = fa;
     c.fillStyle = "#ffe66b";
     c.beginPath();
     for (let i = 0; i < 8; i++) {
@@ -1373,46 +1496,81 @@ function zDrawPolice(c) {
       c.lineTo(60 - r + Math.cos(a) * rad, -75 + Math.sin(a) * rad);
     }
     c.closePath(); c.fill();
+    c.globalAlpha = 1;
   }
   c.restore();
 }
 
 function zDrawZombie(c, z) {
   const gy = zGroundY();
-  c.save(); c.translate(z.x, gy);
+  // ground shadow
+  c.save();
+  c.fillStyle = "rgba(0,0,0,0.4)";
+  c.beginPath(); c.ellipse(z.x, gy + 2, 22 * z.scale, 5, 0, 0, 6.28); c.fill();
+  c.translate(z.x, gy);
   if (z.dead) {
     const k = Math.min(1, z.fall / 0.5);
     c.globalAlpha = 1 - Math.max(0, (z.fall - 0.3) / 0.4);
     c.rotate(k * 1.5);   // ล้มหงายไปทางขวา
   }
+  c.scale(z.scale, z.scale);
   const bob = Math.sin(z.phase) * 3, swing = Math.sin(z.phase);
   c.lineCap = "round";
-  // legs
-  c.strokeStyle = "#3b5a2a"; c.lineWidth = 9;
+  // legs (shaded)
+  const lg = c.createLinearGradient(0, -44, 0, -5);
+  lg.addColorStop(0, "#4a6a36"); lg.addColorStop(1, "#2a401c");
+  c.strokeStyle = lg; c.lineWidth = 9;
   c.beginPath(); c.moveTo(-4, -44); c.lineTo(-4 - swing * 10, -5); c.moveTo(4, -44); c.lineTo(4 + swing * 10, -5); c.stroke();
-  // torso (torn shirt)
-  c.fillStyle = "#5a3a7a"; zRoundRect(c, -15, -82 + bob, 30, 40, 6);
+  c.fillStyle = "#1a1a1a"; c.fillRect(-4 - swing * 10 - 6, -6, 14, 5); c.fillRect(4 + swing * 10 - 6, -6, 14, 5);
+  // torso (torn shirt) with gradient
+  const tg = c.createLinearGradient(-15, -82 + bob, 15, -42 + bob);
+  tg.addColorStop(0, z.shirtLight); tg.addColorStop(1, z.shirtDark);
+  c.fillStyle = tg; zRoundRect(c, -15, -82 + bob, 30, 40, 6);
+  // exposed flesh patches
   c.fillStyle = "#7fc45a"; c.fillRect(-15, -50 + bob, 8, 8); c.fillRect(4, -56 + bob, 9, 6);
-  // arms reaching left toward the police
-  c.strokeStyle = "#7fc45a"; c.lineWidth = 7;
+  // arms reaching left toward the police (shaded)
+  c.strokeStyle = z.skin; c.lineWidth = 7;
   c.beginPath();
   c.moveTo(-8, -74 + bob); c.lineTo(-34, -70 + bob + swing * 3);
   c.moveTo(-8, -64 + bob); c.lineTo(-32, -57 + bob - swing * 3);
   c.stroke();
-  // head
-  c.fillStyle = "#7fc45a"; c.beginPath(); c.arc(0, -96 + bob, 14, 0, 6.28); c.fill();
+  // clawed fingers
+  c.strokeStyle = z.skinDark; c.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    c.beginPath(); c.moveTo(-34, -70 + bob + swing * 3 + i * 2); c.lineTo(-40, -72 + bob + swing * 3 + i * 2); c.stroke();
+    c.beginPath(); c.moveTo(-32, -57 + bob - swing * 3 + i * 2); c.lineTo(-38, -59 + bob - swing * 3 + i * 2); c.stroke();
+  }
+  // head (skin gradient)
+  const hg = c.createRadialGradient(-3, -98 + bob, 2, 0, -96 + bob, 15);
+  hg.addColorStop(0, z.skin); hg.addColorStop(1, z.skinDark);
+  c.fillStyle = hg; c.beginPath(); c.arc(0, -96 + bob, 14, 0, 6.28); c.fill();
+  // messy hair
   c.fillStyle = "#2d4a1c"; c.fillRect(-12, -111 + bob, 20, 6);
+  c.strokeStyle = "#2d4a1c"; c.lineWidth = 2;
+  for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(-10 + i * 5, -111 + bob); c.lineTo(-12 + i * 5, -116 + bob); c.stroke(); }
+  // glowing red eyes
+  c.shadowColor = "#ff2020"; c.shadowBlur = 8;
   c.fillStyle = "#ff3b3b"; c.beginPath(); c.arc(-6, -98 + bob, 2.6, 0, 6.28); c.arc(2, -99 + bob, 2.6, 0, 6.28); c.fill();
+  c.shadowBlur = 0;
+  // fangs + bloody mouth
   c.fillStyle = "#3a0a0a"; c.fillRect(-10, -90 + bob, 11, 3);
+  c.fillStyle = "#fff";
+  c.beginPath(); c.moveTo(-8, -88 + bob); c.lineTo(-7, -84 + bob); c.lineTo(-6, -88 + bob); c.fill();
+  c.beginPath(); c.moveTo(-2, -88 + bob); c.lineTo(-1, -84 + bob); c.lineTo(0, -88 + bob); c.fill();
+  // blood drip
+  c.fillStyle = "#a01010"; c.fillRect(-7, -84 + bob, 1.5, 4);
   // Chinese word above the head
   if (!z.dead) {
     const text = zFirst(z.word[0]);
     const fs = text.length > 3 ? 22 : text.length > 2 ? 27 : 34;
     c.font = `800 ${fs}px "Noto Sans SC", sans-serif`;
     const tw = c.measureText(text).width, bw = tw + 24, bh = fs + 16, by = -120 + bob - bh;
+    // speech bubble with shadow
+    c.shadowColor = "rgba(0,0,0,0.4)"; c.shadowBlur = 6; c.shadowOffsetY = 2;
     c.fillStyle = "rgba(255,255,255,.96)";
     zRoundRect(c, -bw / 2, by, bw, bh, 10);
     c.beginPath(); c.moveTo(-6, by + bh - 1); c.lineTo(6, by + bh - 1); c.lineTo(0, by + bh + 7); c.fill();
+    c.shadowBlur = 0; c.shadowOffsetY = 0;
     c.fillStyle = "#1a1a1a"; c.textAlign = "center"; c.textBaseline = "middle";
     c.fillText(text, 0, by + bh / 2 + 1);
   }
@@ -1422,23 +1580,36 @@ function zDrawZombie(c, z) {
 function zDraw() {
   const c = zctx;
   zDrawBackground(c);
-  const shx = zb.shake ? (Math.random() * 2 - 1) * 10 * (zb.shake / 0.5) : 0;
-  const shy = zb.shake ? (Math.random() * 2 - 1) * 8 * (zb.shake / 0.5) : 0;
+  const shx = zb.shake ? (Math.random() * 2 - 1) * 14 * (zb.shake / 0.5) : 0;
+  const shy = zb.shake ? (Math.random() * 2 - 1) * 10 * (zb.shake / 0.5) : 0;
   c.save(); c.translate(shx, shy);
   // ตัวที่ล้มวาดก่อนเพื่อให้อยู่หลังตัวที่ยังเดินอยู่
   [...zb.zombies].sort((a, b) => (a.dead ? -1 : 1) - (b.dead ? -1 : 1)).forEach((z) => zDrawZombie(c, z));
   zDrawPolice(c);
   const tip = zGunTip();
-  c.strokeStyle = "#ffe66b"; c.lineWidth = 3; c.lineCap = "round";
+  // bullet tracers (with glow)
+  c.lineCap = "round";
   for (const b of zb.bullets) {
     c.globalAlpha = 0.9;
+    c.strokeStyle = "#ffe66b"; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), tip.y); c.lineTo(b.x, tip.y); c.stroke();
+    // glow
+    c.strokeStyle = "rgba(255,230,107,0.4)"; c.lineWidth = 7;
     c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), tip.y); c.lineTo(b.x, tip.y); c.stroke();
   }
   c.globalAlpha = 1;
+  // particles (smoke uses radial gradient, others solid)
   for (const p of zb.particles) {
-    c.globalAlpha = 1 - p.age / p.life;
-    c.fillStyle = p.color;
-    c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+    const a = 1 - p.age / p.life;
+    c.globalAlpha = a;
+    if (p.smoke) {
+      const sg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      sg.addColorStop(0, `rgba(180,180,180,${a * 0.5})`); sg.addColorStop(1, "rgba(180,180,180,0)");
+      c.fillStyle = sg; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+    } else {
+      c.fillStyle = p.color;
+      c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+    }
   }
   c.globalAlpha = 1;
   c.font = "800 22px 'Noto Sans Thai', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
@@ -1449,6 +1620,29 @@ function zDraw() {
   }
   c.globalAlpha = 1;
   c.restore();
+
+  // red danger flash when a zombie is close to the police
+  const closest = zAlive().reduce((m, z) => Math.min(m, z.x - zPoliceX()), Infinity);
+  if (closest < 180) {
+    const intensity = Math.max(0, 1 - closest / 180);
+    c.fillStyle = `rgba(180,20,20,${0.35 * intensity})`;
+    c.fillRect(0, 0, ZW, ZH);
+  }
+  // red flash on ending (zombie reached player)
+  if (zb.ending) {
+    c.fillStyle = "rgba(200,0,0,0.5)";
+    c.fillRect(0, 0, ZW, ZH);
+  }
+
+  // color grading (cool dusk tint)
+  const grade = c.createLinearGradient(0, 0, 0, ZH);
+  grade.addColorStop(0, "rgba(40,20,80,0.12)"); grade.addColorStop(1, "rgba(80,20,40,0.12)");
+  c.fillStyle = grade; c.fillRect(0, 0, ZW, ZH);
+
+  // CRT scanlines (subtle)
+  c.globalAlpha = 0.06; c.fillStyle = "#000";
+  for (let y = 0; y < ZH; y += 3) c.fillRect(0, y, ZW, 1);
+  c.globalAlpha = 1;
 }
 
 function zloop(t) {
