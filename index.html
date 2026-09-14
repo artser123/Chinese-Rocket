@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Chinese Rocket 🚀</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- MENU SCREEN -->
+<div id="menu" class="screen active">
+  <h1 class="title">🚀 Chinese Rocket</h1>
+  <p class="subtitle">เกมฝึกภาษาจีน — เลือกโหมดที่อยากเล่นได้เลย!</p>
+
+  <div class="cards" id="cards">
+    <button class="card" data-mode="meteor">
+      <div class="card-icon">☄️🚀</div>
+      <div class="card-title">เกมยิงอุกกาบาต</div>
+      <div class="card-desc">อ่านพินอินบนอุกกาบาต แล้วยิงจรวดคำจีนให้ตรงก่อนถึงพื้น</div>
+    </button>
+    <button class="card" data-mode="vocab">
+      <div class="card-icon">📖</div>
+      <div class="card-title">เกมคำศัพท์</div>
+      <div class="card-desc">จับคู่คำจีนกับพินอินหรือคำแปลไทย 4 ตัวเลือก ฝึกเรื่อยๆ ไม่จบ</div>
+    </button>
+    <button class="card" data-mode="sentence">
+      <div class="card-icon">🧩</div>
+      <div class="card-title">เกมเรียงประโยค</div>
+      <div class="card-desc">อ่านคำแปลไทย แล้วแตะเรียงชิ้นคำจีนให้เป็นประโยคที่ถูกต้อง</div>
+    </button>
+    <button class="card" data-mode="zombie">
+      <div class="card-icon">👮🧟</div>
+      <div class="card-title">เกมยิงซอมบี้</div>
+      <div class="card-desc">อ่านคำจีนบนหัวซอมบี้ แล้วเลือกพินอินให้ถูกเพื่อยิง ก่อนซอมบี้จะถึงตัวตำรวจ</div>
+    </button>
+    <button class="card" data-mode="matching">
+      <div class="card-icon" aria-hidden="true">汉 / ก</div>
+      <div class="card-title">เกมแฟลชการ์ดจับคู่</div>
+      <div class="card-desc">เปิดการ์ดจับคู่คำจีนกับพินอินหรือภาษาไทย จับคู่ครบแล้วสุ่มชุดใหม่</div>
+    </button>
+  </div>
+
+  <div id="setupPanel" class="setup">
+    <h2 class="mode-label" id="setupTitle">เลือกโหมดด้านบนก่อน</h2>
+
+    <span class="setup-label">ระดับ HSK</span>
+    <div class="level-select" id="levelSelect">
+      <button class="level-btn" data-level="1">HSK 1</button>
+      <button class="level-btn" data-level="2">HSK 2</button>
+      <button class="level-btn" data-level="3">HSK 3</button>
+      <button class="level-btn" data-level="4">HSK 4</button>
+      <button class="level-btn" data-level="5">HSK 5</button>
+    </div>
+
+    <div class="setup-row" id="diffRow">
+      <span class="setup-label">ความยาก</span>
+      <div class="level-select" id="diffSelect">
+        <button class="diff-btn" data-diff="easy">😊 ง่าย</button>
+        <button class="diff-btn selected" data-diff="medium">🙂 ปานกลาง</button>
+        <button class="diff-btn" data-diff="hard">😈 ยากมาก</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="timeRow" style="display:none">
+      <span class="setup-label">เวลาเล่น</span>
+      <div class="level-select" id="timeSelect">
+        <button class="time-btn" data-time="60">⏱ 60 วิ</button>
+        <button class="time-btn selected" data-time="120">⏱ 120 วิ</button>
+        <button class="time-btn" data-time="180">⏱ 180 วิ</button>
+        <button class="time-btn" data-time="0">♾️ ไม่จำกัด</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="fmtRow" style="display:none">
+      <span class="setup-label">รูปแบบคำตอบ</span>
+      <div class="level-select" id="ansSelect">
+        <button class="ans-btn selected" data-ans="pinyin">🔤 เลือกพินอิน</button>
+        <button class="ans-btn" data-ans="thai">🇹🇭 เลือกคำแปลไทย</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="lifeRow" style="display:none">
+      <span class="setup-label">พลังชีวิต</span>
+      <div class="level-select" id="lifeSelect">
+        <button class="life-btn selected" data-life="on">❤️ เปิด (3 ชีวิต)</button>
+        <button class="life-btn" data-life="off">♾️ ปิด (ไม่จำกัด)</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="nextRow" style="display:none">
+      <span class="setup-label">เปลี่ยนคำเมื่อตอบถูก</span>
+      <div class="level-select" id="nextSelect">
+        <button class="next-btn selected" data-next="auto">⚡ อัตโนมัติ</button>
+        <button class="next-btn" data-next="manual">👉 กดเอง</button>
+      </div>
+    </div>
+
+    <button id="startBtn" class="big-btn" disabled>เลือกโหมดก่อน</button>
+    <p id="bestScoreLine" class="best"></p>
+  </div>
+</div>
+
+<!-- METEOR GAME SCREEN -->
+<div id="game" class="screen">
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <div id="hudTop">
+      <div id="score">0</div>
+      <div id="lives">❤️❤️❤️</div>
+    </div>
+    <div id="hudBtns">
+      <button id="muteBtn" class="icon-btn">🔊</button>
+      <button id="pauseBtn" class="icon-btn">⏸️</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="wrongFlash"></div>
+
+  <div id="rocketBar">
+    <button class="rocket-opt"></button>
+    <button class="rocket-opt"></button>
+    <button class="rocket-opt"></button>
+    <button class="rocket-opt"></button>
+  </div>
+
+  <div id="pauseOverlay">
+    <div class="overlay-box">
+      <h2>⏸️ หยุดชั่วคราว</h2>
+      <button id="resumeBtn" class="big-btn">เล่นต่อ</button>
+      <button id="quitBtn" class="big-btn secondary">กลับเมนู</button>
+    </div>
+  </div>
+</div>
+
+<!-- VOCAB QUIZ SCREEN -->
+<div id="quiz" class="screen">
+  <div class="qhud">
+    <div id="quizScore">0</div>
+    <div class="quiz-btns">
+      <button id="quizMuteBtn" class="icon-btn">🔊</button>
+      <button id="quizQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="quizLives">❤️❤️❤️</div>
+
+  <div id="quizWord"></div>
+  <div id="quizHint"></div>
+
+  <div id="quizOptions">
+    <button class="qopt"></button>
+    <button class="qopt"></button>
+    <button class="qopt"></button>
+    <button class="qopt"></button>
+  </div>
+
+  <button id="quizNextBtn">คำถัดไป ▶</button>
+</div>
+
+<!-- SENTENCE ORDERING GAME SCREEN -->
+<div id="sent" class="screen">
+  <div class="qhud">
+    <div id="sentScore">0</div>
+    <div class="quiz-btns">
+      <button id="sentMuteBtn" class="icon-btn">🔊</button>
+      <button id="sentQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="sentLives">❤️❤️❤️</div>
+
+  <div class="sent-label">เรียงประโยคจีนตามคำแปลไทย</div>
+  <div id="sentTarget"></div>
+  <div id="sentAnswer"></div>
+  <div id="sentPool"></div>
+  <div id="sentReveal"></div>
+  <button id="sentNextBtn">ประโยคถัดไป ▶</button>
+</div>
+
+<!-- ZOMBIE SHOOTER SCREEN -->
+<div id="zombie" class="screen">
+  <canvas id="zcanvas"></canvas>
+
+  <div class="hud">
+    <div class="hud-top">
+      <div id="zScore" class="hud-score">0</div>
+      <div id="zKills" class="hud-sub">🧟 0</div>
+    </div>
+    <div id="zTimer">⏱ 2:00</div>
+    <div class="hud-btns">
+      <button id="zMuteBtn" class="icon-btn">🔊</button>
+      <button id="zPauseBtn" class="icon-btn">⏸️</button>
+    </div>
+  </div>
+
+  <div id="ztoast" class="toast"></div>
+  <div id="zWrongFlash" class="wrong-flash"></div>
+
+  <div id="zombieBar">
+    <button class="zopt"></button>
+    <button class="zopt"></button>
+    <button class="zopt"></button>
+    <button class="zopt"></button>
+  </div>
+
+  <div id="zPauseOverlay" class="pause-overlay">
+    <div class="overlay-box">
+      <h2>⏸️ หยุดชั่วคราว</h2>
+      <button id="zResumeBtn" class="big-btn">เล่นต่อ</button>
+      <button id="zQuitBtn" class="big-btn secondary">กลับเมนู</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="gameover" class="screen">
+  <div class="overlay-box">
+    <h1 id="overTitle">💥 เกมจบ!</h1>
+    <p id="finalScore" class="final-score"></p>
+    <p id="finalStats" class="best"></p>
+    <p id="newBest" class="new-best"></p>
+    <button id="againBtn" class="big-btn">เล่นอีกครั้ง</button>
+    <button id="menuBtn" class="big-btn secondary">กลับเมนู</button>
+  </div>
+</div>
+
+<div id="matching" class="screen">
+  <div class="match-header">
+    <h2>แฟลชการ์ดจับคู่</h2>
+    <div class="match-controls">
+      <button id="matchMuteBtn" class="match-control" aria-pressed="false">ปิดเสียง</button>
+      <button id="matchPauseBtn" class="match-control">พักเกม</button>
+      <button id="matchEndBtn" class="match-control">จบเกม</button>
+    </div>
+  </div>
+  <div class="match-stats">
+    <span id="matchScore">0 คะแนน</span>
+    <span id="matchTimer" role="timer"></span>
+  </div>
+  <div id="matchBoard" role="group" aria-label="กระดานแฟลชการ์ด"></div>
+  <div id="matchFeedback" role="status" aria-live="polite"></div>
+  <div id="matchPauseOverlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="matchPauseTitle">
+    <div class="overlay-box">
+      <h2 id="matchPauseTitle">หยุดชั่วคราว</h2>
+      <button id="matchResumeBtn" class="big-btn">เล่นต่อ</button>
+      <button id="matchQuitBtn" class="big-btn secondary">กลับเมนู</button>
+    </div>
+  </div>
+</div>
+
+<script src="data/vocab.js"></script>
+<script src="data/sentences.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

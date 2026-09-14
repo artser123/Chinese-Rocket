@@ -1,0 +1,25 @@
+# ไฟล์ที่ไม่เกี่ยวกับเว็บ — ไม่อัพขึ้น GitHub
+
+# ฐานข้อมูล HSK (ไฟล์ Excel ต้นฉบับ)
+HSK Database/
+
+# เครื่องมือ Python (ใช้สร้าง data/sentences.js เท่านั้น)
+tools/
+
+# Windows artifact
+nul
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
