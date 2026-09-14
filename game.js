@@ -83,6 +83,18 @@ const sfx = {
   damage:  () => { beep(90, 0.4, "sawtooth", 0.2, -50); beep(55, 0.5, "triangle", 0.18, -30); },
   over:    () => { beep(220, 0.5, "sawtooth", 0.15, -180); setTimeout(() => beep(140, 0.7, "sawtooth", 0.15, -100), 250); },
   click:   () => beep(440, 0.05, "square", 0.06),
+  // weapon-specific sounds
+  bowShot: () => { beep(800, 0.08, "sine", 0.18, -400); noiseBurst(0.06, 0.15, 1000, 3000); },
+  bowMiss: () => { noiseBurst(0.12, 0.08, 400, 1200); beep(300, 0.15, "sine", 0.06, -200); },
+  pistol:  () => { noiseBurst(0.18, 0.4, 400, 5000); beep(180, 0.12, "triangle", 0.3, -120); beep(80, 0.2, "sine", 0.25, -50); },
+  smg:     () => { for (let i = 0; i < 3; i++) setTimeout(() => { noiseBurst(0.12, 0.3, 500, 6000); beep(200, 0.08, "triangle", 0.22, -130); }, i * 70); },
+  hmg:     () => { for (let i = 0; i < 3; i++) setTimeout(() => { noiseBurst(0.2, 0.5, 300, 4000); beep(120, 0.12, "triangle", 0.4, -80); beep(50, 0.2, "sine", 0.35, -30); }, i * 80); },
+  sniper:  () => { noiseBurst(0.4, 0.7, 200, 4000); beep(90, 0.25, "triangle", 0.5, -60); beep(40, 0.4, "sine", 0.4, -20); },
+  grenade: () => { beep(200, 0.1, "sine", 0.15, -100); setTimeout(() => { noiseBurst(0.5, 0.6, 100, 2000); beep(80, 0.4, "sawtooth", 0.3, -50); beep(40, 0.5, "triangle", 0.25, -20); }, 300); },
+  bazooka: () => { beep(150, 0.15, "sawtooth", 0.2, -80); noiseBurst(0.3, 0.4, 200, 3000); setTimeout(() => { noiseBurst(0.6, 0.8, 80, 1500); beep(60, 0.5, "sawtooth", 0.4, -40); beep(30, 0.6, "triangle", 0.3, -15); }, 250); },
+  click1:  () => { noiseBurst(0.03, 0.25, 2500, 9000); setTimeout(() => noiseBurst(0.025, 0.18, 3000, 9000), 70); },
+  click3:  () => { for (let i = 0; i < 3; i++) setTimeout(() => { noiseBurst(0.03, 0.25, 2500, 9000); }, i * 90); },
+  upgrade: () => { beep(523, 0.1, "square", 0.15); setTimeout(() => beep(659, 0.1, "square", 0.15), 100); setTimeout(() => beep(784, 0.15, "square", 0.15), 200); },
 };
 
 /* ================= Chinese speech (TTS) ================= */
@@ -763,12 +775,12 @@ function confettiBurst(container, n = 28) {
   }
 }
 
-function showToast(html, id = "toast") {
+function showToast(html, id = "toast", duration = 1800) {
   const t = $(id);
   t.innerHTML = html;
   t.classList.add("show");
   clearTimeout(t._t);
-  t._t = setTimeout(() => t.classList.remove("show"), 1800);
+  t._t = setTimeout(() => t.classList.remove("show"), duration);
 }
 
 function updateHUD() {
@@ -1076,6 +1088,22 @@ const ZDIFF = {
   medium: { base: 50, ramp: 1.1,  cap: 190, spawn0: 2.6, spawnDecay: 0.06,  spawnMin: 1.2 },
   hard:   { base: 70, ramp: 1.9,  cap: 270, spawn0: 2.1, spawnDecay: 0.08,  spawnMin: 0.8 },
 };
+// weapon tiers — auto-upgrade based on kills
+const ZWEAPONS = [
+  { id: "bow",     name: "🏹 ธนู",            min: 0,  fire: () => sfx.bowShot(), miss: () => sfx.bowMiss(), burst: 1, bulletColor: "#d4a86a", bulletStyle: "arrow",  explosion: false, shake: 0.10, flash: 0.05 },
+  { id: "pistol",  name: "🔫 ปืนสั้น",         min: 11, fire: () => sfx.pistol(),  miss: () => sfx.click1(),  burst: 1, bulletColor: "#ffe66b", bulletStyle: "tracer", explosion: false, shake: 0.18, flash: 0.07 },
+  { id: "smg",     name: "🔫 ปืนกลมือ",       min: 21, fire: () => sfx.smg(),     miss: () => sfx.click3(),  burst: 3, bulletColor: "#ffd76a", bulletStyle: "tracer", explosion: false, shake: 0.22, flash: 0.06 },
+  { id: "hmg",     name: "🔫 ปืนกลหนัก",      min: 31, fire: () => sfx.hmg(),     miss: () => sfx.click3(),  burst: 3, bulletColor: "#ffaa3a", bulletStyle: "tracer", explosion: false, shake: 0.30, flash: 0.08 },
+  { id: "sniper",  name: "🎯 สไนเปอร์ไรเฟิล", min: 41, fire: () => sfx.sniper(),  miss: () => sfx.click1(),  burst: 1, bulletColor: "#ff6a3a", bulletStyle: "tracer", explosion: false, shake: 0.40, flash: 0.10 },
+  { id: "grenade", name: "💣 ระเบิดมือ",      min: 51, fire: () => sfx.grenade(), miss: () => sfx.bowMiss(), burst: 1, bulletColor: "#3a3a3a", bulletStyle: "lob",    explosion: true,  shake: 0.45, flash: 0.12 },
+  { id: "bazooka", name: "🚀 บาซูก้า",        min: 61, fire: () => sfx.bazooka(), miss: () => sfx.click1(),  burst: 1, bulletColor: "#ff4a2a", bulletStyle: "rocket",  explosion: true,  shake: 0.55, flash: 0.15 },
+];
+const zWeapon = () => {
+  if (!zb) return ZWEAPONS[0];
+  let w = ZWEAPONS[0];
+  for (const wp of ZWEAPONS) if (zb.kills >= wp.min) w = wp;
+  return w;
+};
 let ZW = 0, ZH = 0;
 const zGroundY = () => ($("zombieBar").offsetTop || ZH - 90) - 28;
 const zPoliceX = () => Math.max(70, ZW * 0.14);
@@ -1132,6 +1160,7 @@ function startZombieGame(level) {
     zombies: [], bullets: [], particles: [], floaters: [], options: [],
     walk: 0, scroll: 0, recoil: 0, flash: 0, shake: 0,
     paused: false, ending: false, endTimer: 0, lastTime: performance.now(),
+    weaponId: "bow", upgradeFlash: 0,
   };
   switchScreen($("zombie"));
   $("zPauseOverlay").classList.remove("show");
@@ -1146,6 +1175,9 @@ function startZombieGame(level) {
 function updateZombieHUD() {
   $("zScore").textContent = zb.score;
   $("zKills").textContent = "🧟 " + zb.kills;
+  // show current weapon
+  const wp = zWeapon();
+  if ($("zWeapon")) $("zWeapon").textContent = wp.name;
   // ไม่จำกัดเวลา → แสดงเวลาที่เล่นไปแล้วแทนการนับถอยหลัง
   const t = zDuration ? Math.max(0, Math.ceil(zb.timeLeft)) : Math.floor(zb.elapsed);
   const el = $("zTimer");
@@ -1220,11 +1252,27 @@ function fireZOption(i) {
     const pts = 10 + distBonus + Math.min(zb.combo - 1, 5) * 2;
     zb.score += pts;
     zb.kills++;
-    zb.recoil = 9; zb.flash = 0.07; zb.shake = 0.18;
+    // weapon upgrade check — compare against current equipped weapon
+    const newWp = zWeapon();
+    if (newWp.id !== zb.weaponId) {
+      zb.weaponId = newWp.id;
+      zb.upgradeFlash = 1.5;
+      sfx.upgrade();
+      showToast(`<span class="toast-zh">⬆️ อัปเกรดอาวุธ!</span> <span class="toast-py">${newWp.name}</span>`, "ztoast", 2500);
+    }
+    const wp = newWp;
+    zb.recoil = wp.shake * 50; zb.flash = wp.flash; zb.shake = wp.shake;
     const tip = zGunTip();
-    zb.bullets.push({ x: tip.x, y: tip.y, target });
-    sfx.gun();
-    // gun smoke puffs at muzzle
+    // burst fire for SMG/HMG
+    for (let s = 0; s < wp.burst; s++) {
+      const delay = s * 70;
+      setTimeout(() => {
+        if (!zb || zb.ending) return;
+        zb.bullets.push({ x: tip.x, y: tip.y + rand(-4, 4), target, color: wp.bulletColor, style: wp.bulletStyle, explosion: wp.explosion });
+      }, delay);
+    }
+    wp.fire();
+    // muzzle smoke puffs
     for (let i = 0; i < 5; i++) {
       zb.particles.push({ x: tip.x + rand(-4, 4), y: tip.y + rand(-4, 4), vx: rand(40, 120), vy: rand(-30, -5),
                           life: rand(0.5, 1.0), age: 0, r: rand(6, 12), color: "rgba(180,180,180,0.5)", smoke: true, gravity: false });
@@ -1236,7 +1284,7 @@ function fireZOption(i) {
                           life: rand(0.3, 0.6), age: 0, r: rand(2, 4), color: "rgba(120,100,80,0.6)", gravity: true });
     }
     zb.floaters.push({ x: target.x, y: zGroundY() - 135, text: "+" + pts, age: 0, life: 0.9 });
-    showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`, "ztoast");
+    if (!zb.upgradeFlash) showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`, "ztoast", 3000);
     speak(zFirst(w[0]));
     zoptBtns[i].classList.add("flash-right");
     setTimeout(() => zoptBtns[i].classList.remove("flash-right"), 250);
@@ -1244,11 +1292,12 @@ function fireZOption(i) {
     refreshZOptions();
     renderZOptions();
   } else {
-    // ทายผิด → ปืนยิงไม่ออก (เสียงแช๊ะ) และโดนหักคะแนน
+    // ทายผิด → อาวุธยิงไม่ออก
+    const wp = zWeapon();
     zb.combo = 0;
     zb.score = Math.max(0, zb.score - 5);
     zb.stunUntil = now + 500;
-    sfx.misfire();
+    wp.miss();
     zoptBtns[i].classList.add("flash-wrong");
     setTimeout(() => zoptBtns[i].classList.remove("flash-wrong"), 400);
     const wf = $("zWrongFlash");
@@ -1286,6 +1335,7 @@ function zUpdate(dt) {
   zb.recoil = Math.max(0, zb.recoil - dt * 70);
   zb.flash = Math.max(0, zb.flash - dt);
   zb.shake = Math.max(0, zb.shake - dt);
+  zb.upgradeFlash = Math.max(0, zb.upgradeFlash - dt);
   if (zb.ending) {
     zb.endTimer -= dt;
     if (zb.endTimer <= 0) zombieGameOver(false);
@@ -1326,7 +1376,23 @@ function zUpdate(dt) {
   for (let i = zb.bullets.length - 1; i >= 0; i--) {
     const b = zb.bullets[i];
     b.x += 2400 * dt;
-    if (b.x >= b.target.x - 10) { killZombie(b.target); zb.bullets.splice(i, 1); }
+    if (b.x >= b.target.x - 10) {
+      if (b.explosion) {
+        // big explosion at impact
+        const gy = zGroundY();
+        for (let j = 0; j < 40; j++) {
+          const a = rand(-3.14, 3.14), sp = rand(100, 400);
+          zb.particles.push({ x: b.target.x, y: gy - 85, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                              life: rand(0.5, 1.2), age: 0, r: rand(3, 8), color: pick(["#ff6a3a", "#ffaa3a", "#ff4a2a", "#ffd76a"]), gravity: true });
+        }
+        for (let j = 0; j < 12; j++) {
+          zb.particles.push({ x: b.target.x + rand(-20, 20), y: gy - 85 + rand(-20, 20), vx: rand(-40, 40), vy: rand(-60, -10),
+                              life: rand(0.8, 1.5), age: 0, r: rand(12, 24), color: "rgba(120,120,120,0.6)", smoke: true, gravity: false });
+        }
+        zb.shake = Math.max(zb.shake, 0.5);
+      }
+      killZombie(b.target); zb.bullets.splice(i, 1);
+    }
   }
   for (let i = zb.particles.length - 1; i >= 0; i--) {
     const p = zb.particles[i];
@@ -1470,15 +1536,47 @@ function zDrawPolice(c) {
   c.fillStyle = "#1e2a6b"; c.fillRect(-13, -112, 26, 9); c.fillRect(-2, -106, 20, 4);
   c.fillStyle = "#ffd23c"; c.fillRect(-3, -111, 6, 6);
   c.fillStyle = "#b8860b"; c.beginPath(); c.arc(0, -108, 1.5, 0, 6.28); c.fill();
-  // front arm holding a pistol (with recoil)
+  // front arm holding weapon (with recoil) — weapon-specific drawing
   const r = zb.recoil;
+  const wp = zWeapon();
   c.strokeStyle = "#2a45b8"; c.lineWidth = 8;
   c.beginPath(); c.moveTo(6, -76); c.lineTo(30 - r, -73); c.stroke();
   // hand
   c.fillStyle = "#f1c48f"; c.beginPath(); c.arc(31 - r, -73, 5, 0, 6.28); c.fill();
-  // pistol (slide + grip + trigger guard)
-  c.fillStyle = "#1a1a1a"; c.fillRect(30 - r, -79, 28, 7); c.fillRect(32 - r, -73, 7, 11);
-  c.strokeStyle = "#2a2a2a"; c.lineWidth = 2; c.beginPath(); c.arc(36 - r, -70, 4, 0, 3.14); c.stroke();
+  // weapon body — different per tier
+  c.fillStyle = "#1a1a1a";
+  if (wp.id === "bow") {
+    // bow — arc + string
+    c.strokeStyle = "#8b6a3a"; c.lineWidth = 3;
+    c.beginPath(); c.arc(40 - r, -73, 18, -1.2, 1.2); c.stroke();
+    c.strokeStyle = "#ddd"; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(40 - r + 18 * Math.cos(-1.2), -73 + 18 * Math.sin(-1.2)); c.lineTo(40 - r + 18 * Math.cos(1.2), -73 + 18 * Math.sin(1.2)); c.stroke();
+    // arrow nocked
+    c.strokeStyle = "#d4a86a"; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(30 - r, -73); c.lineTo(58 - r, -73); c.stroke();
+  } else if (wp.id === "pistol") {
+    c.fillRect(30 - r, -79, 28, 7); c.fillRect(32 - r, -73, 7, 11);
+    c.strokeStyle = "#2a2a2a"; c.lineWidth = 2; c.beginPath(); c.arc(36 - r, -70, 4, 0, 3.14); c.stroke();
+  } else if (wp.id === "smg") {
+    c.fillRect(30 - r, -80, 34, 8); c.fillRect(34 - r, -72, 8, 14);
+    c.fillStyle = "#333"; c.fillRect(30 - r, -84, 18, 4); // magazine
+  } else if (wp.id === "hmg") {
+    c.fillRect(30 - r, -82, 44, 10); c.fillRect(36 - r, -72, 10, 16);
+    c.fillStyle = "#444"; c.fillRect(30 - r, -86, 22, 6);
+    c.fillStyle = "#222"; c.fillRect(46 - r, -88, 30, 4); // barrel
+  } else if (wp.id === "sniper") {
+    c.fillRect(30 - r, -78, 50, 6); c.fillRect(34 - r, -72, 8, 14);
+    c.fillStyle = "#333"; c.fillRect(40 - r, -84, 24, 4); // scope
+    c.fillStyle = "#222"; c.fillRect(70 - r, -79, 20, 3); // long barrel
+  } else if (wp.id === "grenade") {
+    // throwing arm — no weapon drawn, just hand
+    c.fillStyle = "#3a3a3a"; c.beginPath(); c.arc(34 - r, -74, 5, 0, 6.28); c.fill();
+    c.fillStyle = "#5a5a5a"; c.beginPath(); c.arc(34 - r, -74, 3, 0, 6.28); c.fill();
+  } else if (wp.id === "bazooka") {
+    c.fillStyle = "#3a3a3a"; c.fillRect(30 - r, -80, 50, 12);
+    c.fillStyle = "#5a5a5a"; c.fillRect(34 - r, -76, 12, 8); // grip
+    c.fillStyle = "#222"; c.fillRect(70 - r, -78, 16, 8); // muzzle
+  }
   // muzzle flash + light cone
   if (zb.flash > 0) {
     const fa = zb.flash / 0.07;
@@ -1587,15 +1685,40 @@ function zDraw() {
   [...zb.zombies].sort((a, b) => (a.dead ? -1 : 1) - (b.dead ? -1 : 1)).forEach((z) => zDrawZombie(c, z));
   zDrawPolice(c);
   const tip = zGunTip();
-  // bullet tracers (with glow)
+  // bullet tracers (weapon-specific styles)
   c.lineCap = "round";
   for (const b of zb.bullets) {
+    const col = b.color || "#ffe66b";
+    const style = b.style || "tracer";
     c.globalAlpha = 0.9;
-    c.strokeStyle = "#ffe66b"; c.lineWidth = 3;
-    c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), tip.y); c.lineTo(b.x, tip.y); c.stroke();
-    // glow
-    c.strokeStyle = "rgba(255,230,107,0.4)"; c.lineWidth = 7;
-    c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), tip.y); c.lineTo(b.x, tip.y); c.stroke();
+    if (style === "arrow") {
+      c.strokeStyle = col; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 80), b.y); c.lineTo(b.x, b.y); c.stroke();
+      c.fillStyle = col;
+      c.beginPath(); c.moveTo(b.x, b.y); c.lineTo(b.x - 8, b.y - 4); c.lineTo(b.x - 8, b.y + 4); c.closePath(); c.fill();
+    } else if (style === "lob") {
+      const dist = b.target.x - tip.x;
+      const progress = Math.min(1, (b.x - tip.x) / Math.max(dist, 1));
+      const arcY = b.y - Math.sin(progress * 3.14) * 80;
+      c.fillStyle = col; c.beginPath(); c.arc(b.x, arcY, 6, 0, 6.28); c.fill();
+      c.strokeStyle = "rgba(120,120,120,0.4)"; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(tip.x, b.y); c.quadraticCurveTo(tip.x + dist / 2, b.y - 80, b.x, arcY); c.stroke();
+    } else if (style === "rocket") {
+      c.strokeStyle = "rgba(255,170,80,0.6)"; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 100), b.y); c.lineTo(b.x, b.y); c.stroke();
+      c.fillStyle = col; c.fillRect(b.x - 12, b.y - 4, 16, 8);
+      c.fillStyle = "#ffd76a"; c.beginPath(); c.arc(b.x - 12, b.y, 3, 0, 6.28); c.fill();
+      for (let j = 0; j < 3; j++) {
+        zb.particles.push({ x: b.x - 12 + rand(-4, 4), y: b.y + rand(-3, 3), vx: rand(-80, -40), vy: rand(-10, 10),
+                            life: rand(0.2, 0.4), age: 0, r: rand(3, 6), color: pick(["#ff6a3a", "#ffaa3a", "#ffd76a"]), gravity: false });
+      }
+    } else {
+      c.strokeStyle = col; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), b.y); c.lineTo(b.x, b.y); c.stroke();
+      c.globalAlpha = 0.4; c.lineWidth = 7;
+      c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), b.y); c.lineTo(b.x, b.y); c.stroke();
+      c.globalAlpha = 0.9;
+    }
   }
   c.globalAlpha = 1;
   // particles (smoke uses radial gradient, others solid)
@@ -1643,6 +1766,16 @@ function zDraw() {
   c.globalAlpha = 0.06; c.fillStyle = "#000";
   for (let y = 0; y < ZH; y += 3) c.fillRect(0, y, ZW, 1);
   c.globalAlpha = 1;
+
+  // weapon upgrade flash (golden glow)
+  if (zb.upgradeFlash > 0) {
+    const ua = zb.upgradeFlash / 1.5;
+    c.globalAlpha = ua * 0.3;
+    const ug = c.createRadialGradient(ZW / 2, ZH / 2, 0, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.6);
+    ug.addColorStop(0, "rgba(255,215,106,0.8)"); ug.addColorStop(1, "rgba(255,215,106,0)");
+    c.fillStyle = ug; c.fillRect(0, 0, ZW, ZH);
+    c.globalAlpha = 1;
+  }
 }
 
 function zloop(t) {
