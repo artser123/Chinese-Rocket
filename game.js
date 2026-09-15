@@ -266,7 +266,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("zombie"), $("matching")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("zombie"), $("matching"), $("bomb")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
 }
 
@@ -2107,10 +2107,394 @@ $("matchQuitBtn").addEventListener("click", () => {
 });
 $("matchMuteBtn").addEventListener("click", toggleMute);
 
+let bombGame = null, bombWriter = null, bombLibraryPromise = null;
+const bombCharData = new Map();
+const bombBestKey = (level) => `cr_best_hsk${level}_bomb`;
+const bombPinyinKey = (text) => text.normalize("NFC").replace(/\s+/g, "").toLowerCase();
+const bombTier = (s) => Math.floor(s.elapsed / 45) + Math.floor(s.defused / 4);
+const bombFallSeconds = (s) => Math.max(3, 12 - bombTier(s) * 0.65);
+const bombWriteSeconds = (s, strokes) => Math.max(8, (8 + strokes * 2) * Math.max(0.4, 1 - bombTier(s) * 0.04));
+
+function bombVocabulary(level) {
+  const unique = new Map();
+  for (const entry of VOCAB[String(level)] || []) {
+    const chinese = entry[0].split(/[｜|]/)[0].replace(/[^\p{Script=Han}]/gu, "");
+    const pinyin = entry[1].split(/[｜|]/)[0].replace(/[()（）…]/g, "").replace(/\s+/g, " ").trim();
+    if (chinese && pinyin && !unique.has(chinese)) unique.set(chinese, [chinese, pinyin, entry[2]]);
+  }
+  return [...unique.values()];
+}
+
+function loadBombLibrary() {
+  if (window.HanziWriter) return Promise.resolve();
+  if (bombLibraryPromise) return bombLibraryPromise;
+  bombLibraryPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const fail = () => {
+      clearTimeout(timer);
+      script.remove();
+      bombLibraryPromise = null;
+      reject(new Error("โหลดระบบตรวจลายมือไม่สำเร็จ"));
+    };
+    const timer = setTimeout(fail, 15000);
+    script.src = "https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js";
+    script.integrity = "sha384-xd6VpwMU5AxPFzG/nyhXrW70SSR2usiUNV8RrA0wlOjYlCrZyzZC6JiR/mT51pm2";
+    script.crossOrigin = "anonymous";
+    script.onload = () => { clearTimeout(timer); window.HanziWriter ? resolve() : fail(); };
+    script.onerror = fail;
+    document.head.appendChild(script);
+  });
+  return bombLibraryPromise;
+}
+
+function showBombView(view) {
+  for (const id of ["bombArena", "bombWriting", "bombLoading", "bombFeedback"]) $(id).hidden = id !== view;
+}
+
+function updateBombHUD() {
+  const s = bombGame;
+  if (!s) return;
+  $("bombScore").textContent = `${s.score} คะแนน`;
+  $("bombLives").textContent = `ชีวิต ${s.lives} / 3`;
+  $("bombPace").textContent = `ความเร็ว ${bombTier(s) + 1} • ปลดแล้ว ${s.defused} ลูก`;
+}
+
+function startBombGame(level) {
+  stopBombGame();
+  currentLevel = level;
+  lastStarter = () => startBombGame(level);
+  const words = bombVocabulary(level);
+  bombGame = { level, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
+    lives: 3, defused: 0, bonuses: 0, elapsed: 0, charIndex: 0, paused: false,
+    frame: 0, lastTime: performance.now(), request: 0, controller: null };
+  $("bomb").classList.remove("bomb-paused");
+  $("bombPauseOverlay").classList.remove("show");
+  $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
+  $("bombLevel").textContent = `HSK ${level} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
+  $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
+  $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
+  switchScreen($("bomb"));
+  updateBombHUD();
+  nextBombWord();
+  const s = bombGame;
+  s.frame = requestAnimationFrame((now) => bombLoop(now, s));
+}
+
+function nextBombWord() {
+  const s = bombGame;
+  if (!s || s.paused) return;
+  if (!s.deck.length) {
+    s.deck = shuffle(s.words.slice());
+    if (s.deck.length > 1 && s.deck[s.deck.length - 1][0] === s.lastWord) {
+      [s.deck[0], s.deck[s.deck.length - 1]] = [s.deck[s.deck.length - 1], s.deck[0]];
+    }
+  }
+  s.word = s.deck.pop();
+  if (!s.word) { quitBombGame(); return; }
+  s.lastWord = s.word[0];
+  s.chars = [...s.word[0]];
+  s.charIndex = 0;
+  s.bonus = false;
+  s.pendingComplete = false;
+  prepareBombWord();
+}
+
+async function prepareBombWord() {
+  const s = bombGame;
+  if (!s || s.paused) return;
+  const request = ++s.request;
+  s.controller?.abort();
+  const controller = new AbortController();
+  s.controller = controller;
+  s.phase = "loading";
+  showBombView("bombLoading");
+  $("bombLoadTitle").textContent = "เตรียมระเบิด...";
+  $("bombLoadText").textContent = "กำลังโหลดข้อมูลเส้นอักษร ไม่หักเวลาและชีวิต";
+  $("bombLoadActions").hidden = true;
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    await Promise.all([loadBombLibrary(), ...[...new Set(s.chars)].map(async (char) => {
+      if (bombCharData.has(char)) return;
+      const response = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`, { signal: controller.signal });
+      if (!response.ok) throw new Error("ไม่พบข้อมูลเส้นอักษร");
+      const data = await response.json();
+      if (!data.strokes?.length || data.strokes.length !== data.medians?.length) throw new Error("ข้อมูลเส้นอักษรไม่สมบูรณ์");
+      bombCharData.set(char, data);
+    })]);
+    if (bombGame !== s || s.request !== request) return;
+    const seen = new Set([bombPinyinKey(s.word[1])]);
+    const choices = [s.word[1]];
+    for (const w of shuffle(s.words.slice())) {
+      const key = bombPinyinKey(w[1]);
+      if (!seen.has(key)) { choices.push(w[1]); seen.add(key); }
+      if (choices.length === 3) break;
+    }
+    if (choices.length !== 3) throw new Error("ตัวเลือกพินอินไม่เพียงพอ");
+    $("bombWord").textContent = s.word[0];
+    $("bombOptions").replaceChildren();
+    for (const text of shuffle(choices)) {
+      const button = document.createElement("button");
+      button.className = "bomb-option";
+      button.textContent = text;
+      button.addEventListener("click", () => answerBomb(text));
+      $("bombOptions").appendChild(button);
+    }
+    s.fallDuration = bombFallSeconds(s);
+    s.remaining = s.fallDuration;
+    s.phase = "falling";
+    s.lastTime = performance.now();
+    $("bombDrop").hidden = false;
+    showBombView("bombArena");
+    renderBombFall();
+    updateBombHUD();
+  } catch (error) {
+    if (bombGame !== s || s.request !== request) return;
+    controller.abort();
+    s.phase = "error";
+    $("bombLoadTitle").textContent = "โหลดข้อมูลฝึกเขียนไม่สำเร็จ";
+    $("bombLoadText").textContent = "ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง หรือข้ามคำนี้หากไม่มีข้อมูลเส้นอักษร โดยไม่เสียชีวิต";
+    $("bombLoadActions").hidden = false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function renderBombFall() {
+  const s = bombGame;
+  if (!s || s.phase !== "falling") return;
+  const distance = Math.max(0, $("bombArena").clientHeight - 48 - 78 - $("bombDrop").offsetHeight);
+  const y = distance * (1 - Math.max(0, s.remaining) / s.fallDuration);
+  $("bombDrop").style.transform = `translate(-50%, ${y}px)`;
+}
+
+function answerBomb(pinyin = null) {
+  const s = bombGame;
+  if (!s || s.paused || s.phase !== "falling") return;
+  advanceBomb(performance.now());
+  if (s.phase !== "falling") return;
+  if (pinyin !== null && bombPinyinKey(pinyin) !== bombPinyinKey(s.word[1])) {
+    resolveBomb(false, "เลือกพินอินผิด");
+    return;
+  }
+  s.bonus = pinyin !== null;
+  sfx.click();
+  beginBombCharacter();
+}
+
+function resizeBombWriter() {
+  if (!bombWriter || $("bombWriting").hidden) return;
+  const size = $("bombWriter").clientWidth;
+  if (size) bombWriter.updateDimensions({ width: size, height: size, padding: 16 });
+}
+
+async function beginBombCharacter() {
+  const s = bombGame;
+  if (!s) return;
+  const index = s.charIndex;
+  s.phase = "preparing";
+  showBombView("bombWriting");
+  $("bombWritingWord").textContent = s.word[0];
+  $("bombCharProgress").textContent = `เขียนตัวที่ ${index + 1} / ${s.chars.length} : ${s.chars[index]}`;
+  $("bombBonusLabel").textContent = s.bonus ? "รอรับโบนัสพินอิน +50" : "แตะระเบิด: ไม่มีโบนัสพินอิน";
+  $("bombCharList").replaceChildren();
+  s.chars.forEach((char, i) => {
+    const chip = document.createElement("span");
+    chip.className = `bomb-char${i < index ? " done" : i === index ? " current" : ""}`;
+    chip.textContent = char;
+    if (i === index) chip.setAttribute("aria-current", "step");
+    $("bombCharList").appendChild(chip);
+  });
+  if (!bombWriter) {
+    bombWriter = new window.HanziWriter("bombWriter", {
+      width: 300, height: 300, padding: 16, showCharacter: false, showOutline: false,
+      strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86",
+      highlightColor: "#26a477", highlightOnComplete: false, showHintAfterMisses: false,
+      strokeFadeDuration: 120, charDataLoader: (char) => bombCharData.get(char)
+    });
+  }
+  await bombWriter.setCharacter(s.chars[index]);
+  if (bombGame !== s || s.phase !== "preparing" || s.charIndex !== index) return;
+  resizeBombWriter();
+  syncBombOutline();
+  s.writeDuration = bombWriteSeconds(s, bombCharData.get(s.chars[index]).strokes.length);
+  s.remaining = s.writeDuration;
+  s.lastTime = performance.now();
+  s.phase = "writing";
+  $("bombStrokeHint").textContent = "เขียนตามลำดับขีดให้ครบ ก่อนเวลาหมด";
+  renderBombTimer();
+  bombWriter.quiz({
+    onMistake: () => {
+      if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
+        $("bombStrokeHint").textContent = "เส้นยังไม่ตรงหรือลำดับขีดไม่ถูก ลองใหม่ได้ ไม่เสียชีวิต";
+      }
+    },
+    onCorrectStroke: (data) => {
+      if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
+        $("bombStrokeHint").textContent = `ถูกต้อง เหลือ ${data.strokesRemaining} ขีด`;
+      }
+    },
+    onComplete: () => {
+      if (bombGame !== s || s.phase !== "writing" || s.charIndex !== index) return;
+      if (s.paused) { s.pendingComplete = true; return; }
+      completeBombCharacter();
+    }
+  });
+}
+
+function completeBombCharacter() {
+  const s = bombGame;
+  if (!s || s.paused || s.phase !== "writing") return;
+  advanceBomb(performance.now());
+  if (s.phase !== "writing") return;
+  s.pendingComplete = false;
+  s.charIndex++;
+  if (s.charIndex === s.chars.length) resolveBomb(true);
+  else { sfx.hit(); beginBombCharacter(); }
+}
+
+function syncBombOutline() {
+  if (!bombWriter) return;
+  if ($("bombOutlinePlay").checked) bombWriter.showOutline({ duration: 0 });
+  else bombWriter.hideOutline({ duration: 0 });
+}
+
+function renderBombTimer() {
+  const s = bombGame;
+  $("bombWriteTimer").textContent = `${Math.max(0, s.remaining).toFixed(1)} วิ`;
+  $("bombWriteTimer").classList.toggle("urgent", s.remaining <= 5);
+  $("bombTimeBar").value = Math.max(0, s.remaining) / s.writeDuration;
+}
+
+function resolveBomb(success, reason = "") {
+  const s = bombGame;
+  if (!s || s.paused || !["falling", "writing"].includes(s.phase)) return;
+  s.phase = "feedback";
+  s.remaining = 3.5;
+  bombWriter?.cancelQuiz();
+  if (success) {
+    s.score += 100 + (s.bonus ? 50 : 0);
+    s.defused++;
+    if (s.bonus) s.bonuses++;
+    sfx.hit();
+    speak(s.word[0]);
+  } else {
+    s.lives--;
+    sfx.boom();
+  }
+  $("bombFeedback").className = `bomb-message ${success ? "success" : "failure"}`;
+  $("bombResultTitle").textContent = success ? "ปลดระเบิดสำเร็จ!" : `ระเบิดแล้ว! ${reason}`;
+  $("bombRevealWord").textContent = s.word[0];
+  $("bombRevealPinyin").textContent = s.word[1];
+  $("bombRevealThai").textContent = s.word[2];
+  $("bombResultDetail").textContent = success
+    ? `+100 คะแนน${s.bonus ? " +50 โบนัสพินอิน" : " • ไม่มีโบนัสพินอิน"} • เตรียมรับลูกถัดไป`
+    : `เสีย 1 ชีวิต • เหลือ ${s.lives} / 3${s.lives ? " • ลองคำใหม่กัน" : " • เกมจบ"}`;
+  $("bombNextBtn").textContent = s.lives ? "ลูกถัดไป" : "ดูผลคะแนน";
+  showBombView("bombFeedback");
+  $("bombNextBtn").focus({ preventScroll: true });
+  updateBombHUD();
+}
+
+function advanceBomb(now) {
+  const s = bombGame;
+  if (!s) return;
+  const dt = Math.max(0, (now - s.lastTime) / 1000);
+  s.lastTime = now;
+  if (s.paused || !["falling", "writing", "feedback"].includes(s.phase)) return;
+  if (s.phase !== "feedback") s.elapsed += dt;
+  s.remaining -= dt;
+  if (s.phase === "falling") renderBombFall();
+  if (s.phase === "writing") renderBombTimer();
+  if (s.remaining > 0) return;
+  if (s.phase === "feedback") continueBombGame();
+  else resolveBomb(false, s.phase === "falling" ? "ตกถึงพื้น" : "เขียนไม่ทันเวลา");
+}
+
+function bombLoop(now, session) {
+  if (bombGame !== session) return;
+  advanceBomb(now);
+  if (bombGame === session) session.frame = requestAnimationFrame((t) => bombLoop(t, session));
+}
+
+function continueBombGame() {
+  const s = bombGame;
+  if (!s || s.paused || s.phase !== "feedback") return;
+  if (s.lives > 0) { nextBombWord(); return; }
+  stopBombGame();
+  sfx.over();
+  showGameOver("จบเกมเขียนปลดระเบิด", s.score,
+    `HSK ${s.level} • ปลดระเบิด ${s.defused} ลูก • โบนัสพินอิน ${s.bonuses} ครั้ง`, bombBestKey(s.level));
+}
+
+function pauseBombGame() {
+  const s = bombGame;
+  if (!s || s.paused) return;
+  advanceBomb(performance.now());
+  if (bombGame !== s) return;
+  s.paused = true;
+  $("bomb").classList.add("bomb-paused");
+  $("bombPauseOverlay").classList.add("show");
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  $("bombResumeBtn").focus();
+}
+
+function resumeBombGame() {
+  const s = bombGame;
+  if (!s || !s.paused) return;
+  s.paused = false;
+  s.lastTime = performance.now();
+  $("bomb").classList.remove("bomb-paused");
+  $("bombPauseOverlay").classList.remove("show");
+  $("bombPauseBtn").focus();
+  if (s.pendingComplete) completeBombCharacter();
+}
+
+function stopBombGame() {
+  if (bombGame) {
+    cancelAnimationFrame(bombGame.frame);
+    bombGame.controller?.abort();
+  }
+  bombWriter?.cancelQuiz();
+  bombGame = null;
+  music.stop();
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+function quitBombGame() {
+  if (!bombGame) return;
+  saveBest(bombBestKey(bombGame.level), bombGame.score);
+  stopBombGame();
+  switchScreen(menuEl);
+  updateBestLine();
+}
+
+$("bombBody").addEventListener("click", () => answerBomb());
+$("bombRetryBtn").addEventListener("click", () => { if (bombGame?.phase === "error") prepareBombWord(); });
+$("bombSkipBtn").addEventListener("click", () => { if (bombGame?.phase === "error") nextBombWord(); });
+$("bombNextBtn").addEventListener("click", continueBombGame);
+$("bombPauseBtn").addEventListener("click", pauseBombGame);
+$("bombResumeBtn").addEventListener("click", resumeBombGame);
+$("bombQuitBtn").addEventListener("click", quitBombGame);
+$("bombPauseQuitBtn").addEventListener("click", quitBombGame);
+$("bombMuteBtn").addEventListener("click", toggleMute);
+$("bombOutlineSetup").addEventListener("change", () => {
+  $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
+  syncBombOutline();
+});
+$("bombOutlinePlay").addEventListener("change", () => {
+  $("bombOutlineSetup").checked = $("bombOutlinePlay").checked;
+  syncBombOutline();
+});
+new ResizeObserver(resizeBombWriter).observe($("bombWriter"));
+window.addEventListener("resize", renderBombFall);
+
 let selectedLevel = null;
 const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต", vocab: "📖 เกมคำศัพท์", sentence: "🧩 เกมเรียงประโยค", zombie: "🧟 เกมยิงซอมบี้" };
 MODE_TITLES.matching = "เกมแฟลชการ์ดจับคู่";
-const bestKey = () => gameMode === "matching"
+MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
+const bestKey = () => gameMode === "bomb"
+  ? bombBestKey(selectedLevel)
+  : gameMode === "matching"
   ? matchingBestKey(selectedLevel, difficulty, quizMode, zDuration)
   : gameMode === "vocab"
   ? `cr_best_hsk${selectedLevel}_quiz_${quizMode}`
@@ -2119,7 +2503,9 @@ const bestKey = () => gameMode === "matching"
     : gameMode === "zombie"
       ? `cr_best_hsk${selectedLevel}_zombie_${difficulty}_${zDuration}`
       : `cr_best_hsk${selectedLevel}_${difficulty}`;
-const startLabel = () => gameMode === "matching"
+const startLabel = () => gameMode === "bomb"
+  ? `เริ่มเขียนปลดระเบิด HSK ${selectedLevel}`
+  : gameMode === "matching"
   ? `เริ่ม HSK ${selectedLevel} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`
   : gameMode === "vocab"
   ? `🚀 เริ่ม HSK ${selectedLevel} (${quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย"}, Endless)`
@@ -2162,8 +2548,9 @@ $("cards").addEventListener("pointerdown", (e) => {
   $("diffRow").style.display = arcade || isMatching ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
-  $("lifeRow").style.display = arcade || isMatching ? "none" : "";
-  $("nextRow").style.display = arcade || isMatching ? "none" : "";
+  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" ? "none" : "";
+  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" ? "none" : "";
+  $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
@@ -2242,6 +2629,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "sentence") startSentGame(selectedLevel);
   else if (gameMode === "zombie") startZombieGame(selectedLevel);
   else if (gameMode === "matching") startMatchingGame(selectedLevel);
+  else if (gameMode === "bomb") startBombGame(selectedLevel);
   else startGame(selectedLevel);
 });
 
@@ -2274,6 +2662,8 @@ function toggleMute() {
   music.setMuted(muted); // ปิดเฉพาะเพลงพื้นหลัง เสียงพูดภาษาจีนยังเล่นต่อ
   $("matchMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("matchMuteBtn").setAttribute("aria-pressed", String(muted));
+  $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
+  $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
   $("muteBtn").textContent = muted ? "🔇" : "🔊";
   $("quizMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("sentMuteBtn").textContent = muted ? "🔇" : "🔊";
@@ -2285,7 +2675,7 @@ $("againBtn").addEventListener("click", () => { sfx.click(); if (lastStarter) la
 $("menuBtn").addEventListener("click", () => { sfx.click(); switchScreen(menuEl); updateBestLine(); });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) pauseMatchingGame();
+  if (document.hidden) { pauseMatchingGame(); pauseBombGame(); }
   if (document.hidden && running && !paused) {
     paused = true;
     $("pauseOverlay").classList.add("show");

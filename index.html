@@ -38,6 +38,11 @@
       <div class="card-title">เกมยิงซอมบี้</div>
       <div class="card-desc">อ่านคำจีนบนหัวซอมบี้ แล้วเลือกพินอินให้ถูกเพื่อยิง ก่อนซอมบี้จะถึงตัวตำรวจ</div>
     </button>
+    <button class="card" data-mode="bomb">
+      <div class="card-icon bomb-card-icon" aria-hidden="true">字</div>
+      <div class="card-title">เกมเขียนปลดระเบิด</div>
+      <div class="card-desc">รับระเบิดคำจีน เลือกพินอินรับโบนัส แล้วเขียนทีละตัวให้ทันเวลา มี 3 ชีวิต</div>
+    </button>
     <button class="card" data-mode="matching">
       <div class="card-icon" aria-hidden="true">汉 / ก</div>
       <div class="card-title">เกมแฟลชการ์ดจับคู่</div>
@@ -98,6 +103,11 @@
         <button class="next-btn selected" data-next="auto">⚡ อัตโนมัติ</button>
         <button class="next-btn" data-next="manual">👉 กดเอง</button>
       </div>
+    </div>
+
+    <div class="setup-row" id="bombSetupRow" style="display:none">
+      <label class="bomb-toggle"><input id="bombOutlineSetup" type="checkbox" checked> แสดงเงาเส้นช่วยเขียน</label>
+      <p class="bomb-instructions">แตะลูกระเบิดเพื่อเขียน (100 คะแนน) หรือเลือกพินอินที่ถูกเพื่อรับโบนัสอีก 50 คะแนนเมื่อปลดสำเร็จ<br>ตอบผิด ตกถึงพื้น หรือเขียนไม่ทัน เสีย 1 ชีวิต • ยิ่งเล่นยิ่งเร็ว<br>สุ่มไม่ซ้ำจนครบระดับ • ตรวจลำดับขีดทีละตัว • ต้องใช้อินเทอร์เน็ตโหลดเส้นอักษร</p>
     </div>
 
     <button id="startBtn" class="big-btn" disabled>เลือกโหมดก่อน</button>
@@ -250,6 +260,75 @@
       <h2 id="matchPauseTitle">หยุดชั่วคราว</h2>
       <button id="matchResumeBtn" class="big-btn">เล่นต่อ</button>
       <button id="matchQuitBtn" class="big-btn secondary">กลับเมนู</button>
+    </div>
+  </div>
+</div>
+
+<div id="bomb" class="screen">
+  <header class="bomb-header">
+    <div><h2>เขียนปลดระเบิด</h2><span id="bombLevel"></span></div>
+    <div class="match-controls">
+      <button id="bombMuteBtn" class="match-control" aria-pressed="false">ปิดเสียง</button>
+      <button id="bombPauseBtn" class="match-control">พักเกม</button>
+      <button id="bombQuitBtn" class="match-control">กลับเมนู</button>
+    </div>
+  </header>
+  <div class="bomb-stats">
+    <strong id="bombScore">0 คะแนน</strong>
+    <span id="bombLives" role="status">ชีวิต 3 / 3</span>
+    <span id="bombPace"></span>
+  </div>
+  <div id="bombArena" class="bomb-arena">
+    <div class="bomb-cloud cloud-one" aria-hidden="true"></div>
+    <div class="bomb-cloud cloud-two" aria-hidden="true"></div>
+    <svg class="bomb-plane" viewBox="0 0 180 70" aria-hidden="true">
+      <path d="M10 31 L48 26 L76 4 L95 4 L83 26 L143 26 Q161 27 174 38 L173 43 L82 45 L95 64 L76 64 L48 45 L15 44 L3 17 L16 17 L31 31Z" fill="#d6e8fa" stroke="#708ea9" stroke-width="2"/>
+      <path d="M140 27 L153 29 L162 36 L138 36Z" fill="#447a9a"/>
+    </svg>
+    <div id="bombDrop" hidden>
+      <button id="bombBody" aria-label="แตะระเบิดเพื่อเขียนโดยไม่รับโบนัส">
+        <span id="bombWord" lang="zh"></span><small>แตะเพื่อเขียน</small>
+      </button>
+      <div id="bombOptions" role="group" aria-label="เลือกพินอินที่ถูกเพื่อรับโบนัส"></div>
+    </div>
+    <div class="bomb-ground"><span>อย่าให้ระเบิดถึงพื้น</span></div>
+    <p id="bombArenaHint">เลือกพินอินรับโบนัส หรือแตะระเบิดเพื่อเขียน</p>
+  </div>
+  <section id="bombWriting" class="bomb-writing" hidden aria-label="ฝึกเขียนคำศัพท์">
+    <div class="bomb-write-heading">
+      <div><span id="bombWritingWord" lang="zh"></span><p id="bombCharProgress"></p></div>
+      <div><strong id="bombWriteTimer" role="timer"></strong><p id="bombBonusLabel"></p></div>
+    </div>
+    <progress id="bombTimeBar" max="1" value="1" aria-label="เวลาเขียนที่เหลือ"></progress>
+    <div id="bombCharList" aria-label="ตัวอักษรในคำ"></div>
+    <div id="bombWriter" aria-label="ลากเส้นเขียนตัวอักษรจีนตามลำดับขีด"></div>
+    <p id="bombStrokeHint" role="status" aria-live="polite"></p>
+    <label class="bomb-toggle"><input id="bombOutlinePlay" type="checkbox" checked> แสดงเงาเส้นช่วยเขียน</label>
+    <p class="bomb-instructions">ใช้นิ้ว เมาส์ หรือปากกาเขียนตามลำดับขีด • เขียนครบทุกตัวเพื่อปลดระเบิด</p>
+  </section>
+  <section id="bombLoading" class="bomb-message" role="status" hidden>
+    <h3 id="bombLoadTitle">เตรียมระเบิด...</h3>
+    <p id="bombLoadText">กำลังโหลดข้อมูลเส้นอักษร ไม่หักเวลาและชีวิต</p>
+    <div id="bombLoadActions" class="match-controls" hidden>
+      <button id="bombRetryBtn" class="match-control">ลองโหลดอีกครั้ง</button>
+      <button id="bombSkipBtn" class="match-control">ข้ามคำนี้</button>
+    </div>
+  </section>
+  <section id="bombFeedback" class="bomb-message" role="status" aria-live="polite" hidden>
+    <div class="bomb-result-mark" aria-hidden="true"></div>
+    <h2 id="bombResultTitle"></h2>
+    <div id="bombRevealWord" lang="zh"></div>
+    <div id="bombRevealPinyin"></div>
+    <div id="bombRevealThai"></div>
+    <p id="bombResultDetail"></p>
+    <button id="bombNextBtn" class="big-btn">ลูกถัดไป</button>
+  </section>
+  <div id="bombPauseOverlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="bombPauseTitle">
+    <div class="overlay-box">
+      <h2 id="bombPauseTitle">หยุดชั่วคราว</h2>
+      <p>หยุดทั้งระเบิดและเวลาเขียนแล้ว</p>
+      <button id="bombResumeBtn" class="big-btn">เล่นต่อ</button>
+      <button id="bombPauseQuitBtn" class="big-btn secondary">กลับเมนู</button>
     </div>
   </div>
 </div>

@@ -610,3 +610,79 @@ html, body {
 }
 .final-score { font-size: clamp(30px, 9vw, 44px); font-weight: 800; color: #ffd76a; }
 .new-best { color: #58ff88; font-weight: 700; min-height: 1.2em; }
+
+.bomb-card-icon { border-radius: 50%; background: #263044; border: 3px solid #ffb25a; width: 72px; height: 72px; line-height: 66px; color: #fff4cd; }
+.bomb-toggle { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; cursor: pointer; color: #d4e7ff; }
+.bomb-toggle input { width: 22px; height: 22px; accent-color: #ffc46b; }
+.bomb-instructions { color: #aebfdf; font-size: 14px; line-height: 1.7; text-align: center; }
+#bomb { padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); justify-content: flex-start; gap: 10px; overflow-y: auto; touch-action: pan-y; background: radial-gradient(ellipse at 50% 0%, #1b3358, #080e24 80%); }
+#bomb [hidden] { display: none !important; }
+#bomb > :not(.pause-overlay) { width: min(800px, 100%); flex-shrink: 0; }
+.bomb-header, .bomb-stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.bomb-header h2 { font-size: clamp(20px, 5vw, 28px); color: #ffd76a; }
+#bombLevel { color: #9cb7d7; font-size: 13px; }
+.bomb-header .match-control { padding: 8px 12px; font-size: 14px; }
+.bomb-stats { border: 1px solid #385578; border-radius: 12px; background: #10203b; padding: 10px 14px; font-size: clamp(14px, 3.8vw, 18px); }
+#bombScore { color: #ffd76a; }
+#bombLives { color: #ffb7ab; }
+#bombPace { color: #96d5ef; font-size: 13px; }
+#bomb .bomb-arena { position: relative; flex: 1 0 380px; min-height: 380px; max-height: 850px; overflow: hidden; border: 1px solid #416082; border-radius: 22px; background: linear-gradient(#294e75, #5684a2 70%, #bbac86); isolation: isolate; }
+.bomb-cloud { position: absolute; width: 140px; height: 24px; border-radius: 50%; background: #cedcea; opacity: .22; box-shadow: 25px -10px 0 6px #cedcea, 65px -4px 0 #cedcea; pointer-events: none; }
+.cloud-one { top: 25%; left: -35px; }
+.cloud-two { top: 52%; right: 20px; transform: scale(.7); }
+.bomb-plane { position: absolute; top: 8px; left: calc(50% - 90px); width: 180px; height: 70px; filter: drop-shadow(0 8px 5px #11233b55); animation: bombPlane 3s ease-in-out infinite alternate; }
+@keyframes bombPlane { to { transform: translateX(22px) rotate(-3deg); } }
+#bombDrop { position: absolute; top: 78px; left: 50%; width: min(94%, 480px); display: flex; flex-direction: column; align-items: center; will-change: transform; }
+#bombBody { position: relative; width: 190px; min-height: 114px; padding: 22px 12px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 3px solid #9ba9b8; border-radius: 48% 48% 45% 45%; background: radial-gradient(ellipse at 30% 25%, #485c70, #151e2b 70%); color: #fff3c6; box-shadow: inset -7px -9px 14px #0005, 0 8px 15px #15284455; cursor: pointer; touch-action: manipulation; }
+#bombBody::before { content: ""; position: absolute; top: -15px; width: 30px; height: 16px; border: 3px solid #9ba9b8; background: #243446; border-radius: 4px 4px 0 0; }
+#bombWord { font-family: "Noto Sans SC", sans-serif; font-size: clamp(24px, 6.8vw, 34px); font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
+#bombBody small { font: 11px "Noto Sans Thai", sans-serif; color: #c3d4e6; margin-top: 5px; }
+#bombOptions { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding-top: 26px; }
+.bomb-option { position: relative; border: 2px solid #edc68d; border-radius: 12px; min-height: 52px; padding: 8px 4px; background: #fff2d6; color: #3e2c20; font: 700 clamp(14px, 3.8vw, 18px) "Noto Sans Thai", sans-serif; overflow-wrap: anywhere; cursor: pointer; box-shadow: 0 4px 0 #8d7355; touch-action: manipulation; }
+.bomb-option::before { content: ""; position: absolute; width: 2px; height: 28px; left: 50%; top: -28px; background: #ecce9b; pointer-events: none; }
+.bomb-option:hover, #bombBody:hover { filter: brightness(1.15); }
+.bomb-option:focus-visible, #bombBody:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.bomb-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; border-top: 5px solid #8db178; background: repeating-linear-gradient(115deg, #364d3e 0 25px, #3d5644 25px 50px); text-align: center; color: #deeed6; font-size: 12px; padding-top: 8px; }
+#bombArenaHint { position: absolute; left: 8px; right: 8px; bottom: 62px; text-align: center; color: #fff; font-size: 12px; pointer-events: none; text-shadow: 0 1px 3px #172c40; }
+.bomb-writing { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; border-radius: 20px; border: 1px solid #385578; background: #111f37; }
+.bomb-write-heading { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; }
+#bombWritingWord { font: 700 clamp(24px, 6vw, 36px) "Noto Sans SC", sans-serif; color: #ffe0a1; overflow-wrap: anywhere; }
+#bombCharProgress, #bombBonusLabel { font-size: 13px; color: #aebfdf; }
+#bombWriteTimer { font-size: 28px; color: #9dffbc; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#bombWriteTimer.urgent { color: #ff8f83; }
+#bombTimeBar { width: 100%; height: 8px; border: 0; border-radius: 10px; overflow: hidden; accent-color: #ffc46b; background: #263c59; }
+#bombTimeBar::-webkit-progress-bar { background: #263c59; }
+#bombTimeBar::-webkit-progress-value { background: #ffc46b; }
+#bombCharList { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.bomb-char { padding: 3px 10px; border: 1px solid #496482; border-radius: 8px; font: 24px "Noto Sans SC", sans-serif; color: #90a6bf; }
+.bomb-char.current { border-color: #ffc46b; color: #ffe0a1; background: #483923; }
+.bomb-char.done { color: #9dffbc; background: #1a473b; border-color: #64ad8a; }
+#bombWriter { width: min(320px, 100%, 43vh); aspect-ratio: 1; min-width: 190px; position: relative; border: 2px solid #93a9c0; border-radius: 14px; overflow: hidden; background-color: #fbf7ee; background-image: linear-gradient(90deg, transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)), linear-gradient(transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)); touch-action: none; user-select: none; }
+#bombWriter svg { display: block; width: 100%; height: 100%; touch-action: none; }
+#bombStrokeHint { min-height: 24px; color: #ffd76a; text-align: center; font-size: 14px; }
+#bomb .bomb-message { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; flex: 1 0 auto; max-width: 680px; margin: auto; padding: 24px; border: 1px solid #385578; border-radius: 22px; background: #101e34; text-align: center; overflow-wrap: anywhere; }
+#bombLoading p { color: #b9cbe0; }
+#bombFeedback.success { border-color: #69d6a3; background: radial-gradient(ellipse at 50% 10%, #1e5143, #101e34 75%); }
+#bombFeedback.failure { border-color: #ff977d; background: radial-gradient(ellipse at 50% 10%, #692f2f, #101e34 75%); }
+.bomb-result-mark { width: 64px; height: 64px; border: 3px solid #69d6a3; border-radius: 50%; position: relative; }
+.success .bomb-result-mark::after { content: ""; position: absolute; width: 26px; height: 14px; border-left: 5px solid #a2ffd3; border-bottom: 5px solid #a2ffd3; transform: rotate(-45deg); left: 16px; top: 17px; }
+.failure .bomb-result-mark { border-color: #ffb378; background: #ff9c55; box-shadow: 0 0 0 12px #ff753544, 0 0 40px 20px #ff532044; animation: bombExplosion .6s ease-out; }
+@keyframes bombExplosion { from { transform: scale(.2); opacity: .3; } 60% { transform: scale(1.4); } to { transform: scale(1); opacity: 1; } }
+#bombRevealWord { font: 700 clamp(32px, 9vw, 52px) "Noto Sans SC", sans-serif; color: #ffe0a1; }
+#bombRevealPinyin { color: #a6daff; font-size: clamp(20px, 5vw, 28px); }
+#bombRevealThai { color: #a2ffd3; font-size: clamp(18px, 5vw, 26px); }
+#bombResultDetail { color: #c2d3e8; }
+#bombPauseOverlay { position: fixed; padding: 16px; }
+#bomb.bomb-paused > :not(.pause-overlay) { visibility: hidden; }
+#bomb.bomb-paused .bomb-plane { animation-play-state: paused; }
+@media (max-width: 480px) {
+  #bomb { padding-left: 10px; padding-right: 10px; gap: 8px; }
+  .bomb-header h2 { font-size: 20px; }
+  .bomb-header .match-controls { gap: 5px; }
+  .bomb-header .match-control { padding: 7px 9px; font-size: 12px; }
+  .bomb-writing { padding: 10px; gap: 8px; }
+  #bombBody { width: 160px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bomb-plane, .failure .bomb-result-mark { animation: none; }
+}
