@@ -445,6 +445,8 @@ html, body {
   line-height: 1.6;
 }
 #sentReveal.show { display: block; animation: revealIn .3s ease-out; }
+#sentReveal.correct { border-color: #58ff88; box-shadow: 0 0 18px rgba(88, 255, 136, .25); }
+#sentReveal.wrong { border-color: #ff3b3b; box-shadow: 0 0 18px rgba(255, 59, 59, .25); }
 @keyframes revealIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 .confetti {
@@ -480,6 +482,23 @@ html, body {
 }
 #sentNextBtn.show { display: block; }
 #sentNextBtn:active { transform: scale(.96); }
+#sentGiveUpBtn {
+  display: block;
+  min-width: 220px;
+  margin-top: 10px;
+  padding: 10px 22px;
+  font-size: clamp(14px, 3.8vw, 18px);
+  font-weight: 700;
+  border: 2px solid #ff5b5b;
+  border-radius: 14px;
+  background: rgba(255, 59, 59, .12);
+  color: #ffb3b3;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background .15s, opacity .15s;
+}
+#sentGiveUpBtn.hide { display: none; }
+#sentGiveUpBtn:active { transform: scale(.96); }
 
 /* ---------- Overlays ---------- */
 #pauseOverlay, .pause-overlay, #gameover {

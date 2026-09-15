@@ -446,7 +446,8 @@ function nextSentQuestion() {
   sent.wrongThisQ = 0;
   $("sentNextBtn").textContent = "ประโยคถัดไป ▶";
   $("sentNextBtn").classList.remove("show");
-  $("sentReveal").classList.remove("show");
+  $("sentReveal").classList.remove("show", "correct", "wrong");
+  $("sentGiveUpBtn").classList.remove("hide");
   // คิวทบทวน: ประโยคที่เคยเรียงผิดวนกลับมาทุกๆ 5 ข้อ จนกว่าจะถูกในครั้งเดียว
   if (sent.reviewQueue.length && sent.sinceReview >= 5) {
     sent.current = sent.reviewQueue.shift();
@@ -518,8 +519,10 @@ function sentRemove(i) {
   renderSent();
 }
 
-function showSentReveal() {
+function showSentReveal(wrong) {
   const rv = $("sentReveal");
+  rv.classList.remove("correct", "wrong");
+  rv.classList.add(wrong ? "wrong" : "correct");
   rv.innerHTML = `<div class="r-zh">${sent.current[0]}</div><div class="r-py">${sent.current[1]}</div>` +
     (sent.current[3] ? `<div class="r-focus">📐 จุดไวยากรณ์: ${sent.current[3]}</div>` : "");
   rv.classList.add("show");
@@ -533,10 +536,11 @@ function checkSentAnswer() {
     sent.solved = true;
     sent.score++;
     $("sentAnswer").classList.add("correct-full");
+    $("sentGiveUpBtn").classList.add("hide");
     sfx.hit();
     confettiBurst($("sent"), 30);
     speak(zh.trim().split(/[｜|]/)[0]);
-    showSentReveal();
+    showSentReveal(false);
     if (sent.wrongThisQ > 0) sent.reviewQueue.push(sent.current);
     updateSentHUD();
     if (autoNext) {
@@ -550,10 +554,11 @@ function checkSentAnswer() {
     sent.placed = want.map((t, id) => ({ t, id }));
     sent.pool = [];
     sent.reviewQueue.push(sent.current);
+    $("sentGiveUpBtn").classList.add("hide");
     sfx.wrong();
     speak(zh.trim().split(/[｜|]/)[0]);
     renderSent();
-    showSentReveal();
+    showSentReveal(true);
     if (quizLivesOn) sent.lives--;
     updateSentHUD();
     if (autoNext) {
@@ -566,6 +571,36 @@ function checkSentAnswer() {
       $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
       $("sentNextBtn").classList.add("show");
     }
+  }
+}
+
+function sentGiveUp() {
+  if (!sent || sent.solved) return;
+  sfx.click();
+  // เปิดเผยเฉลยและถือว่าเป็นการตอบผิดของข้อนี้ (เสีย 1 ชีวิตถ้าเปิดพลังชีวิต)
+  const want = sent.current[4];
+  const zh = sent.current[0];
+  sent.wrongThisQ++;
+  sent.solved = true;
+  sent.placed = want.map((t, id) => ({ t, id }));
+  sent.pool = [];
+  sent.reviewQueue.push(sent.current);
+  $("sentGiveUpBtn").classList.add("hide");
+  sfx.wrong();
+  speak(zh.trim().split(/[｜|]/)[0]);
+  renderSent();
+  showSentReveal(true);
+  if (quizLivesOn) sent.lives--;
+  updateSentHUD();
+  if (autoNext) {
+    sent.nextTimer = setTimeout(() => {
+      if (!sent) return;
+      if (quizLivesOn && sent.lives <= 0) sentGameOver();
+      else nextSentQuestion();
+    }, 3000);
+  } else {
+    $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
+    $("sentNextBtn").classList.add("show");
   }
 }
 
@@ -588,6 +623,7 @@ $("sentNextBtn").addEventListener("click", () => {
   if (quizLivesOn && sent.lives <= 0) sentGameOver();
   else nextSentQuestion();
 });
+$("sentGiveUpBtn").addEventListener("click", sentGiveUp);
 $("sentMuteBtn").addEventListener("click", toggleMute);
 $("sentQuitBtn").addEventListener("click", () => {
   sfx.click();
@@ -2012,7 +2048,15 @@ function flipMatchingCard(i) {
   const deck = matching.deck;
   advanceMatching(performance.now());
   const s = matching;
-  if (!s || s.deck !== deck || s.waitUntil || !s.deck[i] || s.deck[i].matched || s.open.includes(i)) return;
+  if (!s || s.deck !== deck || s.waitUntil || !s.deck[i] || s.deck[i].matched) return;
+  // คลิกการ์ดใบที่เลือกอยู่ซ้ำ = ยกเลิกการเลือก เพื่อเลือกคู่ตัวใหม่
+  if (s.open.includes(i)) {
+    s.open = s.open.filter((idx) => idx !== i);
+    sfx.click();
+    renderMatchingCards();
+    updateMatchingHUD();
+    return;
+  }
   s.open.push(i);
   sfx.click();
   if (s.open.length === 2) {
@@ -2409,6 +2453,7 @@ function completeBombCharacter() {
   advanceBomb(performance.now());
   if (s.phase !== "writing") return;
   s.pendingComplete = false;
+  speak(s.chars[s.charIndex]);
   s.charIndex++;
   if (s.charIndex === s.chars.length) resolveBomb(true);
   else { sfx.hit(); beginBombCharacter(); }
@@ -2439,7 +2484,6 @@ function resolveBomb(success, reason = "") {
     s.defused++;
     if (s.bonus) s.bonuses++;
     sfx.hit();
-    speak(s.word[0]);
   } else {
     s.lives--;
     sfx.bombBlast();
