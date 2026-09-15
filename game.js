@@ -78,6 +78,7 @@ const sfx = {
   misfire: () => { noiseBurst(0.03, 0.25, 2500, 9000); setTimeout(() => noiseBurst(0.025, 0.18, 3000, 9000), 70); },
   groan:   () => beep(110, 0.35, "sawtooth", 0.08, -30),
   boom:    () => { beep(120, 0.3, "sawtooth", 0.16, -80); beep(70, 0.35, "triangle", 0.14, -40); },
+  bombBlast: () => { noiseBurst(0.7, 0.45, 70, 3200); beep(110, 0.5, "sawtooth", 0.18, -80); beep(65, 0.8, "triangle", 0.24, -35); },
   wrong:   () => beep(160, 0.22, "sawtooth", 0.14, -60),
   hit:     () => beep(880, 0.1, "square", 0.1, 300),
   damage:  () => { beep(90, 0.4, "sawtooth", 0.2, -50); beep(55, 0.5, "triangle", 0.18, -30); },
@@ -2109,6 +2110,61 @@ $("matchMuteBtn").addEventListener("click", toggleMute);
 
 let bombGame = null, bombWriter = null, bombLibraryPromise = null;
 const bombCharData = new Map();
+const pencilSound = {
+  source: null, gain: null, pointerId: null, buffer: null,
+  start(e) {
+    if (!e.isPrimary || e.button !== 0 || muted || !bombGame || bombGame.paused || bombGame.phase !== "writing") return;
+    this.stop();
+    try {
+      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      if (AC.state === "suspended") AC.resume();
+      if (!this.buffer) {
+        this.buffer = AC.createBuffer(1, Math.ceil(AC.sampleRate * 0.5), AC.sampleRate);
+        const data = this.buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      }
+      const source = AC.createBufferSource(), filter = AC.createBiquadFilter(), gain = AC.createGain();
+      source.buffer = this.buffer;
+      source.loop = true;
+      filter.type = "bandpass";
+      filter.frequency.value = 2400;
+      filter.Q.value = 0.7;
+      gain.gain.value = 0;
+      source.connect(filter); filter.connect(gain); gain.connect(AC.destination);
+      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+      source.start();
+      this.source = source;
+      this.gain = gain;
+      this.pointerId = e.pointerId;
+      this.x = e.clientX; this.y = e.clientY; this.time = e.timeStamp;
+    } catch (error) { this.stop(); }
+  },
+  move(e) {
+    if (e.pointerId !== this.pointerId || !this.source) return;
+    if (muted || !bombGame || bombGame.paused || bombGame.phase !== "writing" || !e.buttons) { this.stop(); return; }
+    const distance = Math.hypot(e.clientX - this.x, e.clientY - this.y);
+    const speed = Math.min(2, distance / Math.max(8, e.timeStamp - this.time));
+    this.x = e.clientX; this.y = e.clientY; this.time = e.timeStamp;
+    if (distance < 0.5) return;
+    const now = AC.currentTime;
+    this.source.playbackRate.setTargetAtTime(0.8 + speed * 0.25, now, 0.02);
+    this.gain.gain.cancelScheduledValues(now);
+    this.gain.gain.setTargetAtTime(0.055 + speed * 0.04, now, 0.008);
+    this.gain.gain.setTargetAtTime(0, now + 0.055, 0.015);
+  },
+  stop() {
+    if (this.source) {
+      const now = AC.currentTime;
+      this.gain.gain.cancelScheduledValues(now);
+      this.gain.gain.setTargetAtTime(0, now, 0.005);
+      this.source.stop(now + 0.03);
+    }
+    this.source = null;
+    this.gain = null;
+    this.pointerId = null;
+  }
+};
+const BOMB_HINT_AFTER_MISSES = 2;
 const bombBestKey = (level) => `cr_best_hsk${level}_bomb`;
 const bombPinyinKey = (text) => text.normalize("NFC").replace(/\s+/g, "").toLowerCase();
 const bombTier = (s) => Math.floor(s.elapsed / 45) + Math.floor(s.defused / 4);
@@ -2174,6 +2230,7 @@ function startBombGame(level) {
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("bomb"));
+  music.start();
   updateBombHUD();
   nextBombWord();
   const s = bombGame;
@@ -2291,6 +2348,7 @@ async function beginBombCharacter() {
   const s = bombGame;
   if (!s) return;
   const index = s.charIndex;
+  pencilSound.stop();
   s.phase = "preparing";
   showBombView("bombWriting");
   $("bombWritingWord").textContent = s.word[0];
@@ -2307,9 +2365,9 @@ async function beginBombCharacter() {
   if (!bombWriter) {
     bombWriter = new window.HanziWriter("bombWriter", {
       width: 300, height: 300, padding: 16, showCharacter: false, showOutline: false,
-      strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86",
-      highlightColor: "#26a477", highlightOnComplete: false, showHintAfterMisses: false,
-      strokeFadeDuration: 120, charDataLoader: (char) => bombCharData.get(char)
+      strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86", drawingWidth: 64,
+      highlightColor: "#26a477", highlightOnComplete: false, showHintAfterMisses: BOMB_HINT_AFTER_MISSES,
+      strokeHighlightSpeed: 0.7, strokeFadeDuration: 120, charDataLoader: (char) => bombCharData.get(char)
     });
   }
   await bombWriter.setCharacter(s.chars[index]);
@@ -2320,17 +2378,21 @@ async function beginBombCharacter() {
   s.remaining = s.writeDuration;
   s.lastTime = performance.now();
   s.phase = "writing";
-  $("bombStrokeHint").textContent = "เขียนตามลำดับขีดให้ครบ ก่อนเวลาหมด";
+  $("bombStrokeHint").textContent = `เริ่มขีดที่ 1 • ผิดขีดเดิม ${BOMB_HINT_AFTER_MISSES} ครั้ง จะมีเส้นสีเขียวสาธิตวิธีเขียน`;
   renderBombTimer();
   bombWriter.quiz({
-    onMistake: () => {
+    onMistake: (data) => {
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
-        $("bombStrokeHint").textContent = "เส้นยังไม่ตรงหรือลำดับขีดไม่ถูก ลองใหม่ได้ ไม่เสียชีวิต";
+        $("bombStrokeHint").textContent = data.mistakesOnStroke >= BOMB_HINT_AFTER_MISSES
+          ? `ดูเส้นสีเขียวสาธิตขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตามทิศทางนั้น • ไม่เสียชีวิต`
+          : `ขีดที่ ${data.strokeNum + 1} ยังไม่ถูก ลองใหม่ได้ • ผิดซ้ำจะมีเส้นสีเขียวช่วยบอก • ไม่เสียชีวิต`;
       }
     },
     onCorrectStroke: (data) => {
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
-        $("bombStrokeHint").textContent = `ถูกต้อง เหลือ ${data.strokesRemaining} ขีด`;
+        $("bombStrokeHint").textContent = data.strokesRemaining
+          ? `ถูกต้อง! ต่อไปเขียนขีดที่ ${data.strokeNum + 2} • เหลือ ${data.strokesRemaining} ขีด`
+          : "ถูกต้อง! เขียนครบทุกขีดแล้ว";
       }
     },
     onComplete: () => {
@@ -2370,6 +2432,7 @@ function resolveBomb(success, reason = "") {
   if (!s || s.paused || !["falling", "writing"].includes(s.phase)) return;
   s.phase = "feedback";
   s.remaining = 3.5;
+  pencilSound.stop();
   bombWriter?.cancelQuiz();
   if (success) {
     s.score += 100 + (s.bonus ? 50 : 0);
@@ -2379,7 +2442,7 @@ function resolveBomb(success, reason = "") {
     speak(s.word[0]);
   } else {
     s.lives--;
-    sfx.boom();
+    sfx.bombBlast();
   }
   $("bombFeedback").className = `bomb-message ${success ? "success" : "failure"}`;
   $("bombResultTitle").textContent = success ? "ปลดระเบิดสำเร็จ!" : `ระเบิดแล้ว! ${reason}`;
@@ -2432,6 +2495,8 @@ function pauseBombGame() {
   advanceBomb(performance.now());
   if (bombGame !== s) return;
   s.paused = true;
+  pencilSound.stop();
+  music.stop();
   $("bomb").classList.add("bomb-paused");
   $("bombPauseOverlay").classList.add("show");
   if ("speechSynthesis" in window) speechSynthesis.cancel();
@@ -2445,6 +2510,7 @@ function resumeBombGame() {
   s.lastTime = performance.now();
   $("bomb").classList.remove("bomb-paused");
   $("bombPauseOverlay").classList.remove("show");
+  music.start();
   $("bombPauseBtn").focus();
   if (s.pendingComplete) completeBombCharacter();
 }
@@ -2454,6 +2520,7 @@ function stopBombGame() {
     cancelAnimationFrame(bombGame.frame);
     bombGame.controller?.abort();
   }
+  pencilSound.stop();
   bombWriter?.cancelQuiz();
   bombGame = null;
   music.stop();
@@ -2485,6 +2552,13 @@ $("bombOutlinePlay").addEventListener("change", () => {
   $("bombOutlineSetup").checked = $("bombOutlinePlay").checked;
   syncBombOutline();
 });
+$("bombWriter").addEventListener("pointerdown", (e) => pencilSound.start(e));
+$("bombWriter").addEventListener("pointermove", (e) => pencilSound.move(e));
+const stopPencilPointer = (e) => { if (e.pointerId === pencilSound.pointerId) pencilSound.stop(); };
+$("bombWriter").addEventListener("pointerleave", stopPencilPointer);
+document.addEventListener("pointerup", stopPencilPointer, true);
+document.addEventListener("pointercancel", stopPencilPointer, true);
+window.addEventListener("blur", () => pencilSound.stop());
 new ResizeObserver(resizeBombWriter).observe($("bombWriter"));
 window.addEventListener("resize", renderBombFall);
 
@@ -2659,6 +2733,7 @@ $("quitBtn").addEventListener("click", () => {
 
 function toggleMute() {
   muted = !muted;
+  if (muted) pencilSound.stop();
   music.setMuted(muted); // ปิดเฉพาะเพลงพื้นหลัง เสียงพูดภาษาจีนยังเล่นต่อ
   $("matchMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("matchMuteBtn").setAttribute("aria-pressed", String(muted));

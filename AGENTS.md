@@ -7,3 +7,4 @@
 - Vocabulary data uses `[Chinese, Pinyin, Thai]` in the global `VOCAB` object; validate it with `node --check data/vocab.js`.
 - The writing mode loads Hanzi Writer 3.7.3 (with SRI) and hanzi-writer-data 2.0.1 from jsDelivr. Internet access is required for uncached characters; load failures must not consume lives or writing time.
 - Reuse the Hanzi Writer instance across characters and sessions because it registers document-level input listeners. Use `updateDimensions` when its container resizes so stroke coordinates remain accurate on mobile.
+- Hanzi Writer's `drawingWidth` is in its 1024-unit character coordinate system, not CSS pixels; it scales with the writing canvas.
