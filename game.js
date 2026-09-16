@@ -2209,11 +2209,16 @@ const pencilSound = {
   }
 };
 const BOMB_HINT_AFTER_MISSES = 2;
-const bombBestKey = (level) => `cr_best_hsk${level}_bomb`;
+const BOMB_DIFF = {
+  easy:   { label: "ง่าย",     fallMul: 1.4, writeMul: 1.35, tierMul: 0.7 },
+  medium: { label: "ปานกลาง", fallMul: 1.0, writeMul: 1.0,  tierMul: 1.0 },
+  hard:   { label: "ยากมาก",  fallMul: 0.7, writeMul: 0.7,  tierMul: 1.3 },
+};
+const bombBestKey = (level, diff) => `cr_best_hsk${level}_bomb_${diff}`;
 const bombPinyinKey = (text) => text.normalize("NFC").replace(/\s+/g, "").toLowerCase();
-const bombTier = (s) => Math.floor(s.elapsed / 45) + Math.floor(s.defused / 4);
-const bombFallSeconds = (s) => Math.max(3, 12 - bombTier(s) * 0.65);
-const bombWriteSeconds = (s, strokes) => Math.max(8, (8 + strokes * 2) * Math.max(0.4, 1 - bombTier(s) * 0.04));
+const bombTier = (s) => Math.floor((Math.floor(s.elapsed / 45) + Math.floor(s.defused / 4)) * (BOMB_DIFF[s.difficulty]?.tierMul ?? 1));
+const bombFallSeconds = (s) => Math.max(3, (12 - bombTier(s) * 0.65) * (BOMB_DIFF[s.difficulty]?.fallMul ?? 1));
+const bombWriteSeconds = (s, strokes) => Math.max(8, (8 + strokes * 2) * Math.max(0.4, 1 - bombTier(s) * 0.04) * (BOMB_DIFF[s.difficulty]?.writeMul ?? 1));
 
 function bombVocabulary(level) {
   const unique = new Map();
@@ -2256,21 +2261,21 @@ function updateBombHUD() {
   if (!s) return;
   $("bombScore").textContent = `${s.score} คะแนน`;
   $("bombLives").textContent = `ชีวิต ${s.lives} / 3`;
-  $("bombPace").textContent = `ความเร็ว ${bombTier(s) + 1} • ปลดแล้ว ${s.defused} ลูก`;
+  $("bombPace").textContent = `${BOMB_DIFF[s.difficulty]?.label ?? "ปานกลาง"} • ความเร็ว ${bombTier(s) + 1} • ปลดแล้ว ${s.defused} ลูก`;
 }
 
-function startBombGame(level) {
+function startBombGame(level, diff = difficulty) {
   stopBombGame();
   currentLevel = level;
-  lastStarter = () => startBombGame(level);
+  lastStarter = () => startBombGame(level, diff);
   const words = bombVocabulary(level);
-  bombGame = { level, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
+  bombGame = { level, difficulty: diff, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
     lives: 3, defused: 0, bonuses: 0, elapsed: 0, charIndex: 0, paused: false,
     frame: 0, lastTime: performance.now(), request: 0, controller: null };
   $("bomb").classList.remove("bomb-paused");
   $("bombPauseOverlay").classList.remove("show");
   $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
-  $("bombLevel").textContent = `HSK ${level} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
+  $("bombLevel").textContent = `HSK ${level} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("bomb"));
@@ -2532,7 +2537,7 @@ function continueBombGame() {
   stopBombGame();
   sfx.over();
   showGameOver("จบเกมเขียนปลดระเบิด", s.score,
-    `HSK ${s.level} • ปลดระเบิด ${s.defused} ลูก • โบนัสพินอิน ${s.bonuses} ครั้ง`, bombBestKey(s.level));
+    `HSK ${s.level} • ปลดระเบิด ${s.defused} ลูก • โบนัสพินอิน ${s.bonuses} ครั้ง`, bombBestKey(s.level, s.difficulty));
 }
 
 function pauseBombGame() {
@@ -2575,7 +2580,7 @@ function stopBombGame() {
 
 function quitBombGame() {
   if (!bombGame) return;
-  saveBest(bombBestKey(bombGame.level), bombGame.score);
+  saveBest(bombBestKey(bombGame.level, bombGame.difficulty), bombGame.score);
   stopBombGame();
   switchScreen(menuEl);
   updateBestLine();
@@ -2613,7 +2618,7 @@ const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต
 MODE_TITLES.matching = "เกมแฟลชการ์ดจับคู่";
 MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
 const bestKey = () => gameMode === "bomb"
-  ? bombBestKey(selectedLevel)
+  ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
   ? matchingBestKey(selectedLevel, difficulty, quizMode, zDuration)
   : gameMode === "vocab"
@@ -2624,7 +2629,7 @@ const bestKey = () => gameMode === "bomb"
       ? `cr_best_hsk${selectedLevel}_zombie_${difficulty}_${zDuration}`
       : `cr_best_hsk${selectedLevel}_${difficulty}`;
 const startLabel = () => gameMode === "bomb"
-  ? `เริ่มเขียนปลดระเบิด HSK ${selectedLevel}`
+  ? `เริ่มเขียนปลดระเบิด HSK ${selectedLevel} (${BOMB_DIFF[difficulty].label})`
   : gameMode === "matching"
   ? `เริ่ม HSK ${selectedLevel} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`
   : gameMode === "vocab"
@@ -2665,7 +2670,7 @@ $("cards").addEventListener("pointerdown", (e) => {
   const isMatching = gameMode === "matching";
   const arcade = gameMode === "meteor" || gameMode === "zombie";
   $("setupTitle").textContent = MODE_TITLES[gameMode];
-  $("diffRow").style.display = arcade || isMatching ? "" : "none";
+  $("diffRow").style.display = arcade || isMatching || gameMode === "bomb" ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
   $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" ? "none" : "";
