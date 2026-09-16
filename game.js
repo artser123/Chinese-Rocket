@@ -2425,6 +2425,8 @@ async function beginBombCharacter() {
   $("bombStrokeHint").textContent = `เริ่มขีดที่ 1 • ผิดขีดเดิม ${BOMB_HINT_AFTER_MISSES} ครั้ง จะมีเส้นสีเขียวสาธิตวิธีเขียน`;
   renderBombTimer();
   bombWriter.quiz({
+    leniency: 1.4,
+    markStrokeCorrectAfterMisses: 4,
     onMistake: (data) => {
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
         $("bombStrokeHint").textContent = data.mistakesOnStroke >= BOMB_HINT_AFTER_MISSES
