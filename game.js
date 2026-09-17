@@ -2818,10 +2818,15 @@ function normSyl(s) {
   return normPinyin(s).replace(/\s+/g, "");
 }
 
+function dictUpdateClearBtn() {
+  $("dictClearBtn").hidden = !dictInput.value;
+}
+
 function startDict() {
   switchScreen(dictEl);
   stopSpeech();
   dictInput.value = "";
+  dictUpdateClearBtn();
   dictResults.innerHTML = '<p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>';
   dictWritePanel.hidden = true;
   // show mic button if speech recognition is available
@@ -2879,7 +2884,26 @@ function dictSearch(query) {
   }
   // sort: shorter chinese first, then lower HSK level
   results.sort((a, b) => a.zh.length - b.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
+  // spoken-phrase fallback: a long Chinese query (e.g. a dictated sentence)
+  // with no direct hit -> list vocab words contained inside it, longest first
+  if (isChinese && !results.length && q.length >= 2) {
+    for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
+      for (const w of VOCAB[lvl] || []) {
+        if (w[0] && q.includes(w[0])) results.push({ zh: w[0], py: w[1], th: w[2], lvl });
+      }
+    }
+    results.sort((a, b) => b.zh.length - a.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
+  }
   dictRenderResults(results.slice(0, 20), q);
+}
+
+// Bing Translator deep link: Thai query -> th->zh ; Chinese query -> zh->th ; else auto->th
+function dictBingUrl(q) {
+  const isChinese = /[一-鿿]/.test(q);
+  const isThai = /[฀-๿]/.test(q);
+  const from = isThai ? "th" : isChinese ? "zh-Hans" : "auto";
+  const to = isThai ? "zh-Hans" : "th";
+  return `https://www.bing.com/translator?from=${from}&to=${to}&text=` + encodeURIComponent(q);
 }
 
 function dictRenderResults(results, query) {
@@ -2997,21 +3021,55 @@ function dictFindExamples(zh, lvl) {
 
 function dictStartMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = $("dictMicBtn");
   if (!SR) return;
-  if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; return; }
-  dictRecognition = new SR();
-  dictRecognition.lang = "zh-CN";
-  dictRecognition.continuous = false;
-  dictRecognition.interimResults = false;
-  dictRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript.trim();
-    dictInput.value = text;
-    dictSearch(text);
+  if (dictRecognition) { dictRecognition.stop(); return; }
+
+  const rec = new SR();
+  dictRecognition = rec;
+  rec.lang = "zh-CN";
+  rec.continuous = false;
+  rec.interimResults = true; // live-typing: show words in the box as they are spoken
+
+  let finalText = "";
+  const stopUi = () => {
+    dictRecognition = null;
+    micBtn.classList.remove("listening");
   };
-  dictRecognition.onend = () => { dictRecognition = null; $("dictMicBtn").textContent = "🎤"; };
-  dictRecognition.onerror = () => { dictRecognition = null; $("dictMicBtn").textContent = "🎤"; };
-  $("dictMicBtn").textContent = "🔴";
-  dictRecognition.start();
+
+  rec.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    dictInput.value = (finalText + interim).trim();
+    dictUpdateClearBtn();
+    if (finalText.trim()) dictSearch(finalText.trim());
+  };
+  rec.onend = () => {
+    stopUi();
+    if (!dictInput.value.trim()) {
+      dictResults.innerHTML = '<p class="dict-placeholder">🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูดภาษาจีนอีกครั้ง</p>';
+    }
+  };
+  rec.onerror = (e) => {
+    stopUi();
+    const msgs = {
+      "not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน — กดอนุญาตไมค์ที่แถบที่อยู่แล้วลองใหม่",
+      "service-not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน",
+      "no-speech": "🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูดภาษาจีนอีกครั้ง",
+      "audio-capture": "🎙️ ไม่พบไมโครโฟนในเครื่องนี้",
+      "network": "🌐 ระบบจดจำเสียงต้องเชื่อมต่ออินเทอร์เน็ต",
+    };
+    if (e.error !== "aborted") {
+      dictResults.innerHTML = `<p class="dict-placeholder">${msgs[e.error] || "⚠️ จดจำเสียงผิดพลาด ลองใหม่อีกครั้ง"}</p>`;
+    }
+  };
+
+  micBtn.classList.add("listening");
+  dictResults.innerHTML = '<p class="dict-placeholder">🎤 กำลังฟัง… พูดภาษาจีนได้เลย ข้อความจะขึ้นในช่องค้นหา</p>';
+  try { rec.start(); } catch (err) { stopUi(); }
 }
 
 /* ---------- Dictionary free-handwriting mode (HanziLookupJS) ---------- */
@@ -3043,6 +3101,7 @@ function loadDictLookup() {
 }
 
 async function dictStartWrite() {
+  if (dictRecognition) dictRecognition.stop();
   if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
   dictWritePanel.hidden = false;
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">กำลังโหลดระบบจดจำลายมือ...</p>';
@@ -3132,6 +3191,7 @@ function dictShowCandidates(chars) {
       // append the recognized char to the search box (don't replace)
       // so user can build up multi-char words/phrases like 你好
       dictInput.value += ch;
+      dictUpdateClearBtn();
       dictSearch(dictInput.value.trim());
       // clear canvas so user can write the next char, keep panel open
       dictClearCanvas();
@@ -3151,11 +3211,23 @@ $("dictSearchBtn").addEventListener("click", () => {
   dictWritePanel.hidden = true;
   dictSearch();
 });
+$("dictBingBtn").addEventListener("click", () => {
+  sfx.click();
+  window.open(dictBingUrl(dictInput.value.trim()), "_blank", "noopener");
+});
 dictInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dictSearch(); } });
 dictInput.addEventListener("input", () => {
+  dictUpdateClearBtn();
   // auto-search if query is long enough or contains chinese
   const v = dictInput.value.trim();
   if (v.length >= 2 || /[\u4e00-\u9fff]/.test(v)) dictSearch(v);
+});
+$("dictClearBtn").addEventListener("click", () => {
+  sfx.click();
+  dictInput.value = "";
+  dictUpdateClearBtn();
+  dictInput.focus();
+  dictResults.innerHTML = '<p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>';
 });
 $("dictMicBtn").addEventListener("click", () => { sfx.click(); dictStartMic(); });
 $("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });

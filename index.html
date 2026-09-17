@@ -18,10 +18,20 @@
   <p class="subtitle">เกมฝึกภาษาจีน — เลือกโหมดที่อยากเล่นได้เลย!</p>
 
   <div class="cards" id="cards">
+    <button class="card" data-mode="dict">
+      <div class="card-icon">📚</div>
+      <div class="card-title">พจนานุกรมจีน</div>
+      <div class="card-desc">ค้นคำจากพินอิน ตัวจีน เสียงพูด หรือเขียนบนจอ พร้อมระดับ HSK และประโยคตัวอย่าง</div>
+    </button>
     <button class="card" data-mode="meteor">
       <div class="card-icon">☄️🚀</div>
       <div class="card-title">เกมยิงอุกกาบาต</div>
       <div class="card-desc">อ่านพินอินบนอุกกาบาต แล้วยิงจรวดคำจีนให้ตรงก่อนถึงพื้น</div>
+    </button>
+    <button class="card" data-mode="zombie">
+      <div class="card-icon">👮🧟</div>
+      <div class="card-title">เกมยิงซอมบี้</div>
+      <div class="card-desc">อ่านคำจีนบนหัวซอมบี้ แล้วเลือกพินอินให้ถูกเพื่อยิง ก่อนซอมบี้จะถึงตัวตำรวจ</div>
     </button>
     <button class="card" data-mode="vocab">
       <div class="card-icon">📖</div>
@@ -33,11 +43,6 @@
       <div class="card-title">เกมเรียงประโยค</div>
       <div class="card-desc">อ่านคำแปลไทย แล้วแตะเรียงชิ้นคำจีนให้เป็นประโยคที่ถูกต้อง</div>
     </button>
-    <button class="card" data-mode="zombie">
-      <div class="card-icon">👮🧟</div>
-      <div class="card-title">เกมยิงซอมบี้</div>
-      <div class="card-desc">อ่านคำจีนบนหัวซอมบี้ แล้วเลือกพินอินให้ถูกเพื่อยิง ก่อนซอมบี้จะถึงตัวตำรวจ</div>
-    </button>
     <button class="card" data-mode="bomb">
       <div class="card-icon bomb-card-icon" aria-hidden="true">字</div>
       <div class="card-title">เกมเขียนปลดระเบิด</div>
@@ -47,11 +52,6 @@
       <div class="card-icon" aria-hidden="true">汉 / ก</div>
       <div class="card-title">เกมแฟลชการ์ดจับคู่</div>
       <div class="card-desc">เปิดการ์ดจับคู่คำจีนกับพินอินหรือภาษาไทย จับคู่ครบแล้วสุ่มชุดใหม่</div>
-    </button>
-    <button class="card" data-mode="dict">
-      <div class="card-icon">📚</div>
-      <div class="card-title">พจนานุกรมจีน</div>
-      <div class="card-desc">ค้นคำจากพินอิน ตัวจีน เสียงพูด หรือเขียนบนจอ พร้อมระดับ HSK และประโยคตัวอย่าง</div>
     </button>
   </div>
 
@@ -347,9 +347,13 @@
     <button id="dictMuteBtn" class="icon-btn">🔊</button>
   </div>
   <div class="dict-search">
-    <input id="dictInput" type="text" placeholder="พิมพ์พินอินหรือตัวจีน..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="dict-input-wrap">
+      <input id="dictInput" type="text" placeholder="พิมพ์พินอินหรือตัวจีน..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button id="dictClearBtn" title="ล้างคำค้นหา" aria-label="ล้างคำค้นหา" hidden>✕</button>
+    </div>
     <button id="dictSearchBtn" class="icon-btn" title="ค้นหาด้วยข้อความ">🔍</button>
-    <button id="dictMicBtn" class="icon-btn" title="ค้นหาด้วยเสียงพูด" hidden>🎤</button>
+    <button id="dictBingBtn" class="icon-btn" title="แปลคำนี้ด้วย Bing Translator">🌐</button>
+    <button id="dictMicBtn" class="icon-btn" title="ค้นหาด้วยเสียงพูดภาษาจีน" hidden>🎤</button>
     <button id="dictWriteBtn" class="icon-btn" title="ค้นหาด้วยลายมือ">✍️</button>
   </div>
   <div id="dictWritePanel" class="dict-write" hidden>
