@@ -3,8 +3,9 @@
 # ฐานข้อมูล HSK (ไฟล์ Excel ต้นฉบับ)
 HSK Database/
 
-# เครื่องมือ Python (ใช้สร้าง data/sentences.js เท่านั้น)
+# เครื่องมือ Python (ใช้สร้าง data/sentences.js และ audio/ เท่านั้น)
 tools/
+gen_audio.py
 
 # Windows artifact
 nul

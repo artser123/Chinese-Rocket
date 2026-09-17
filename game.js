@@ -39,8 +39,8 @@ const DIFF = {
 
 /* ================= Audio (WebAudio, no assets) ================= */
 let AC = null, muted = false;
-function beep(freq, dur, type = "square", vol = 0.12, slide = 0) {
-  if (muted) return;
+function beep(freq, dur, type = "square", vol = 0.12, slide = 0, force = false) {
+  if (muted && !force) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
@@ -53,8 +53,8 @@ function beep(freq, dur, type = "square", vol = 0.12, slide = 0) {
     o.start(); o.stop(AC.currentTime + dur);
   } catch (e) {}
 }
-function noiseBurst(dur, vol, hp, lp) {
-  if (muted) return;
+function noiseBurst(dur, vol, hp, lp, force = false) {
+  if (muted && !force) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
@@ -96,13 +96,26 @@ const sfx = {
   click1:  () => { noiseBurst(0.03, 0.25, 2500, 9000); setTimeout(() => noiseBurst(0.025, 0.18, 3000, 9000), 70); },
   click3:  () => { for (let i = 0; i < 3; i++) setTimeout(() => { noiseBurst(0.03, 0.25, 2500, 9000); }, i * 90); },
   upgrade: () => { beep(523, 0.1, "square", 0.15); setTimeout(() => beep(659, 0.1, "square", 0.15), 100); setTimeout(() => beep(784, 0.15, "square", 0.15), 200); },
+  // แฟนแฟร์ตอบถูก — force=true เล่นแม้ปิดเพลงพื้นหลังอยู่
+  correct: () => {
+    [523, 659, 784].forEach((f, i) => setTimeout(() => {
+      beep(f, 0.13, "square", 0.15, 80, true);
+      beep(f * 2, 0.09, "triangle", 0.06, 0, true);
+    }, i * 85));
+    setTimeout(() => {
+      beep(1047, 0.34, "square", 0.14, 0, true);
+      beep(1319, 0.34, "square", 0.1, 0, true);
+      beep(1568, 0.34, "triangle", 0.09, 40, true);
+      noiseBurst(0.3, 0.07, 5000, 14000, true);
+    }, 280);
+  },
 };
 
 /* ================= Chinese speech (TTS) ================= */
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
   try {
-    speechSynthesis.cancel();
+    stopSpeech();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "zh-CN";
     u.rate = 0.85;
@@ -110,6 +123,129 @@ function speak(text) {
     if (v) u.voice = v;
     speechSynthesis.speak(u);
   } catch (e) {}
+}
+
+const FEMALE_TH_VOICE = /premwadee|achara|kanya|female|google/i;
+const MALE_TH_VOICE = /pattara|niwat|\bmale\b/i;
+let speechDuckTimer = null;
+
+function pickVoice(lang) {
+  const voices = speechSynthesis.getVoices().filter((v) => v.lang && v.lang.startsWith(lang.slice(0, 2)));
+  if (!voices.length) return null;
+  if (lang.startsWith("th")) {
+    return voices.find((v) => FEMALE_TH_VOICE.test(v.name))
+      || voices.find((v) => !MALE_TH_VOICE.test(v.name))
+      || voices[0];
+  }
+  return voices[0];
+}
+
+function duckMusic(on) {
+  if (!music.master || !AC) return;
+  music.master.gain.setTargetAtTime(on && !muted ? 0.2 : muted ? 0 : 1, AC.currentTime, 0.05);
+  clearTimeout(speechDuckTimer);
+  speechDuckTimer = on ? setTimeout(() => duckMusic(false), 6000) : null;
+}
+
+function speakSeq(parts) {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    stopSpeech();
+    for (const [text, lang] of parts) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang;
+      u.rate = 0.85;
+      const v = pickVoice(lang);
+      if (v) u.voice = v;
+      if (lang.startsWith("th")) {
+        u.volume = 1;
+        if (!v || MALE_TH_VOICE.test(v.name)) u.pitch = 1.35;
+        u.onstart = () => duckMusic(true);
+        u.onend = u.onerror = () => duckMusic(false);
+      }
+      speechSynthesis.speak(u);
+    }
+  } catch (e) {}
+}
+
+/* Pre-generated audio files (gen_audio.py -> audio/zh|th/<word>.mp3) with TTS fallback */
+const missingAudio = new Set();
+// ตัดช่วงเงียบหัว-ท้ายของคลิป (edge-tts มี ~0.2s นำหน้าและ ~1s ต่อท้าย) แล้วต่อคลิปแบบไร้ช่องว่าง
+function audioBounds(buf, thr = 0.015) {
+  const d = buf.getChannelData(0);
+  let lo = 0, hi = d.length - 1;
+  while (lo < hi && Math.abs(d[lo]) < thr) lo++;
+  while (hi > lo && Math.abs(d[hi]) < thr) hi--;
+  return { start: Math.max(0, lo / buf.sampleRate - 0.02),
+           end: Math.min(buf.duration, hi / buf.sampleRate + 0.04) };
+}
+const wordAudio = {
+  seq: 0, srcs: [], timers: [],
+  stop() {
+    this.seq++;
+    this.srcs.forEach((s) => { try { s.stop(); } catch (e) {} });
+    this.srcs = [];
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    duckMusic(false);
+  },
+  play(items) {
+    this.stop();
+    stopSpeech();
+    const token = this.seq;
+    (async () => {
+      const ac = AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+      if (ac.state === "suspended") ac.resume();
+      const clips = [];
+      for (const it of items) {
+        if (missingAudio.has(it.url)) break;
+        try {
+          const res = await fetch(encodeURI(it.url));
+          if (!res.ok) throw 0;
+          clips.push({ it, buf: await ac.decodeAudioData(await res.arrayBuffer()) });
+        } catch (e) { missingAudio.add(it.url); break; }
+      }
+      if (this.seq !== token) return;
+      let t = ac.currentTime + 0.03;
+      let duckAt = Infinity, unduckAt = 0;
+      for (const { it, buf } of clips) {
+        const { start, end } = audioBounds(buf);
+        const dur = Math.max(0.05, end - start);
+        const src = ac.createBufferSource();
+        src.buffer = buf;
+        src.connect(ac.destination);
+        src.start(t, start, dur);
+        this.srcs.push(src);
+        if (it.duck) { duckAt = Math.min(duckAt, t); unduckAt = t + dur; }
+        t += dur + 0.03;
+      }
+      const after = (delay, fn) => this.timers.push(setTimeout(() => { if (this.seq === token) fn(); }, delay));
+      if (duckAt < Infinity) {
+        after(Math.max(0, (duckAt - ac.currentTime) * 1000), () => duckMusic(true));
+        after(Math.max(0, (unduckAt - ac.currentTime) * 1000), () => duckMusic(false));
+      }
+      const rest = items.slice(clips.length);
+      if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () => speakSeq(rest.map((x) => x.tts)));
+    })().catch(() => { if (this.seq === token) speakSeq(items.map((x) => x.tts)); });
+  },
+};
+
+function stopSpeech() {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  wordAudio.stop();
+}
+
+function playWordAudio(word, parts) {
+  const items = [{ url: `audio/zh/${word}.mp3`, tts: parts[0] }];
+  if (parts[1]) items.push({ url: `audio/th/${word}.mp3`, tts: parts[1], duck: parts[1][1].startsWith("th") });
+  wordAudio.play(items);
+}
+// เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
+function speakWordHit(w) {
+  const zh = w[0].split(/[｜|]/)[0].trim();
+  const meaning = (w[2] || "").trim();
+  playWordAudio(zh, [[zh, "zh-CN"],
+    ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
 }
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
 
@@ -260,7 +396,7 @@ function startGame(level) {
   switchScreen(gameEl);
   running = true; paused = false;
   $("pauseOverlay").classList.remove("show");
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   music.start();
   lastTime = performance.now();
   requestAnimationFrame(loop);
@@ -274,7 +410,7 @@ function switchScreen(el) {
 function endGame() {
   running = false;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   sfx.over();
   showGameOver("💥 เกมจบ!", score,
     `ทำลายอุกกาบาต ${destroyed} ลูก • HSK ${currentLevel} • ${DIFF[difficulty].label}`,
@@ -306,7 +442,7 @@ function startQuizGame(level) {
   lastStarter = () => startQuizGame(level);
   quiz = { lives: 3, score: 0, answered: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false };
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   music.start();
   switchScreen(quizEl);
   updateQuizHUD();
@@ -373,7 +509,7 @@ function answerQuiz(i) {
     btn.classList.add("correct");
     sfx.hit();
     confettiBurst(quizEl, 22);
-    speak(w[0].split(/[｜|]/)[0]);
+    speakWordHit(w);
     // reveal the complementary attribute on all 4 boxes so distractors are learned too
     quiz.options.forEach((o, j) => {
       const b = qoptBtns[j];
@@ -407,7 +543,7 @@ function quizGameOver() {
   const finalScore = quiz ? quiz.score : 0;
   quiz = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   sfx.over();
   const modeLabel = quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย";
   showGameOver("📖 จบเกม!", finalScore,
@@ -425,9 +561,9 @@ function startSentGame(level) {
   lastStarter = () => startSentGame(level);
   sent = { lives: 3, score: 0, solved: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false,
-           current: null, pool: [], placed: [] };
+           repeat: false, isRetry: false, current: null, pool: [], placed: [] };
   pool = list;
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   music.start();
   switchScreen($("sent"));
   updateSentHUD();
@@ -448,17 +584,21 @@ function nextSentQuestion() {
   $("sentNextBtn").classList.remove("show");
   $("sentReveal").classList.remove("show", "correct", "wrong");
   $("sentGiveUpBtn").classList.remove("hide");
-  // คิวทบทวน: ประโยคที่เคยเรียงผิดวนกลับมาทุกๆ 5 ข้อ จนกว่าจะถูกในครั้งเดียว
-  if (sent.reviewQueue.length && sent.sinceReview >= 5) {
-    sent.current = sent.reviewQueue.shift();
-    sent.sinceReview = 0;
-    sent.isReview = true;
-  } else {
-    sent.current = pick(pool);
-    sent.sinceReview++;
-    sent.isReview = false;
-    const qi = sent.reviewQueue.findIndex((s) => s[0] === sent.current[0]);
-    if (qi >= 0) { sent.reviewQueue.splice(qi, 1); sent.isReview = true; }
+  // เรียงผิด/ยอมแพ้: ซ้ำประโยคเดิมทันทีจนกว่าจะถูก แล้วค่อยไปประโยคใหม่
+  sent.isRetry = !!(sent.repeat && sent.current);
+  sent.isReview = false;
+  if (!sent.isRetry) {
+    // คิวทบทวน: ประโยคที่เคยเรียงผิดวนกลับมาทุกๆ 5 ข้อ จนกว่าจะถูกในครั้งเดียว
+    if (sent.reviewQueue.length && sent.sinceReview >= 5) {
+      sent.current = sent.reviewQueue.shift();
+      sent.sinceReview = 0;
+      sent.isReview = true;
+    } else {
+      sent.current = pick(pool);
+      sent.sinceReview++;
+      const qi = sent.reviewQueue.findIndex((s) => s[0] === sent.current[0]);
+      if (qi >= 0) { sent.reviewQueue.splice(qi, 1); sent.isReview = true; }
+    }
   }
   const tokens = sent.current[4];
   // unique ids per chip so duplicate tokens still work
@@ -468,7 +608,7 @@ function nextSentQuestion() {
   } while (tokens.length > 1 && shuffled.every((c, i) => c.id === i));
   sent.pool = shuffled;
   sent.placed = [];
-  $("sentTarget").textContent = (sent.isReview ? "🔁 ทบทวน: " : "") + sent.current[2];
+  $("sentTarget").textContent = (sent.isRetry ? "🔁 ลองอีกครั้ง: " : sent.isReview ? "🔁 ทบทวน: " : "") + sent.current[2];
   renderSent();
 }
 
@@ -479,16 +619,13 @@ function renderSent() {
   poolEl.innerHTML = "";
   const want = sent.current[4];
   const full = sent.placed.length === want.length;
-  if (full && sent.solved) ans.classList.add("correct-full");
-  if (full && !sent.solved && sent.wrongThisQ > 0) ans.classList.add("wrong-full");
+  if (full && sent.solved) ans.classList.add(sent.wrongThisQ > 0 ? "wrong-full" : "correct-full");
   sent.placed.forEach((c, i) => {
     const b = document.createElement("button");
     b.className = "chip";
     b.textContent = c.t;
-    if (full) {
-      b.classList.add(want[i] === c.t ? "ok" : "bad");
-      b.disabled = sent.solved;
-    }
+    b.disabled = sent.solved;
+    if (full) b.classList.add(want[i] === c.t ? "ok" : "bad");
     b.addEventListener("pointerdown", (e) => { e.preventDefault(); sentRemove(i); });
     ans.appendChild(b);
   });
@@ -534,10 +671,11 @@ function checkSentAnswer() {
   const zh = sent.current[0];
   if (correct) {
     sent.solved = true;
+    sent.repeat = false;
     sent.score++;
     $("sentAnswer").classList.add("correct-full");
     $("sentGiveUpBtn").classList.add("hide");
-    sfx.hit();
+    sfx.correct();
     confettiBurst($("sent"), 30);
     speak(zh.trim().split(/[｜|]/)[0]);
     showSentReveal(false);
@@ -551,9 +689,9 @@ function checkSentAnswer() {
   } else {
     sent.wrongThisQ++;
     sent.solved = true;
-    sent.placed = want.map((t, id) => ({ t, id }));
-    sent.pool = [];
-    sent.reviewQueue.push(sent.current);
+    sent.repeat = true;
+    // คงการเรียงของผู้เล่นไว้ให้เห็นว่าผิดตรงไหน (เฉลยแสดงในกล่อง sentReveal)
+    if (!sent.reviewQueue.some((s) => s[0] === zh)) sent.reviewQueue.push(sent.current);
     $("sentGiveUpBtn").classList.add("hide");
     sfx.wrong();
     speak(zh.trim().split(/[｜|]/)[0]);
@@ -568,7 +706,7 @@ function checkSentAnswer() {
         else nextSentQuestion();
       }, 3000);
     } else {
-      $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
+      $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "🔁 ลองอีกครั้ง ▶";
       $("sentNextBtn").classList.add("show");
     }
   }
@@ -578,13 +716,12 @@ function sentGiveUp() {
   if (!sent || sent.solved) return;
   sfx.click();
   // เปิดเผยเฉลยและถือว่าเป็นการตอบผิดของข้อนี้ (เสีย 1 ชีวิตถ้าเปิดพลังชีวิต)
-  const want = sent.current[4];
   const zh = sent.current[0];
   sent.wrongThisQ++;
   sent.solved = true;
-  sent.placed = want.map((t, id) => ({ t, id }));
-  sent.pool = [];
-  sent.reviewQueue.push(sent.current);
+  sent.repeat = true;
+  // คงการเรียงของผู้เล่นไว้ให้เห็นว่าผิดตรงไหน (เฉลยแสดงในกล่อง sentReveal)
+  if (!sent.reviewQueue.some((s) => s[0] === zh)) sent.reviewQueue.push(sent.current);
   $("sentGiveUpBtn").classList.add("hide");
   sfx.wrong();
   speak(zh.trim().split(/[｜|]/)[0]);
@@ -599,7 +736,7 @@ function sentGiveUp() {
       else nextSentQuestion();
     }, 3000);
   } else {
-    $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
+    $("sentNextBtn").textContent = quizLivesOn && sent.lives <= 0 ? "ดูผลคะแนน ▶" : "🔁 ลองอีกครั้ง ▶";
     $("sentNextBtn").classList.add("show");
   }
 }
@@ -609,7 +746,7 @@ function sentGameOver() {
   const finalScore = sent ? sent.score : 0;
   sent = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   sfx.over();
   showGameOver("🧩 จบเกม!", finalScore,
     `HSK ${currentLevel} • เกมเรียงประโยค`,
@@ -630,7 +767,7 @@ $("sentQuitBtn").addEventListener("click", () => {
   saveBest(`cr_best_hsk${currentLevel}_sent`, sent ? sent.score : 0);
   sent = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   switchScreen(menuEl);
   updateBestLine();
 });
@@ -646,7 +783,7 @@ $("quizQuitBtn").addEventListener("click", () => {
   saveBest(`cr_best_hsk${currentLevel}_quiz_${quizMode}`, quiz ? quiz.score : 0);
   quiz = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   switchScreen(menuEl);
   updateBestLine();
 });
@@ -756,7 +893,7 @@ function fireOption(i) {
     explosion(baseX(), baseY() - 46, "#9fd0ff", 6);   // muzzle flash
     floaters.push({ x: m.x, y: m.y, text: "+" + pts, age: 0, life: 0.9, color: "#ffd76a" });
     showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`);
-    speak(w[0].split(/[｜|]/)[0]);
+    speakWordHit(w);
     optBtns[i].classList.add("flash-right");
     setTimeout(() => optBtns[i].classList.remove("flash-right"), 250);
     destroyed++;
@@ -1204,7 +1341,7 @@ function startZombieGame(level) {
   updateZombieHUD();
   refreshZOptions();
   renderZOptions();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   music.start();
   requestAnimationFrame(zloop);
 }
@@ -1322,7 +1459,7 @@ function fireZOption(i) {
     }
     zb.floaters.push({ x: target.x, y: zGroundY() - 135, text: "+" + pts, age: 0, life: 0.9 });
     if (!zb.upgradeFlash) showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`, "ztoast", 3000);
-    speak(zFirst(w[0]));
+    speakWordHit(w);
     zoptBtns[i].classList.add("flash-right");
     setTimeout(() => zoptBtns[i].classList.remove("flash-right"), 250);
     updateZombieHUD();
@@ -1829,7 +1966,7 @@ function zombieGameOver(win) {
   const s = zb;
   zb = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   $("zWrongFlash").classList.remove("show");
   if (win) sfx.hit(); else sfx.over();
   showGameOver(win ? "🏆 รอดแล้ว! หมดเวลา" : "🧟 ซอมบี้ถึงตัวแล้ว!", s.score,
@@ -1855,7 +1992,7 @@ $("zQuitBtn").addEventListener("click", () => {
   if (zb) saveBest(zombieBestKey(), zb.score);
   zb = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   $("zPauseOverlay").classList.remove("show");
   $("zWrongFlash").classList.remove("show");
   switchScreen(menuEl);
@@ -1914,7 +2051,7 @@ function startMatchingGame(level, mode = quizMode, diff = difficulty, duration =
   switchScreen($("matching"));
   nextMatchingRound();
   updateMatchingHUD();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   music.start();
   const session = matching;
   session.frame = requestAnimationFrame((t) => matchingLoop(t, session));
@@ -2100,7 +2237,7 @@ function stopMatchingGame() {
   if (matching) cancelAnimationFrame(matching.frame);
   matching = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
 }
 
 function endMatchingGame(expired = false) {
@@ -2124,7 +2261,7 @@ function pauseMatchingGame() {
   $("matching").classList.add("match-paused");
   $("matchPauseOverlay").classList.add("show");
   renderMatchingCards();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   $("matchResumeBtn").focus();
 }
 
@@ -2460,7 +2597,13 @@ function completeBombCharacter() {
   advanceBomb(performance.now());
   if (s.phase !== "writing") return;
   s.pendingComplete = false;
-  speak(s.chars[s.charIndex]);
+  if (s.charIndex + 1 === s.chars.length) {
+    const meaning = (s.word[2] || "").trim();
+    playWordAudio(s.word[0], [[s.word[0], "zh-CN"],
+      ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
+  } else {
+    speak(s.chars[s.charIndex]);
+  }
   s.charIndex++;
   if (s.charIndex === s.chars.length) resolveBomb(true);
   else { sfx.hit(); beginBombCharacter(); }
@@ -2550,7 +2693,7 @@ function pauseBombGame() {
   music.stop();
   $("bomb").classList.add("bomb-paused");
   $("bombPauseOverlay").classList.add("show");
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   $("bombResumeBtn").focus();
 }
 
@@ -2575,7 +2718,7 @@ function stopBombGame() {
   bombWriter?.cancelQuiz();
   bombGame = null;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
 }
 
 function quitBombGame() {
@@ -2658,7 +2801,7 @@ const dictEl = $("dict");
 const dictInput = $("dictInput");
 const dictResults = $("dictResults");
 const dictWritePanel = $("dictWritePanel");
-let dictWriter = null;
+let dictWriter = null; // unused — dict mode uses canvas + HanziLookup, not HanziWriter
 let dictRecognition = null;
 
 // pinyin normalize: strip tone marks + lowercase for fuzzy match
@@ -2677,7 +2820,7 @@ function normSyl(s) {
 
 function startDict() {
   switchScreen(dictEl);
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   dictInput.value = "";
   dictResults.innerHTML = '<p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>';
   dictWritePanel.hidden = true;
@@ -2759,15 +2902,22 @@ function dictRenderResults(results, query) {
     const thText = r.th || "(ไม่มีคำแปล)";
     const bingUrl = "https://www.bing.com/translator?from=zh-Hans&to=th&text=" + encodeURIComponent(r.zh);
 
-    // find example sentences
+    // find example sentences (SENTENCES HSK 1-5 + VOCAB_EXTRA Bing examples for HSK 6-9)
     const examples = dictFindExamples(r.zh, r.lvl);
+    const extra = (typeof VOCAB_EXTRA !== "undefined" && VOCAB_EXTRA[r.zh]) || null;
+    const posText = extra && extra.pos ? `<span class="dict-entry-pos">${extra.pos}</span>` : "";
+    const pyText = r.py || (extra && extra.py) || "";
+    const altHtml = (extra && extra.alt && extra.alt.length > 1)
+      ? `<div class="dict-entry-alt">≈ ${extra.alt.slice(1).join(", ")}</div>` : "";
 
     let html = `<div class="dict-entry-top">
       <div class="dict-entry-zh" lang="zh">${r.zh}</div>
-      <div class="dict-entry-pinyin">${r.py}</div>
+      <div class="dict-entry-pinyin">${pyText}</div>
+      ${posText}
       <span class="dict-entry-hsk" data-hsk="${r.lvl}">HSK ${r.lvl}</span>
     </div>
     <div class="dict-entry-th ${thClass}">${thText}</div>
+    ${altHtml}
     <div class="dict-entry-actions">
       <button class="dict-speak-btn" data-zh="${r.zh}">🔊 ฟังเสียง</button>
       <button class="dict-copy-btn" data-zh="${r.zh}">📋 คัดลอก</button>
@@ -2820,16 +2970,26 @@ function dictRenderResults(results, query) {
 }
 
 function dictFindExamples(zh, lvl) {
-  if (!SENT_OK) return [];
   const examples = [];
-  for (const sl of ["1", "2", "3", "4", "5"]) {
-    const sents = SENTENCES[sl] || [];
-    for (const s of sents) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
+  // 1) SENTENCES data (HSK 1-5): [zh, pinyin, th, grammar, tokens]
+  if (SENT_OK) {
+    for (const sl of ["1", "2", "3", "4", "5"]) {
+      const sents = SENTENCES[sl] || [];
+      for (const s of sents) {
+        const tokens = s[4] || [];
+        if (tokens.includes(zh)) {
+          examples.push(s);
+          if (examples.length >= 3) return examples;
+        }
       }
+    }
+  }
+  // 2) VOCAB_EXTRA Bing examples (HSK 6-9): [zh, pinyin, en, th] -> normalize to [zh, py, th||en]
+  const extra = (typeof VOCAB_EXTRA !== "undefined" && VOCAB_EXTRA[zh]);
+  if (extra && extra.ex) {
+    for (const e of extra.ex) {
+      examples.push([e[0], e[1] || "", e[3] || e[2] || ""]);
+      if (examples.length >= 3) return examples;
     }
   }
   return examples;
@@ -2854,98 +3014,143 @@ function dictStartMic() {
   dictRecognition.start();
 }
 
+/* ---------- Dictionary free-handwriting mode (HanziLookupJS) ---------- */
+let dictCanvas = null;
+let dictCtx = null;
+let dictStrokes = [];       // array of strokes, each stroke = array of [x,y]
+let dictCurrentStroke = []; // points of the stroke currently being drawn
+let dictDrawing = false;
+let dictLookupReady = false;
+let dictLookupPromise = null;
+
+// load hanzilookup.min.js + mmah.json once
+function loadDictLookup() {
+  if (dictLookupReady) return Promise.resolve();
+  if (dictLookupPromise) return dictLookupPromise;
+  dictLookupPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/hanzilookup.min.js";
+    script.onload = () => {
+      if (!window.HanziLookup) { reject(new Error("HanziLookup not loaded")); return; }
+      window.HanziLookup.init("mmah",
+        "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/mmah.json",
+        (ok) => { ok ? (dictLookupReady = true, resolve()) : reject(new Error("mmah data failed")) });
+    };
+    script.onerror = () => reject(new Error("hanzilookup.min.js failed to load"));
+    document.head.appendChild(script);
+  });
+  return dictLookupPromise;
+}
+
 async function dictStartWrite() {
   if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
   dictWritePanel.hidden = false;
-  try { await loadBombLibrary(); } catch (e) { sfx.wrong(); return; }
-  dictNewWriteChar();
-}
-
-async function dictLoadCharData(char) {
-  // reuse bombCharData cache; fetch from jsDelivr if missing
-  if (bombCharData.has(char)) return bombCharData.get(char);
-  try {
-    const response = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
-    if (!response.ok) throw new Error("not found");
-    const data = await response.json();
-    if (!data.strokes?.length || data.strokes.length !== data.medians?.length) throw new Error("incomplete");
-    bombCharData.set(char, data);
-    return data;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function dictNewWriteChar() {
-  // pick a common character to practice writing
-  const chars = ["人", "大", "中", "国", "我", "你", "好", "的", "是", "不", "他", "她", "们", "上", "下", "去", "来", "说", "看", "想"];
-  const ch = chars[Math.floor(Math.random() * chars.length)];
-  if (dictWriter) { try { dictWriter.unmount(); } catch (e) {} dictWriter = null; }
-  $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">กำลังโหลด...</p>';
-  $("dictCharPicker").innerHTML = "";
-  // load char data first (like bomb mode does)
-  const data = await dictLoadCharData(ch);
-  if (!data) {
-    $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">ไม่สามารถโหลดตัวอักษรนี้ได้ ลองกดสุ่มตัวใหม่</p>';
+  $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">กำลังโหลดระบบจดจำลายมือ...</p>';
+  try { await loadDictLookup(); }
+  catch (e) {
+    $("dictCharPicker").innerHTML = '<p style="color:#ff9c9c;">โหลดระบบจดจำลายมือไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต</p>';
     return;
   }
-  $("dictWriter").innerHTML = "";
+  dictInitCanvas();
+}
+
+function dictInitCanvas() {
+  dictCanvas = $("dictWriter");
+  dictCtx = dictCanvas.getContext("2d");
+  dictCtx.lineCap = "round"; dictCtx.lineJoin = "round";
+  dictCtx.strokeStyle = "#ff5722"; dictCtx.lineWidth = 8;
+  dictStrokes = []; dictCurrentStroke = []; dictDrawing = false;
+  dictCtx.clearRect(0, 0, dictCanvas.width, dictCanvas.height);
+  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictCanvas.width, dictCanvas.height);
+  $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
+  // wire pointer events
+  dictCanvas.onpointerdown = dictPointerDown;
+  dictCanvas.onpointermove = dictPointerMove;
+  dictCanvas.onpointerup = dictPointerUp;
+  dictCanvas.onpointerleave = dictPointerUp;
+}
+
+function dictCanvasPos(e) {
+  const r = dictCanvas.getBoundingClientRect();
+  const sx = dictCanvas.width / r.width, sy = dictCanvas.height / r.height;
+  return [Math.round((e.clientX - r.left) * sx), Math.round((e.clientY - r.top) * sy)];
+}
+
+function dictPointerDown(e) {
+  e.preventDefault();
+  dictDrawing = true;
+  dictCurrentStroke = [dictCanvasPos(e)];
+  dictCtx.beginPath();
+  const [x, y] = dictCurrentStroke[0];
+  dictCtx.moveTo(x, y);
+}
+
+function dictPointerMove(e) {
+  if (!dictDrawing) return;
+  const p = dictCanvasPos(e);
+  dictCurrentStroke.push(p);
+  dictCtx.lineTo(p[0], p[1]);
+  dictCtx.stroke();
+}
+
+function dictPointerUp(e) {
+  if (!dictDrawing) return;
+  dictDrawing = false;
+  if (dictCurrentStroke.length > 1) dictStrokes.push(dictCurrentStroke);
+  dictCurrentStroke = [];
+  dictRecognize();
+}
+
+function dictClearCanvas() {
+  if (!dictCtx) return;
+  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictCanvas.width, dictCanvas.height);
+  dictStrokes = []; dictCurrentStroke = [];
+  $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
+}
+
+function dictRecognize() {
+  if (!dictLookupReady || !dictStrokes.length) return;
   try {
-    dictWriter = new window.HanziWriter("dictWriter", ch, {
-      width: 220, height: 220, padding: 10,
-      showCharacter: false, showOutline: true,
-      strokeColor: "#203954", outlineColor: "#cbd2db",
-      drawingWidth: 40, drawingColor: "#ff5722",
-      highlightColor: "#26a477", highlightOnComplete: true,
-      strokeAnimationSpeed: 1, leniency: 1.4,
-      markStrokeCorrectAfterMisses: 4,
-      charDataLoader: (char) => bombCharData.get(char),
-    });
-    dictWriter.quiz({
-      leniency: 1.4,
-      markStrokeCorrectAfterMisses: 4,
-      onMistake: () => {},
-      onCorrectStroke: () => {},
-      onComplete: () => { dictShowCharPicker(ch); },
+    const analyzed = new window.HanziLookup.AnalyzedCharacter(dictStrokes);
+    const matcher = new window.HanziLookup.Matcher("mmah");
+    matcher.match(analyzed, 8, (matches) => {
+      dictShowCandidates(matches.map((m) => m.character));
     });
   } catch (e) {
-    $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">ไม่สามารถโหลดตัวอักษรนี้ได้ ลองกดสุ่มตัวใหม่</p>';
+    $("dictCharPicker").innerHTML = '<p style="color:#ff9c9c;">จดจำลายมือผิดพลาด ลองล้างแล้ววาดใหม่</p>';
   }
 }
 
-function dictShowCharPicker(ch) {
-  // find all words containing this character
+function dictShowCandidates(chars) {
   const picker = $("dictCharPicker");
   picker.innerHTML = "";
-  const seen = new Set();
-  const words = [];
-  for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
-    for (const w of VOCAB[lvl] || []) {
-      if (w[0].includes(ch) && !seen.has(w[0])) { seen.add(w[0]); words.push(w[0]); }
-    }
-  }
-  // show up to 12 words
-  for (const zh of words.slice(0, 12)) {
+  if (!chars.length) { picker.innerHTML = '<p style="color:#8b95c9;">ไม่เจอตัวอักษรที่ตรงกัน</p>'; return; }
+  for (const ch of chars) {
     const btn = document.createElement("button");
-    btn.textContent = zh;
+    btn.textContent = ch;
     btn.addEventListener("click", () => {
-      dictInput.value = zh;
-      dictSearch(zh);
-      dictWritePanel.hidden = true;
+      // append the recognized char to the search box (don't replace)
+      // so user can build up multi-char words/phrases like 你好
+      dictInput.value += ch;
+      dictSearch(dictInput.value.trim());
+      // clear canvas so user can write the next char, keep panel open
+      dictClearCanvas();
     });
     picker.appendChild(btn);
   }
-  if (!words.length) picker.innerHTML = '<p style="color:#8b95c9;">ไม่พบคำที่มีตัวอักษรนี้</p>';
 }
 
 $("dictQuitBtn").addEventListener("click", () => {
   sfx.click();
   if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; }
-  if (dictWriter) { try { dictWriter.unmount(); } catch (e) {} dictWriter = null; }
   switchScreen(menuEl);
 });
 $("dictMuteBtn").addEventListener("click", toggleMute);
-$("dictSearchBtn").addEventListener("click", () => { sfx.click(); dictSearch(); });
+$("dictSearchBtn").addEventListener("click", () => {
+  sfx.click();
+  dictWritePanel.hidden = true;
+  dictSearch();
+});
 dictInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dictSearch(); } });
 dictInput.addEventListener("input", () => {
   // auto-search if query is long enough or contains chinese
@@ -2955,7 +3160,7 @@ dictInput.addEventListener("input", () => {
 $("dictMicBtn").addEventListener("click", () => { sfx.click(); dictStartMic(); });
 $("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });
 $("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
-$("dictWriteNewBtn").addEventListener("click", () => { sfx.click(); dictNewWriteChar(); });
+$("dictWriteClearBtn").addEventListener("click", () => { sfx.click(); dictClearCanvas(); });
 
 $("cards").addEventListener("pointerdown", (e) => {
   const card = e.target.closest(".card");
@@ -3087,7 +3292,7 @@ $("quitBtn").addEventListener("click", () => {
   running = false;
   paused = false;
   music.stop();
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeech();
   $("pauseOverlay").classList.remove("show");
   switchScreen(menuEl);
   updateBestLine();
