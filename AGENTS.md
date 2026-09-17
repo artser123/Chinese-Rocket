@@ -5,6 +5,9 @@
 - Validate JavaScript with `node --check game.js` and `node --check data/sentences.js`.
 - Sentence data uses `[Chinese, Pinyin, Thai, Grammar Focus, Tokens]`, grouped by HSK level in the global `SENTENCES` object.
 - Vocabulary data uses `[Chinese, Pinyin, Thai]` in the global `VOCAB` object; validate it with `node --check data/vocab.js`.
+- Vocabulary covers HSK 1–9: HSK 1–5 have Thai translations; HSK 6 and 7-9 use English from CC-CEDICT (or Thai if translated via Bing). Regenerate with `python tools/translate_hsk69.py` (reads `BING_TRANSLATE_KEY` env var for batch en→th translation; without key, keeps English).
 - The writing mode loads Hanzi Writer 3.7.3 (with SRI) and hanzi-writer-data 2.0.1 from jsDelivr. Internet access is required for uncached characters; load failures must not consume lives or writing time.
 - Reuse the Hanzi Writer instance across characters and sessions because it registers document-level input listeners. Use `updateDimensions` when its container resizes so stroke coordinates remain accurate on mobile.
 - Hanzi Writer's `drawingWidth` is in its 1024-unit character coordinate system, not CSS pixels; it scales with the writing canvas.
+- Dictionary mode (`dict`) searches VOCAB (HSK 1–9) by pinyin/Chinese/Thai, speech (Web Speech API `zh-CN`, Chrome/Edge only), or handwriting (Hanzi Writer). Shows HSK level + example sentences from SENTENCES (HSK 1–5 only). Words without Thai translation show English + Bing Translator link (`https://www.bing.com/translator?from=zh&to=th&text=...`).
+- HSK 3.0 data source: `HSK Database/hsk30.csv` from `ivankra/hsk30` (11,092 words). English definitions from `HSK Database/cedict.txt` (CC-CEDICT). Both are gitignored.

@@ -23,3 +23,8 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Secrets (API keys, etc.)
+.env
+.env.*
+*.key

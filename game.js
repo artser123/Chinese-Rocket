@@ -267,7 +267,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("zombie"), $("matching"), $("bomb")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("zombie"), $("matching"), $("bomb"), $("dict")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
 }
 
@@ -2617,6 +2617,7 @@ let selectedLevel = null;
 const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต", vocab: "📖 เกมคำศัพท์", sentence: "🧩 เกมเรียงประโยค", zombie: "🧟 เกมยิงซอมบี้" };
 MODE_TITLES.matching = "เกมแฟลชการ์ดจับคู่";
 MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
+MODE_TITLES.dict = "📚 พจนานุกรมจีน";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
@@ -2652,6 +2653,310 @@ function updateBestLine() {
   $("bestScoreLine").textContent = best ? `สถิติ HSK ${selectedLevel}: ${best} คะแนน` : "";
 }
 
+/* ================= Dictionary mode ================= */
+const dictEl = $("dict");
+const dictInput = $("dictInput");
+const dictResults = $("dictResults");
+const dictWritePanel = $("dictWritePanel");
+let dictWriter = null;
+let dictRecognition = null;
+
+// pinyin normalize: strip tone marks + lowercase for fuzzy match
+function normPinyin(s) {
+  return s.toLowerCase()
+    .replace(/[āáǎà]/g, "a").replace(/[ēéěè]/g, "e")
+    .replace(/[īíǐì]/g, "i").replace(/[ōóǒò]/g, "o")
+    .replace(/[ūúǔù]/g, "u").replace(/[ǖǘǚǜü]/g, "v")
+    .replace(/\d/g, "").replace(/\s+/g, " ").trim();
+}
+
+// normalize pinyin for single-syllable matching (no spaces)
+function normSyl(s) {
+  return normPinyin(s).replace(/\s+/g, "");
+}
+
+function startDict() {
+  switchScreen(dictEl);
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  dictInput.value = "";
+  dictResults.innerHTML = '<p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>';
+  dictWritePanel.hidden = true;
+  // show mic button if speech recognition is available
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  $("dictMicBtn").hidden = !SR;
+  setTimeout(() => { dictInput.focus(); }, 100);
+}
+
+function dictSearch(query) {
+  const q = (query || dictInput.value).trim();
+  if (!q) {
+    dictResults.innerHTML = '<p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>';
+    return;
+  }
+  const isChinese = /[\u4e00-\u9fff]/.test(q);
+  const isThai = /[\u0e00-\u0e7f]/.test(q);
+  const qLower = q.toLowerCase();
+  const results = [];
+  // For pinyin search: split query into syllables by space, normalize each
+  // e.g. "ni hao" -> ["ni","hao"] ; "nihao" -> ["nihao"]
+  const qSyls = isChinese || isThai ? [] : normPinyin(q).split(/\s+/).filter(Boolean);
+  for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
+    const words = VOCAB[lvl] || [];
+    for (const w of words) {
+      const zh = w[0], py = w[1], th = w[2];
+      let match = false;
+      if (isChinese) {
+        match = zh.includes(q);
+      } else if (isThai) {
+        if (th && th.toLowerCase().includes(qLower)) match = true;
+      } else if (qSyls.length) {
+        // Pinyin search: split word pinyin into syllables, match each query syllable
+        // against the corresponding word syllable (prefix match, no tone needed)
+        const wSyls = normPinyin(py).split(/\s+/).filter(Boolean);
+        if (qSyls.length === 1) {
+          // single syllable query: match if any word syllable starts with it
+          if (wSyls.some((s) => s.startsWith(qSyls[0]))) match = true;
+          // also allow substring match for multi-syllable words typed as one block
+          else if (normSyl(py).includes(qSyls[0])) match = true;
+        } else {
+          // multi-syllable query: each query syllable must match a word syllable in order
+          if (wSyls.length >= qSyls.length) {
+            let ok = true;
+            for (let i = 0; i < qSyls.length; i++) {
+              if (!wSyls[i].startsWith(qSyls[i])) { ok = false; break; }
+            }
+            if (ok) match = true;
+          }
+        }
+        // also search Thai meaning as fallback
+        if (!match && th && th.toLowerCase().includes(qLower)) match = true;
+      }
+      if (match) results.push({ zh, py, th, lvl });
+    }
+  }
+  // sort: shorter chinese first, then lower HSK level
+  results.sort((a, b) => a.zh.length - b.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
+  dictRenderResults(results.slice(0, 20), q);
+}
+
+function dictRenderResults(results, query) {
+  if (!results.length) {
+    const isChinese = /[\u4e00-\u9fff]/.test(query);
+    const isThai = /[\u0e00-\u0e7f]/.test(query);
+    // Thai query -> translate th->zh ; Chinese query -> translate zh->th : else auto
+    const from = isThai ? "th" : isChinese ? "zh-Hans" : "auto";
+    const to = isThai ? "zh-Hans" : "th";
+    const bingUrl = `https://www.bing.com/translator?from=${from}&to=${to}&text=` + encodeURIComponent(query);
+    dictResults.innerHTML = `<div class="dict-not-found"><p>🔍 ไม่พบคำ "${query}" ในฐานข้อมูล HSK 1–9</p><p>ลองค้นหาผ่าน Bing Translator:</p><a href="${bingUrl}" target="_blank" rel="noopener">🌐 Bing Translator</a></div>`;
+    return;
+  }
+  dictResults.innerHTML = "";
+  for (const r of results) {
+    const entry = document.createElement("div");
+    entry.className = "dict-entry";
+    const hasThai = r.th && !/^[A-Za-z\s;,.\-()\/]+$/.test(r.th) && r.th.length > 0;
+    const thClass = hasThai ? "" : "english-only";
+    const thText = r.th || "(ไม่มีคำแปล)";
+    const bingUrl = "https://www.bing.com/translator?from=zh-Hans&to=th&text=" + encodeURIComponent(r.zh);
+
+    // find example sentences
+    const examples = dictFindExamples(r.zh, r.lvl);
+
+    let html = `<div class="dict-entry-top">
+      <div class="dict-entry-zh" lang="zh">${r.zh}</div>
+      <div class="dict-entry-pinyin">${r.py}</div>
+      <span class="dict-entry-hsk" data-hsk="${r.lvl}">HSK ${r.lvl}</span>
+    </div>
+    <div class="dict-entry-th ${thClass}">${thText}</div>
+    <div class="dict-entry-actions">
+      <button class="dict-speak-btn" data-zh="${r.zh}">🔊 ฟังเสียง</button>
+      <button class="dict-copy-btn" data-zh="${r.zh}">📋 คัดลอก</button>
+      <a class="bing-link" href="${bingUrl}" target="_blank" rel="noopener">🌐 แปลด้วย Bing</a>`;
+    html += `</div>`;
+    if (examples.length) {
+      html += `<div class="dict-examples"><div class="dict-examples-label">📝 ประโยคตัวอย่าง (${examples.length})</div>`;
+      for (const ex of examples) {
+        html += `<div class="dict-example">
+          <div class="dict-example-zh" lang="zh">${ex[0]}</div>
+          <div class="dict-example-pinyin">${ex[1]}</div>
+          <div class="dict-example-th">${ex[2]}</div>
+          <div class="dict-example-actions"><button class="dict-ex-speak-btn" data-zh="${ex[0]}">🔊 ฟัง</button></div>
+        </div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<div class="dict-examples"><div class="dict-no-examples">ยังไม่มีประโยคตัวอย่างสำหรับคำนี้</div></div>`;
+    }
+    entry.innerHTML = html;
+    dictResults.appendChild(entry);
+  }
+  // wire up speak buttons
+  dictResults.querySelectorAll(".dict-speak-btn, .dict-ex-speak-btn").forEach((btn) => {
+    btn.addEventListener("click", () => speak(btn.dataset.zh));
+  });
+  // wire up copy buttons
+  dictResults.querySelectorAll(".dict-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      sfx.click();
+      const text = btn.dataset.zh;
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = btn.textContent;
+        btn.textContent = "✅ คัดลอกแล้ว";
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      } catch (e) {
+        // fallback for older browsers / non-secure contexts
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); btn.textContent = "✅ คัดลอกแล้ว"; setTimeout(() => { btn.textContent = "📋 คัดลอก"; }, 1200); } catch (e2) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+}
+
+function dictFindExamples(zh, lvl) {
+  if (!SENT_OK) return [];
+  const examples = [];
+  for (const sl of ["1", "2", "3", "4", "5"]) {
+    const sents = SENTENCES[sl] || [];
+    for (const s of sents) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  return examples;
+}
+
+function dictStartMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; return; }
+  dictRecognition = new SR();
+  dictRecognition.lang = "zh-CN";
+  dictRecognition.continuous = false;
+  dictRecognition.interimResults = false;
+  dictRecognition.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    dictInput.value = text;
+    dictSearch(text);
+  };
+  dictRecognition.onend = () => { dictRecognition = null; $("dictMicBtn").textContent = "🎤"; };
+  dictRecognition.onerror = () => { dictRecognition = null; $("dictMicBtn").textContent = "🎤"; };
+  $("dictMicBtn").textContent = "🔴";
+  dictRecognition.start();
+}
+
+async function dictStartWrite() {
+  if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
+  dictWritePanel.hidden = false;
+  try { await loadBombLibrary(); } catch (e) { sfx.wrong(); return; }
+  dictNewWriteChar();
+}
+
+async function dictLoadCharData(char) {
+  // reuse bombCharData cache; fetch from jsDelivr if missing
+  if (bombCharData.has(char)) return bombCharData.get(char);
+  try {
+    const response = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+    if (!response.ok) throw new Error("not found");
+    const data = await response.json();
+    if (!data.strokes?.length || data.strokes.length !== data.medians?.length) throw new Error("incomplete");
+    bombCharData.set(char, data);
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function dictNewWriteChar() {
+  // pick a common character to practice writing
+  const chars = ["人", "大", "中", "国", "我", "你", "好", "的", "是", "不", "他", "她", "们", "上", "下", "去", "来", "说", "看", "想"];
+  const ch = chars[Math.floor(Math.random() * chars.length)];
+  if (dictWriter) { try { dictWriter.unmount(); } catch (e) {} dictWriter = null; }
+  $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">กำลังโหลด...</p>';
+  $("dictCharPicker").innerHTML = "";
+  // load char data first (like bomb mode does)
+  const data = await dictLoadCharData(ch);
+  if (!data) {
+    $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">ไม่สามารถโหลดตัวอักษรนี้ได้ ลองกดสุ่มตัวใหม่</p>';
+    return;
+  }
+  $("dictWriter").innerHTML = "";
+  try {
+    dictWriter = new window.HanziWriter("dictWriter", ch, {
+      width: 220, height: 220, padding: 10,
+      showCharacter: false, showOutline: true,
+      strokeColor: "#203954", outlineColor: "#cbd2db",
+      drawingWidth: 40, drawingColor: "#ff5722",
+      highlightColor: "#26a477", highlightOnComplete: true,
+      strokeAnimationSpeed: 1, leniency: 1.4,
+      markStrokeCorrectAfterMisses: 4,
+      charDataLoader: (char) => bombCharData.get(char),
+    });
+    dictWriter.quiz({
+      leniency: 1.4,
+      markStrokeCorrectAfterMisses: 4,
+      onMistake: () => {},
+      onCorrectStroke: () => {},
+      onComplete: () => { dictShowCharPicker(ch); },
+    });
+  } catch (e) {
+    $("dictWriter").innerHTML = '<p style="color:#fff;padding:80px 20px;text-align:center;">ไม่สามารถโหลดตัวอักษรนี้ได้ ลองกดสุ่มตัวใหม่</p>';
+  }
+}
+
+function dictShowCharPicker(ch) {
+  // find all words containing this character
+  const picker = $("dictCharPicker");
+  picker.innerHTML = "";
+  const seen = new Set();
+  const words = [];
+  for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
+    for (const w of VOCAB[lvl] || []) {
+      if (w[0].includes(ch) && !seen.has(w[0])) { seen.add(w[0]); words.push(w[0]); }
+    }
+  }
+  // show up to 12 words
+  for (const zh of words.slice(0, 12)) {
+    const btn = document.createElement("button");
+    btn.textContent = zh;
+    btn.addEventListener("click", () => {
+      dictInput.value = zh;
+      dictSearch(zh);
+      dictWritePanel.hidden = true;
+    });
+    picker.appendChild(btn);
+  }
+  if (!words.length) picker.innerHTML = '<p style="color:#8b95c9;">ไม่พบคำที่มีตัวอักษรนี้</p>';
+}
+
+$("dictQuitBtn").addEventListener("click", () => {
+  sfx.click();
+  if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; }
+  if (dictWriter) { try { dictWriter.unmount(); } catch (e) {} dictWriter = null; }
+  switchScreen(menuEl);
+});
+$("dictMuteBtn").addEventListener("click", toggleMute);
+$("dictSearchBtn").addEventListener("click", () => { sfx.click(); dictSearch(); });
+dictInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dictSearch(); } });
+dictInput.addEventListener("input", () => {
+  // auto-search if query is long enough or contains chinese
+  const v = dictInput.value.trim();
+  if (v.length >= 2 || /[\u4e00-\u9fff]/.test(v)) dictSearch(v);
+});
+$("dictMicBtn").addEventListener("click", () => { sfx.click(); dictStartMic(); });
+$("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });
+$("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
+$("dictWriteNewBtn").addEventListener("click", () => { sfx.click(); dictNewWriteChar(); });
+
 $("cards").addEventListener("pointerdown", (e) => {
   const card = e.target.closest(".card");
   if (!card || card.classList.contains("locked")) return;
@@ -2660,6 +2965,12 @@ $("cards").addEventListener("pointerdown", (e) => {
   document.querySelectorAll(".card").forEach((c) => c.classList.remove("selected"));
   card.classList.add("selected");
   gameMode = card.dataset.mode;
+  if (gameMode === "dict") {
+    // Dictionary mode: no setup panel needed, go straight in
+    $("setupPanel").classList.remove("show");
+    startDict();
+    return;
+  }
   if (gameMode === "sentence" && !SENT_OK) {
     $("setupTitle").textContent = "🧩 เกมเรียงประโยค";
     $("setupPanel").classList.add("show");

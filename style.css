@@ -705,3 +705,234 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .bomb-plane, .failure .bomb-result-mark { animation: none; }
 }
+
+/* ---------- Dictionary mode ---------- */
+#dict {
+  background: radial-gradient(ellipse at 50% 120%, #1a2450 0%, #05081e 60%);
+  justify-content: flex-start;
+  padding-top: max(16px, 3vh);
+  overflow-y: auto;
+  touch-action: pan-y;
+  gap: 10px;
+}
+.dict-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(720px, 94vw);
+}
+.dict-title {
+  flex: 1;
+  font-size: clamp(18px, 5vw, 26px);
+  font-weight: 800;
+  color: #ffd76a;
+  text-align: center;
+}
+.dict-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(720px, 94vw);
+  flex-wrap: wrap;
+}
+.dict-search #dictInput {
+  flex: 1;
+  min-width: 150px;
+  padding: 12px 16px;
+  font-size: clamp(16px, 4.5vw, 20px);
+  border: 2px solid #3d4a9e;
+  border-radius: 14px;
+  background: #131a3d;
+  color: #fff;
+  font-family: "Noto Sans SC", "Noto Sans Thai", sans-serif;
+}
+.dict-search #dictInput:focus {
+  outline: none;
+  border-color: #6a7af0;
+  box-shadow: 0 0 12px rgba(106, 122, 240, .4);
+}
+.dict-search .big-btn {
+  min-width: auto;
+  padding: 12px 18px;
+  font-size: clamp(15px, 4vw, 18px);
+}
+.dict-write {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(720px, 94vw);
+  background: rgba(16, 23, 54, .85);
+  border: 1px solid #3d4a9e;
+  border-radius: 18px;
+  padding: 16px;
+}
+.dict-write #dictWriter {
+  width: 220px;
+  height: 220px;
+  background: #fff;
+  border-radius: 12px;
+}
+.dict-write #dictCharPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  min-height: 50px;
+}
+.dict-write #dictCharPicker button {
+  font: 700 28px "Noto Sans SC", sans-serif;
+  width: 50px;
+  height: 50px;
+  border: 2px solid #3d4a9e;
+  border-radius: 10px;
+  background: #131a3d;
+  color: #fff;
+  cursor: pointer;
+}
+.dict-write #dictCharPicker button:active { transform: scale(.95); }
+.dict-write-hint { color: #8b95c9; font-size: clamp(12px, 3.4vw, 14px); text-align: center; }
+.dict-results {
+  width: min(720px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 20px;
+}
+.dict-placeholder {
+  color: #8b95c9;
+  text-align: center;
+  font-size: clamp(14px, 4vw, 17px);
+  padding: 40px 20px;
+}
+.dict-entry {
+  background: linear-gradient(180deg, #1b2347, #121838);
+  border: 2px solid #3d4a9e;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dict-entry-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dict-entry-zh {
+  font: 800 clamp(28px, 8vw, 42px) "Noto Sans SC", sans-serif;
+  color: #ffe0a1;
+  line-height: 1.1;
+}
+.dict-entry-pinyin {
+  font-size: clamp(16px, 4.5vw, 22px);
+  color: #a6daff;
+  font-weight: 600;
+}
+.dict-entry-hsk {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 10px;
+  font-size: clamp(13px, 3.5vw, 15px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.dict-entry-hsk[data-hsk="1"] { background: #2d6a4f; color: #d8f3dc; }
+.dict-entry-hsk[data-hsk="2"] { background: #1b6ca8; color: #d0ebff; }
+.dict-entry-hsk[data-hsk="3"] { background: #6a4c93; color: #e6d6ff; }
+.dict-entry-hsk[data-hsk="4"] { background: #b5651d; color: #ffe8d6; }
+.dict-entry-hsk[data-hsk="5"] { background: #9e2a2a; color: #ffd6d6; }
+.dict-entry-hsk[data-hsk="6"] { background: #5a189a; color: #e0aaff; }
+.dict-entry-hsk[data-hsk="7-9"] { background: #6c757d; color: #f8f9fa; }
+.dict-entry-th {
+  font-size: clamp(16px, 4.5vw, 20px);
+  color: #a2ffd3;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.dict-entry-th.english-only { color: #c2d3e8; font-style: italic; }
+.dict-entry-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dict-entry-actions button, .dict-entry-actions a {
+  padding: 8px 14px;
+  font-size: clamp(13px, 3.5vw, 15px);
+  border: 2px solid #3d4a9e;
+  border-radius: 10px;
+  background: #131a3d;
+  color: #cdd5ff;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.dict-entry-actions button:active, .dict-entry-actions a:active { transform: scale(.95); }
+.dict-entry-actions .bing-link {
+  background: linear-gradient(180deg, #2a3f7a, #1a2a5a);
+  border-color: #4a6abe;
+  color: #a6daff;
+}
+.dict-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid #2a3360;
+}
+.dict-examples-label {
+  color: #8fd3ff;
+  font-size: clamp(13px, 3.5vw, 15px);
+  font-weight: 700;
+}
+.dict-example {
+  background: rgba(10, 15, 40, .6);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dict-example-zh {
+  font: 600 clamp(16px, 4.5vw, 20px) "Noto Sans SC", sans-serif;
+  color: #ffe0a1;
+}
+.dict-example-pinyin { color: #a6daff; font-size: clamp(13px, 3.5vw, 16px); }
+.dict-example-th { color: #a2ffd3; font-size: clamp(14px, 3.8vw, 17px); }
+.dict-example-actions { display: flex; gap: 6px; }
+.dict-example-actions button {
+  padding: 5px 10px;
+  font-size: clamp(12px, 3vw, 14px);
+  border: 1px solid #3d4a9e;
+  border-radius: 8px;
+  background: #131a3d;
+  color: #cdd5ff;
+  cursor: pointer;
+}
+.dict-example-actions button:active { transform: scale(.93); }
+.dict-no-examples { color: #666; font-size: clamp(12px, 3.4vw, 14px); font-style: italic; }
+.dict-not-found {
+  text-align: center;
+  padding: 30px 20px;
+  color: #8b95c9;
+}
+.dict-not-found a {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, #2a3f7a, #1a2a5a);
+  border: 2px solid #4a6abe;
+  border-radius: 12px;
+  color: #a6daff;
+  text-decoration: none;
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .dict-search { gap: 6px; }
+  .dict-search .big-btn { width: 100%; }
+  .dict-write #dictWriter { width: 180px; height: 180px; }
+}

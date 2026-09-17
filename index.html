@@ -48,6 +48,11 @@
       <div class="card-title">เกมแฟลชการ์ดจับคู่</div>
       <div class="card-desc">เปิดการ์ดจับคู่คำจีนกับพินอินหรือภาษาไทย จับคู่ครบแล้วสุ่มชุดใหม่</div>
     </button>
+    <button class="card" data-mode="dict">
+      <div class="card-icon">📚</div>
+      <div class="card-title">พจนานุกรมจีน</div>
+      <div class="card-desc">ค้นคำจากพินอิน ตัวจีน เสียงพูด หรือเขียนบนจอ พร้อมระดับ HSK และประโยคตัวอย่าง</div>
+    </button>
   </div>
 
   <div id="setupPanel" class="setup">
@@ -331,6 +336,31 @@
       <button id="bombResumeBtn" class="big-btn">เล่นต่อ</button>
       <button id="bombPauseQuitBtn" class="big-btn secondary">กลับเมนู</button>
     </div>
+  </div>
+</div>
+
+<!-- DICTIONARY SCREEN -->
+<div id="dict" class="screen">
+  <div class="dict-header">
+    <button id="dictQuitBtn" class="icon-btn">✖️</button>
+    <h2 class="dict-title">📚 พจนานุกรมจีน-ไทย</h2>
+    <button id="dictMuteBtn" class="icon-btn">🔊</button>
+  </div>
+  <div class="dict-search">
+    <input id="dictInput" type="text" placeholder="พิมพ์พินอินหรือตัวจีน..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button id="dictMicBtn" class="icon-btn" hidden>🎤</button>
+    <button id="dictWriteBtn" class="icon-btn">✍️</button>
+    <button id="dictSearchBtn" class="big-btn">🔍 ค้นหา</button>
+  </div>
+  <div id="dictWritePanel" class="dict-write" hidden>
+    <div id="dictWriter" aria-label="ลากเส้นเขียนตัวอักษรจีน"></div>
+    <div id="dictCharPicker" aria-label="เลือกตัวอักษรที่เขียนได้"></div>
+    <p class="dict-write-hint">เขียนตัวอักษรจีนตามเงาเส้น แล้วเลือกตัวที่ตรงจากด้านล่าง</p>
+    <button id="dictWriteNewBtn" class="big-btn secondary">🎲 สุ่มตัวใหม่</button>
+    <button id="dictWriteCloseBtn" class="big-btn secondary">ปิดโหมดเขียน</button>
+  </div>
+  <div id="dictResults" class="dict-results">
+    <p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>
   </div>
 </div>
 
