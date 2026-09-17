@@ -3072,12 +3072,13 @@ function dictStartMic() {
   try { rec.start(); } catch (err) { stopUi(); }
 }
 
-/* ---------- Dictionary free-handwriting mode (HanziLookupJS) ---------- */
+/* ---------- Dictionary free-handwriting mode (Google Input Tools API + HanziLookupJS fallback) ---------- */
 let dictCanvas = null;
 let dictCtx = null;
-let dictStrokes = [];       // array of strokes, each stroke = array of [x,y]
+let dictStrokes = [];       // array of strokes, each stroke = array of [x,y,t]
 let dictCurrentStroke = []; // points of the stroke currently being drawn
 let dictDrawing = false;
+let dictStrokeT0 = 0;       // timestamp (ms) when the current stroke started
 let dictLookupReady = false;
 let dictLookupPromise = null;
 
@@ -3100,16 +3101,10 @@ function loadDictLookup() {
   return dictLookupPromise;
 }
 
-async function dictStartWrite() {
+function dictStartWrite() {
   if (dictRecognition) dictRecognition.stop();
   if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
   dictWritePanel.hidden = false;
-  $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">กำลังโหลดระบบจดจำลายมือ...</p>';
-  try { await loadDictLookup(); }
-  catch (e) {
-    $("dictCharPicker").innerHTML = '<p style="color:#ff9c9c;">โหลดระบบจดจำลายมือไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต</p>';
-    return;
-  }
   dictInitCanvas();
 }
 
@@ -3138,24 +3133,32 @@ function dictCanvasPos(e) {
 function dictPointerDown(e) {
   e.preventDefault();
   dictDrawing = true;
-  dictCurrentStroke = [dictCanvasPos(e)];
+  dictStrokeT0 = performance.now();
+  const [x, y] = dictCanvasPos(e);
+  dictCurrentStroke = [[x, y, 0]];
   dictCtx.beginPath();
-  const [x, y] = dictCurrentStroke[0];
   dictCtx.moveTo(x, y);
 }
 
 function dictPointerMove(e) {
   if (!dictDrawing) return;
-  const p = dictCanvasPos(e);
-  dictCurrentStroke.push(p);
-  dictCtx.lineTo(p[0], p[1]);
+  const [x, y] = dictCanvasPos(e);
+  dictCurrentStroke.push([x, y, performance.now() - dictStrokeT0]);
+  dictCtx.lineTo(x, y);
   dictCtx.stroke();
 }
 
 function dictPointerUp(e) {
   if (!dictDrawing) return;
   dictDrawing = false;
-  if (dictCurrentStroke.length > 1) dictStrokes.push(dictCurrentStroke);
+  // keep single-point strokes (dot taps like 丶) by duplicating the point
+  if (dictCurrentStroke.length === 1) {
+    const [x, y, t] = dictCurrentStroke[0];
+    dictCurrentStroke.push([x + 0.5, y + 0.5, t + 1]);
+    dictCtx.lineTo(x + 0.5, y + 0.5);
+    dictCtx.stroke();
+  }
+  if (dictCurrentStroke.length) dictStrokes.push(dictCurrentStroke);
   dictCurrentStroke = [];
   dictRecognize();
 }
@@ -3164,19 +3167,61 @@ function dictClearCanvas() {
   if (!dictCtx) return;
   dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictCanvas.width, dictCanvas.height);
   dictStrokes = []; dictCurrentStroke = [];
+  dictRecogSeq++; // cancel any recognition still in flight
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
 }
 
-function dictRecognize() {
-  if (!dictLookupReady || !dictStrokes.length) return;
+// Google Input Tools handwriting API — much more accurate than the offline
+// matcher (same engine as Google's handwriting keyboard, tolerant of
+// stroke-order slips). Requires internet; HanziLookup below is the fallback.
+async function dictRecognizeGoogle() {
+  const ink = dictStrokes.map((s) => [s.map((p) => p[0]), s.map((p) => p[1]), s.map((p) => Math.round(p[2]))]);
+  const body = {
+    input_type: 0,
+    requests: [{
+      language: "zh",
+      writing_guide: { writing_area_width: dictCanvas.width, writing_area_height: dictCanvas.height },
+      ink,
+      max_num_results: 10,
+      max_completions: 0,
+      pre_context: "",
+    }],
+  };
+  const res = await fetch("https://inputtools.google.com/request?itc=zh-t-i0-handwrit&num=10&cp=1&cs=1&ie=utf-8&oe=utf-8&app=zhhandwrit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("google handwriting " + res.status);
+  const data = await res.json();
+  if (data[0] !== "SUCCESS" || !data[1] || !data[1][0]) return [];
+  return data[1][0][1] || [];
+}
+
+let dictRecogSeq = 0; // ignore stale results if new strokes arrive mid-request
+
+async function dictRecognize() {
+  if (!dictStrokes.length) return;
+  const seq = ++dictRecogSeq;
+  const picker = $("dictCharPicker");
+  picker.innerHTML = '<p style="color:#8b95c9;">กำลังจดจำ...</p>';
   try {
-    const analyzed = new window.HanziLookup.AnalyzedCharacter(dictStrokes);
-    const matcher = new window.HanziLookup.Matcher("mmah");
-    matcher.match(analyzed, 8, (matches) => {
+    const chars = await dictRecognizeGoogle();
+    if (seq !== dictRecogSeq) return;
+    if (chars.length) { dictShowCandidates(chars); return; }
+  } catch (e) { /* fall back to offline matcher below */ }
+  try {
+    await loadDictLookup();
+    if (seq !== dictRecogSeq) return;
+    const strokes2d = dictStrokes.map((s) => s.map((p) => [p[0], p[1]]));
+    const analyzed = new window.HanziLookup.AnalyzedCharacter(strokes2d);
+    new window.HanziLookup.Matcher("mmah").match(analyzed, 8, (matches) => {
+      if (seq !== dictRecogSeq) return;
       dictShowCandidates(matches.map((m) => m.character));
     });
   } catch (e) {
-    $("dictCharPicker").innerHTML = '<p style="color:#ff9c9c;">จดจำลายมือผิดพลาด ลองล้างแล้ววาดใหม่</p>';
+    if (seq !== dictRecogSeq) return;
+    picker.innerHTML = '<p style="color:#ff9c9c;">จดจำลายมือผิดพลาด ลองล้างแล้ววาดใหม่</p>';
   }
 }
 

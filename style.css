@@ -816,8 +816,9 @@ html, body {
 }
 .dict-write #dictCharPicker button {
   font: 700 28px "Noto Sans SC", sans-serif;
-  width: 50px;
+  min-width: 50px;
   height: 50px;
+  padding: 0 10px;
   border: 2px solid #3d4a9e;
   border-radius: 10px;
   background: #131a3d;
