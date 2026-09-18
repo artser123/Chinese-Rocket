@@ -3171,22 +3171,28 @@ let dictWhisperPromise = null;
 let dictWRecord = null; // {stream, src, proc, gain, chunks, asr, rate, timer}
 
 // lazy-load transformers.js + the local whisper-tiny model committed in models/
-// everything is self-hosted (vendor/, models/) so it works where CDNs are blocked
+// everything is self-hosted (vendor3/, models/) so it works where CDNs are blocked
 function loadDictWhisper(onProgress) {
   if (dictWhisperPromise) return dictWhisperPromise;
   dictWhisperPromise = (async () => {
-    const mod = await import("./vendor/transformers.min.js");
-    mod.env.allowRemoteModels = false;
-    mod.env.allowLocalModels = true;
-    mod.env.localModelPath = "models/";
-    // onnxruntime-web wasm files are self-hosted too (default = jsDelivr CDN);
-    // vendor/dist/ also matches the path transformers derives from its own URL
-    if (mod.env.backends && mod.env.backends.onnx && mod.env.backends.onnx.wasm)
-      mod.env.backends.onnx.wasm.wasmPaths = "vendor/dist/";
-    return mod.pipeline("automatic-speech-recognition", "whisper-tiny", {
-      quantized: true,
+    const mod = await import("./vendor3/transformers.web.min.js");
+    const { env, pipeline } = mod;
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = "models/";
+    // onnxruntime-web wasm/jsep files are self-hosted too (default = jsDelivr CDN)
+    if (env.backends && env.backends.onnx && env.backends.onnx.wasm)
+      env.backends.onnx.wasm.wasmPaths = "vendor3/";
+    const mk = (device) => pipeline("automatic-speech-recognition", "whisper-tiny", {
+      device,
+      dtype: "q8", // maps to the *_quantized.onnx files in models/whisper-tiny/
       progress_callback: (p) => { if (onProgress) onProgress(p); },
     });
+    // WebGPU runs whisper on the GPU — much faster than single-threaded WASM
+    if (navigator.gpu) {
+      try { return await mk("webgpu"); } catch (e) { /* fall back to wasm */ }
+    }
+    return mk("wasm");
   })();
   dictWhisperPromise.catch(() => { dictWhisperPromise = null; }); // allow retry after a failed load
   return dictWhisperPromise;
