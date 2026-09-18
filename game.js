@@ -3115,12 +3115,22 @@ function dictStartMic() {
   rec.interimResults = true; // live-typing: show words in the box as they are spoken
 
   let finalText = "";
+  // if the service stalls silently (blocked network), switch to on-device Whisper
+  const stallTimer = setTimeout(() => {
+    if (dictRecognition === rec && !finalText && !dictInput.value.trim()) {
+      try { rec.abort(); } catch (e) {}
+      dictRecognition = null;
+      dictStartMicWhisper();
+    }
+  }, 7000);
   const stopUi = () => {
+    clearTimeout(stallTimer);
     dictRecognition = null;
     micBtn.classList.remove("listening");
   };
 
   rec.onresult = (e) => {
+    clearTimeout(stallTimer);
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
@@ -3161,14 +3171,22 @@ let dictWhisperPromise = null;
 let dictWRecord = null; // {stream, src, proc, gain, chunks, asr, rate, timer}
 
 // lazy-load transformers.js + the local whisper-tiny model committed in models/
-function loadDictWhisper() {
+// everything is self-hosted (vendor/, models/) so it works where CDNs are blocked
+function loadDictWhisper(onProgress) {
   if (dictWhisperPromise) return dictWhisperPromise;
   dictWhisperPromise = (async () => {
-    const mod = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js");
+    const mod = await import("./vendor/transformers.min.js");
     mod.env.allowRemoteModels = false;
     mod.env.allowLocalModels = true;
     mod.env.localModelPath = "models/";
-    return mod.pipeline("automatic-speech-recognition", "whisper-tiny", { quantized: true });
+    // onnxruntime-web wasm files are self-hosted too (default = jsDelivr CDN);
+    // vendor/dist/ also matches the path transformers derives from its own URL
+    if (mod.env.backends && mod.env.backends.onnx && mod.env.backends.onnx.wasm)
+      mod.env.backends.onnx.wasm.wasmPaths = "vendor/dist/";
+    return mod.pipeline("automatic-speech-recognition", "whisper-tiny", {
+      quantized: true,
+      progress_callback: (p) => { if (onProgress) onProgress(p); },
+    });
   })();
   dictWhisperPromise.catch(() => { dictWhisperPromise = null; }); // allow retry after a failed load
   return dictWhisperPromise;
@@ -3182,14 +3200,29 @@ async function dictStartMicWhisper() {
     return;
   }
   micBtn.classList.add("listening");
-  dictResults.innerHTML = '<p class="dict-placeholder">⏳ กำลังโหลดโมเดลจดจำเสียงในเครื่อง (ครั้งแรก ~40MB โหลดครั้งเดียวแล้วจำไว้)...</p>';
+  const setStatus = (h) => { dictResults.innerHTML = `<p class="dict-placeholder">${h}</p>`; };
+  setStatus("⏳ กำลังโหลดโมเดลจดจำเสียงในเครื่อง (ครั้งแรก ~40MB)...");
+  let lastShown = 0;
   let asr;
-  try { asr = await loadDictWhisper(); }
-  catch (e) {
+  try {
+    asr = await Promise.race([
+      loadDictWhisper((p) => {
+        if (p.status === "progress" && p.total && Date.now() - lastShown > 150) {
+          lastShown = Date.now();
+          const mb = (p.loaded / 1048576).toFixed(1) + "/" + (p.total / 1048576).toFixed(1) + "MB";
+          setStatus(`⏳ กำลังโหลดโมเดลเสียง ${Math.round(p.loaded / p.total * 100)}% (${mb})`);
+        } else if (p.status === "initiate") {
+          setStatus("⏳ เริ่มโหลดโมเดลเสียง...");
+        }
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 120000)),
+    ]);
+  } catch (e) {
     micBtn.classList.remove("listening");
-    dictResults.innerHTML = '<p class="dict-placeholder">โหลดโมเดลเสียงไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่</p>';
+    setStatus("โหลดโมเดลเสียงไม่สำเร็จ (ช้าหรือขาดกลางคัน) ตรวจสอบอินเทอร์เน็ตแล้วกด 🎤 ลองใหม่");
     return;
   }
+  setStatus("✅ โมเดลพร้อมแล้ว กำลังเปิดไมโครโฟน...");
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) {
