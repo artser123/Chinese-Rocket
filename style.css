@@ -800,8 +800,9 @@ html, body {
 }
 .dict-write[hidden] { display: none; }
 .dict-write #dictWriter {
-  width: 220px;
-  height: 220px;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 55vh;
   background: #fff;
   border-radius: 12px;
   cursor: crosshair;
@@ -840,6 +841,30 @@ html, body {
   font-size: clamp(14px, 4vw, 17px);
   padding: 40px 20px;
 }
+.dict-translate { border-color: #2d6a4f; }
+.dict-translate-label {
+  color: #8b95c9;
+  font-size: clamp(13px, 3.4vw, 15px);
+  font-weight: 600;
+}
+.dict-translate-zh {
+  font: 700 clamp(20px, 5.5vw, 28px) "Noto Sans SC", sans-serif;
+  color: #ffe0a1;
+  line-height: 1.3;
+}
+.dict-translate-pinyin {
+  font-size: clamp(14px, 4vw, 17px);
+  color: #a6daff;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.dict-translate-th {
+  font-size: clamp(16px, 4.4vw, 20px);
+  color: #b8f5c8;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.dict-translate-th a { color: #a6daff; }
 .dict-entry {
   background: linear-gradient(180deg, #1b2347, #121838);
   border: 2px solid #3d4a9e;
@@ -985,5 +1010,4 @@ html, body {
 }
 @media (max-width: 480px) {
   .dict-search { gap: 6px; }
-  .dict-write #dictWriter { width: 180px; height: 180px; }
 }

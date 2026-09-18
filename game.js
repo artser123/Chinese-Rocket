@@ -2203,7 +2203,7 @@ function flipMatchingCard(i) {
       a.matched = b.matched = true;
       s.pairs++; s.score += 10;
       sfx.hit();
-      setTimeout(() => speak(a.word[0].split(/[｜|]/)[0]), 150);
+      setTimeout(() => { if (matching === s) speakWordHit(a.word); }, 150);
       $("matchFeedback").innerHTML =
         `<span class="fb-zh">${a.word[0]}</span> ` +
         `<span class="fb-py">${a.word[1]}</span> ` +
@@ -2831,7 +2831,8 @@ function startDict() {
   dictWritePanel.hidden = true;
   // show mic button if speech recognition is available
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  $("dictMicBtn").hidden = !SR;
+  // show mic when Web Speech exists, or when mic capture is possible (Whisper fallback)
+  $("dictMicBtn").hidden = !SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   setTimeout(() => { dictInput.focus(); }, 100);
 }
 
@@ -2895,6 +2896,87 @@ function dictSearch(query) {
     results.sort((a, b) => b.zh.length - a.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
   }
   dictRenderResults(results.slice(0, 20), q);
+  // multi-char Chinese query (word/sentence): also translate the whole thing
+  if (isChinese && q.length >= 2) dictAddTranslation(q);
+  else dictTransSeq++; // cancel any pending translation from a previous query
+}
+
+let dictTransSeq = 0; // stale-guard for the sentence translation card
+
+// free MyMemory translation API (no key needed; falls back to Bing link on failure)
+async function dictTranslateZh(text) {
+  const url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=zh-CN|th";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("translate " + res.status);
+  const data = await res.json();
+  const t = data && data.responseData && data.responseData.translatedText;
+  if (data.responseStatus !== 200 || !t) throw new Error("no translation");
+  return t;
+}
+
+// local pinyin for arbitrary Chinese text: greedy longest-match word
+// segmentation over VOCAB (keeps word-context readings for polyphonic
+// chars), falling back to a per-char map for unknown characters
+let dictPinyinIdx = null;
+function dictPinyinIndex() {
+  if (dictPinyinIdx) return dictPinyinIdx;
+  const wordPy = new Map(); // exact word -> its pinyin
+  const charPy = new Map(); // char -> first seen syllable
+  for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
+    for (const w of VOCAB[lvl] || []) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  dictPinyinIdx = { wordPy, charPy };
+  return dictPinyinIdx;
+}
+
+function dictSentencePinyin(text) {
+  const { wordPy, charPy } = dictPinyinIndex();
+  const chars = [...text];
+  const parts = [];
+  let i = 0;
+  while (i < chars.length) {
+    const ch = chars[i];
+    if (!/[一-鿿]/.test(ch)) { parts.push(ch); i++; continue; }
+    let py = null, len = 0;
+    for (let l = Math.min(6, chars.length - i); l >= 2; l--) {
+      const w = chars.slice(i, i + l).join("");
+      if (wordPy.has(w)) { py = wordPy.get(w); len = l; break; }
+    }
+    if (py) { parts.push(py); i += len; }
+    else { parts.push(charPy.get(ch) || ch); i++; }
+  }
+  return parts.join(" ");
+}
+
+// sentence translation card shown above results for multi-char Chinese queries
+async function dictAddTranslation(q) {
+  const seq = ++dictTransSeq;
+  const box = document.createElement("div");
+  box.className = "dict-entry dict-translate";
+  box.innerHTML = `<div class="dict-translate-label">🌐 แปลประโยค (จีน → ไทย)</div>
+    <div class="dict-translate-zh" lang="zh"></div>
+    <div class="dict-translate-pinyin"></div>
+    <div class="dict-translate-th">กำลังแปล...</div>`;
+  box.querySelector(".dict-translate-zh").textContent = q;
+  box.querySelector(".dict-translate-pinyin").textContent = dictSentencePinyin(q);
+  dictResults.prepend(box);
+  const thBox = box.querySelector(".dict-translate-th");
+  try {
+    const th = await dictTranslateZh(q);
+    if (seq !== dictTransSeq) return;
+    thBox.textContent = th || "(แปลไม่ได้)";
+  } catch (e) {
+    if (seq !== dictTransSeq) return;
+    thBox.innerHTML = `แปลอัตโนมัติไม่สำเร็จ — <a href="${dictBingUrl(q)}" target="_blank" rel="noopener">🌐 เปิด Bing Translator</a>`;
+  }
 }
 
 // Bing Translator deep link: Thai query -> th->zh ; Chinese query -> zh->th ; else auto->th
@@ -3022,8 +3104,9 @@ function dictFindExamples(zh, lvl) {
 function dictStartMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micBtn = $("dictMicBtn");
-  if (!SR) return;
   if (dictRecognition) { dictRecognition.stop(); return; }
+  if (dictWRecord) { dictStopMicWhisper(); return; }
+  if (!SR) { dictStartMicWhisper(); return; }
 
   const rec = new SR();
   dictRecognition = rec;
@@ -3055,12 +3138,13 @@ function dictStartMic() {
   };
   rec.onerror = (e) => {
     stopUi();
+    // Google speech service unreachable (e.g. blocked network) -> on-device Whisper
+    if (e.error === "network") { dictStartMicWhisper(); return; }
     const msgs = {
       "not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน — กดอนุญาตไมค์ที่แถบที่อยู่แล้วลองใหม่",
       "service-not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน",
       "no-speech": "🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูดภาษาจีนอีกครั้ง",
       "audio-capture": "🎙️ ไม่พบไมโครโฟนในเครื่องนี้",
-      "network": "🌐 ระบบจดจำเสียงต้องเชื่อมต่ออินเทอร์เน็ต",
     };
     if (e.error !== "aborted") {
       dictResults.innerHTML = `<p class="dict-placeholder">${msgs[e.error] || "⚠️ จดจำเสียงผิดพลาด ลองใหม่อีกครั้ง"}</p>`;
@@ -3072,6 +3156,107 @@ function dictStartMic() {
   try { rec.start(); } catch (err) { stopUi(); }
 }
 
+/* ---------- Whisper on-device ASR fallback (works where Google speech is blocked) ---------- */
+let dictWhisperPromise = null;
+let dictWRecord = null; // {stream, src, proc, gain, chunks, asr, rate, timer}
+
+// lazy-load transformers.js + the local whisper-tiny model committed in models/
+function loadDictWhisper() {
+  if (dictWhisperPromise) return dictWhisperPromise;
+  dictWhisperPromise = (async () => {
+    const mod = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js");
+    mod.env.allowRemoteModels = false;
+    mod.env.allowLocalModels = true;
+    mod.env.localModelPath = "models/";
+    return mod.pipeline("automatic-speech-recognition", "whisper-tiny", { quantized: true });
+  })();
+  dictWhisperPromise.catch(() => { dictWhisperPromise = null; }); // allow retry after a failed load
+  return dictWhisperPromise;
+}
+
+async function dictStartMicWhisper() {
+  const micBtn = $("dictMicBtn");
+  if (dictWRecord) { dictStopMicWhisper(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    dictResults.innerHTML = '<p class="dict-placeholder">🚫 เบราว์เซอร์นี้ไม่รองรับการค้นหาด้วยเสียง</p>';
+    return;
+  }
+  micBtn.classList.add("listening");
+  dictResults.innerHTML = '<p class="dict-placeholder">⏳ กำลังโหลดโมเดลจดจำเสียงในเครื่อง (ครั้งแรก ~40MB โหลดครั้งเดียวแล้วจำไว้)...</p>';
+  let asr;
+  try { asr = await loadDictWhisper(); }
+  catch (e) {
+    micBtn.classList.remove("listening");
+    dictResults.innerHTML = '<p class="dict-placeholder">โหลดโมเดลเสียงไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่</p>';
+    return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) {
+    micBtn.classList.remove("listening");
+    dictResults.innerHTML = '<p class="dict-placeholder">🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน</p>';
+    return;
+  }
+  const ac = AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+  if (ac.state === "suspended") ac.resume();
+  const src = ac.createMediaStreamSource(stream);
+  const proc = ac.createScriptProcessor(4096, 1, 1);
+  const gain = ac.createGain(); // silence tap: ScriptProcessor must reach destination to run
+  gain.gain.value = 0;
+  const chunks = [];
+  proc.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(proc); proc.connect(gain); gain.connect(ac.destination);
+  dictWRecord = { stream, src, proc, gain, chunks, asr, rate: ac.sampleRate,
+    timer: setTimeout(() => dictStopMicWhisper(), 12000) };
+  dictResults.innerHTML = '<p class="dict-placeholder">🎤 กำลังฟัง… พูดภาษาจีนแล้วกด 🎤 อีกครั้งเพื่อถอดเสียง (หยุดเองใน 12 วิ)</p>';
+}
+
+// linear resample Float32 -> 16 kHz for whisper
+function dictResample16k(data, from) {
+  if (from === 16000) return data;
+  const ratio = from / 16000;
+  const len = Math.round(data.length / ratio);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const pos = i * ratio, j = Math.floor(pos), f = pos - j;
+    const a = data[j] || 0, b = data[j + 1] !== undefined ? data[j + 1] : a;
+    out[i] = a + (b - a) * f;
+  }
+  return out;
+}
+
+async function dictStopMicWhisper(cancel) {
+  const r = dictWRecord; dictWRecord = null;
+  if (!r) return;
+  clearTimeout(r.timer);
+  try { r.proc.disconnect(); r.src.disconnect(); r.gain.disconnect(); } catch (e) {}
+  r.stream.getTracks().forEach((t) => t.stop());
+  $("dictMicBtn").classList.remove("listening");
+  if (cancel) return;
+  const total = r.chunks.reduce((n, c) => n + c.length, 0);
+  if (total < r.rate * 0.3) {
+    dictResults.innerHTML = '<p class="dict-placeholder">🤔 เสียงสั้นเกินไป กด 🎤 แล้วพูดภาษาจีนอีกครั้ง</p>';
+    return;
+  }
+  const audio = new Float32Array(total);
+  let o = 0;
+  for (const c of r.chunks) { audio.set(c, o); o += c.length; }
+  dictResults.innerHTML = '<p class="dict-placeholder">⏳ กำลังถอดเสียงเป็นข้อความ...</p>';
+  try {
+    const out = await r.asr(dictResample16k(audio, r.rate), { language: "chinese", task: "transcribe" });
+    const text = (out && out.text ? out.text : "").trim();
+    if (text) {
+      dictInput.value = text;
+      dictUpdateClearBtn();
+      dictSearch(text);
+    } else {
+      dictResults.innerHTML = '<p class="dict-placeholder">🤔 ไม่ได้ยินชัด กด 🎤 แล้วพูดอีกครั้ง</p>';
+    }
+  } catch (e) {
+    dictResults.innerHTML = '<p class="dict-placeholder">ถอดเสียงไม่สำเร็จ ลองใหม่อีกครั้ง</p>';
+  }
+}
+
 /* ---------- Dictionary free-handwriting mode (Google Input Tools API + HanziLookupJS fallback) ---------- */
 let dictCanvas = null;
 let dictCtx = null;
@@ -3079,6 +3264,7 @@ let dictStrokes = [];       // array of strokes, each stroke = array of [x,y,t]
 let dictCurrentStroke = []; // points of the stroke currently being drawn
 let dictDrawing = false;
 let dictStrokeT0 = 0;       // timestamp (ms) when the current stroke started
+let dictW = 0, dictH = 0;   // drawing area size in CSS px (canvas attrs are × devicePixelRatio)
 let dictLookupReady = false;
 let dictLookupPromise = null;
 
@@ -3103,6 +3289,7 @@ function loadDictLookup() {
 
 function dictStartWrite() {
   if (dictRecognition) dictRecognition.stop();
+  if (dictWRecord) dictStopMicWhisper(true);
   if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
   dictWritePanel.hidden = false;
   dictInitCanvas();
@@ -3110,12 +3297,19 @@ function dictStartWrite() {
 
 function dictInitCanvas() {
   dictCanvas = $("dictWriter");
+  // size the canvas backing store to its real displayed size (× dpr) so
+  // strokes stay crisp; ctx transform maps CSS px -> device px
+  const dpr = window.devicePixelRatio || 1;
+  dictW = dictCanvas.clientWidth;
+  dictH = dictCanvas.clientHeight;
+  dictCanvas.width = Math.round(dictW * dpr);
+  dictCanvas.height = Math.round(dictH * dpr);
   dictCtx = dictCanvas.getContext("2d");
+  dictCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   dictCtx.lineCap = "round"; dictCtx.lineJoin = "round";
-  dictCtx.strokeStyle = "#ff5722"; dictCtx.lineWidth = 8;
+  dictCtx.strokeStyle = "#ff5722"; dictCtx.lineWidth = 10;
   dictStrokes = []; dictCurrentStroke = []; dictDrawing = false;
-  dictCtx.clearRect(0, 0, dictCanvas.width, dictCanvas.height);
-  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictCanvas.width, dictCanvas.height);
+  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictW, dictH);
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
   // wire pointer events
   dictCanvas.onpointerdown = dictPointerDown;
@@ -3126,8 +3320,7 @@ function dictInitCanvas() {
 
 function dictCanvasPos(e) {
   const r = dictCanvas.getBoundingClientRect();
-  const sx = dictCanvas.width / r.width, sy = dictCanvas.height / r.height;
-  return [Math.round((e.clientX - r.left) * sx), Math.round((e.clientY - r.top) * sy)];
+  return [Math.round(e.clientX - r.left), Math.round(e.clientY - r.top)];
 }
 
 function dictPointerDown(e) {
@@ -3165,7 +3358,7 @@ function dictPointerUp(e) {
 
 function dictClearCanvas() {
   if (!dictCtx) return;
-  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictCanvas.width, dictCanvas.height);
+  dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictW, dictH);
   dictStrokes = []; dictCurrentStroke = [];
   dictRecogSeq++; // cancel any recognition still in flight
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
@@ -3180,7 +3373,7 @@ async function dictRecognizeGoogle() {
     input_type: 0,
     requests: [{
       language: "zh",
-      writing_guide: { writing_area_width: dictCanvas.width, writing_area_height: dictCanvas.height },
+      writing_guide: { writing_area_width: dictW, writing_area_height: dictH },
       ink,
       max_num_results: 10,
       max_completions: 0,
@@ -3248,6 +3441,7 @@ function dictShowCandidates(chars) {
 $("dictQuitBtn").addEventListener("click", () => {
   sfx.click();
   if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; }
+  if (dictWRecord) dictStopMicWhisper(true);
   switchScreen(menuEl);
 });
 $("dictMuteBtn").addEventListener("click", toggleMute);
