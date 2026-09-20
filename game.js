@@ -3953,6 +3953,13 @@ $("dictMicLangBtn").addEventListener("click", () => {
 $("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });
 $("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
 $("dictWriteClearBtn").addEventListener("click", () => { sfx.click(); dictClearCanvas(); });
+$("dictWriteClearTextBtn").addEventListener("click", () => {
+  sfx.click();
+  dictInput.value = "";
+  dictUpdateClearBtn();
+  // ไม่ focus ช่องค้นหา — กันคีย์บอร์ดมือถือเด้งมาบังแผงเขียน
+  dictResults.innerHTML = '<p class="dict-placeholder">พิมพ์พินอิน ตัวจีน หรือภาษาไทยเพื่อค้นหา — กด 🎤 เพื่อพูด (เลือกภาษาได้ที่ปุ่มข้างๆ) หรือ ✍️ เพื่อเขียน</p>';
+});
 
 /* ================= Speaking practice mode (เกมฝึกพูด) ================= */
 // ฝึกพูดตามประโยค SENTENCES (HSK 1-5) แล้วตรวจว่าพูดถูกไหม — จดจำเสียงด้วย
