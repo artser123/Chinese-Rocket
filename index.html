@@ -68,6 +68,11 @@
       <div class="card-title">เกมแฟลชการ์ดจับคู่</div>
       <div class="card-desc">เปิดการ์ดจับคู่คำจีนกับพินอินหรือภาษาไทย จับคู่ครบแล้วสุ่มชุดใหม่</div>
     </button>
+    <button class="card" data-mode="listen">
+      <div class="card-icon">🎧🔁</div>
+      <div class="card-title">เกมฝึกฟัง</div>
+      <div class="card-desc">ฟังคำศัพท์หรือประโยคจีน-ไทยวนไปเรื่อยๆ สุ่มไม่ซ้ำ เลือกจังหวะเปลี่ยนคำได้ เหมาะตอนเดินทาง</div>
+    </button>
   </div>
 
 </div>
@@ -133,6 +138,23 @@
       <div class="level-select" id="nextSelect">
         <button class="next-btn selected" data-next="auto">⚡ อัตโนมัติ</button>
         <button class="next-btn" data-next="manual">👉 กดเอง</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="lisTypeRow" style="display:none">
+      <span class="setup-label">ฟังแบบ</span>
+      <div class="level-select" id="lisTypeSelect">
+        <button class="lis-btn selected" data-lis="word">🗣️ คำศัพท์</button>
+        <button class="lis-btn" data-lis="sent">💬 ประโยค</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="lisSpeedRow" style="display:none">
+      <span class="setup-label">ห่างก่อนเปลี่ยนคำ</span>
+      <div class="level-select" id="lisSpeedSelect">
+        <button class="spd-btn" data-gap="0.8">⚡ 0.8 วิ</button>
+        <button class="spd-btn selected" data-gap="1.2">🙂 1.2 วิ</button>
+        <button class="spd-btn" data-gap="2">🐢 2 วิ</button>
       </div>
     </div>
 
@@ -409,6 +431,31 @@
     <button id="spkSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
   </div>
   <button id="spkNextBtn">ประโยคถัดไป ▶</button>
+</div>
+
+<!-- LISTENING PRACTICE SCREEN -->
+<div id="listen" class="screen">
+  <div class="qhud">
+    <div id="lisCount">0</div>
+    <div class="quiz-btns">
+      <button id="lisMuteBtn" class="icon-btn">🔊</button>
+      <button id="lisQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+
+  <div class="sent-label" id="lisLabel">ฟังภาษาจีนแล้วตามด้วยคำแปล — เล่นวนไปเรื่อยๆ</div>
+  <div id="lisCard">
+    <div id="lisZh" lang="zh"></div>
+    <div id="lisPy"></div>
+    <div id="lisTh"></div>
+    <div id="lisSub"></div>
+  </div>
+  <div id="lisStatus" role="status" aria-live="polite"></div>
+  <div class="spk-actions">
+    <button id="lisReplayBtn" class="big-btn secondary">🔁 ฟังซ้ำ</button>
+    <button id="lisPlayBtn" class="lis-play">⏸ พัก</button>
+    <button id="lisSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
+  </div>
 </div>
 
 <!-- DICTIONARY SCREEN -->

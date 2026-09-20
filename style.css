@@ -42,7 +42,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn {
+.level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -58,8 +58,8 @@ html, body {
   color: #fff;
   box-shadow: 0 0 16px rgba(255, 120, 40, .55);
 }
-.diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected {
+.diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected {
   background: linear-gradient(180deg, #3ce07f, #12994a);
   border-color: #8fffb0;
   color: #fff;
@@ -638,6 +638,65 @@ html, body {
 }
 #spkNextBtn.show { display: block; }
 #spkNextBtn:active { transform: scale(.96); }
+
+/* ---------- Listening practice mode ---------- */
+#listen {
+  background: radial-gradient(ellipse at 50% 0%, #16204d 0%, #05081e 65%);
+  justify-content: flex-start;
+  padding-top: calc(14px + env(safe-area-inset-top));
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  gap: 12px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+#listen > * { flex-shrink: 0; }
+#lisCount { font-size: clamp(24px, 6.5vw, 36px); font-weight: 800; color: #ffd76a; }
+#lisCard {
+  width: min(680px, 94vw);
+  min-height: 30vh;
+  background: rgba(19, 26, 61, .9);
+  border: 2px solid #3d4a9e;
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+#lisCard.playing { border-color: #6a7af0; box-shadow: 0 0 18px rgba(106, 122, 240, .3); }
+#lisZh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(30px, 8.5vw, 46px);
+  font-weight: 800;
+  color: #fff;
+}
+#lisPy { font-size: clamp(16px, 4.5vw, 22px); color: #8fd3ff; }
+#lisTh { font-size: clamp(15px, 4.2vw, 20px); color: #9dff9d; }
+#lisSub { font-size: clamp(12px, 3.4vw, 15px); color: #8b95c9; min-height: 1.2em; }
+#lisStatus {
+  width: min(680px, 94vw);
+  min-height: 1.4em;
+  text-align: center;
+  font-size: clamp(13px, 3.8vw, 16px);
+  color: #8b95c9;
+}
+.lis-play {
+  flex: 1.4;
+  min-width: 130px;
+  padding: 14px 18px;
+  font-size: clamp(18px, 5vw, 24px);
+  font-weight: 800;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #4a7dff, #2b4fd0);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(60, 100, 255, .4);
+  touch-action: manipulation;
+}
+.lis-play:active { transform: scale(.96); }
 
 /* ---------- Overlays ---------- */
 #pauseOverlay, .pause-overlay, #gameover {

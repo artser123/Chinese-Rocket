@@ -28,6 +28,10 @@ let quiz = null;
 let sent = null;            // sentence-ordering game state
 let fill = null;            // fill-in-the-blank game state
 let zb = null;              // zombie shooter game state
+let lis = null;             // listening practice state
+let lisType = "word";       // 'word' | 'sent' — ฟังเป็นคำหรือประโยค
+let lisGap = 1.2;           // วินาที — ช่วงห่างก่อนเปลี่ยนคำ/ประโยคถัดไป
+let lisWakeLock = null;     // Screen Wake Lock กันจอดับตอนฟังระหว่างเดินทาง
 let zDuration = 120;        // เวลาเล่นเกมยิงซอมบี้ (วินาที), 0 = ไม่จำกัดเวลา
 const zDurLabel = () => zDuration ? `${zDuration} วิ` : "ไม่จำกัดเวลา";
 let lastStarter = null;
@@ -155,25 +159,38 @@ function duckMusic(on) {
   speechDuckTimer = on ? setTimeout(() => duckMusic(false), 6000) : null;
 }
 
-function speakSeq(parts) {
-  if (!("speechSynthesis" in window)) return;
+// ตัวนับรอบเสียงพูด — ทุกครั้งที่ stopSpeech() ถูกเรียก ค่าจะเพิ่มขึ้น
+// ทำให้ onDone ของ utterance ที่ถูก cancel ไม่ทำงานต่อ (เช่นตอนกดข้าม/ออก)
+let speechSeqId = 0;
+function speakSeq(parts, onDone) {
+  if (!("speechSynthesis" in window) || !parts.length) { if (onDone) setTimeout(onDone, 0); return; }
   try {
     stopSpeech();
-    for (const [text, lang] of parts) {
+    const sid = speechSeqId;
+    let fired = false;
+    const finish = () => {
+      if (fired) return;
+      fired = true;
+      if (sid === speechSeqId && onDone) onDone();
+    };
+    parts.forEach(([text, lang], i) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = lang;
       u.rate = 0.85;
       const v = pickVoice(lang);
       if (v) u.voice = v;
+      const last = i === parts.length - 1;
       if (lang.startsWith("th")) {
         u.volume = 1;
         if (!v || MALE_TH_VOICE.test(v.name)) u.pitch = 1.35;
         u.onstart = () => duckMusic(true);
-        u.onend = u.onerror = () => duckMusic(false);
+        u.onend = u.onerror = () => { duckMusic(false); if (last) finish(); };
+      } else if (last) {
+        u.onend = u.onerror = finish;
       }
       speechSynthesis.speak(u);
-    }
-  } catch (e) {}
+    });
+  } catch (e) { if (onDone) setTimeout(onDone, 0); }
 }
 
 /* Pre-generated audio files (gen_audio.py -> audio/zh|th/<word>.mp3) with TTS fallback */
@@ -197,7 +214,7 @@ const wordAudio = {
     this.timers = [];
     duckMusic(false);
   },
-  play(items) {
+  play(items, onDone) {
     this.stop();
     stopSpeech();
     const token = this.seq;
@@ -233,20 +250,22 @@ const wordAudio = {
         after(Math.max(0, (unduckAt - ac.currentTime) * 1000), () => duckMusic(false));
       }
       const rest = items.slice(clips.length);
-      if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () => speakSeq(rest.map((x) => x.tts)));
-    })().catch(() => { if (this.seq === token) speakSeq(items.map((x) => x.tts)); });
+      if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () => speakSeq(rest.map((x) => x.tts), onDone));
+      else if (onDone) after(Math.max(0, (t - ac.currentTime) * 1000), onDone);
+    })().catch(() => { if (this.seq === token) speakSeq(items.map((x) => x.tts), onDone); });
   },
 };
 
 function stopSpeech() {
+  speechSeqId++;
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   wordAudio.stop();
 }
 
-function playWordAudio(word, parts) {
+function playWordAudio(word, parts, onDone) {
   const items = [{ url: `audio/zh/${word}.mp3`, tts: parts[0] }];
   if (parts[1]) items.push({ url: `audio/th/${word}.mp3`, tts: parts[1], duck: parts[1][1].startsWith("th") });
-  wordAudio.play(items);
+  wordAudio.play(items, onDone);
 }
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
 function speakWordHit(w) {
@@ -605,7 +624,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("setup")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
 }
 
@@ -3138,6 +3157,7 @@ MODE_TITLES.matching = "เกมแฟลชการ์ดจับคู่";
 MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
 MODE_TITLES.dict = "📚 พจนานุกรมจีน";
 MODE_TITLES.speak = "🎤 เกมฝึกพูด";
+MODE_TITLES.listen = "🎧 เกมฝึกฟัง";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
@@ -3167,16 +3187,23 @@ const startLabel = () => gameMode === "bomb"
       ? `🔫 เริ่ม HSK ${selectedLevel} (${DIFF[difficulty].label}, ${zDurLabel()})`
       : gameMode === "speak"
         ? `🎤 เริ่มฝึกพูด HSK ${selectedLevel} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`
-        : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
+        : gameMode === "listen"
+          ? `🎧 เริ่มฝึกฟัง HSK ${selectedLevel} (${lisType === "sent" ? "ประโยค" : "คำศัพท์"}, ห่าง ${lisGap} วิ)`
+          : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
 
 function updateStartBtn() {
   if (!gameMode) return;
-  $("startBtn").disabled = !selectedLevel;
-  $("startBtn").textContent = selectedLevel ? startLabel() : "เลือกระดับ HSK เพื่อเริ่ม";
+  const noSent = gameMode === "listen" && lisType === "sent" && !SENT_OK;
+  $("startBtn").disabled = !selectedLevel || noSent;
+  $("startBtn").textContent = noSent
+    ? "⚠️ รัน python tools\\extract_sentences.py ก่อน"
+    : selectedLevel ? startLabel() : "เลือกระดับ HSK เพื่อเริ่ม";
   updateBestLine();
 }
 function updateBestLine() {
-  if (!selectedLevel || !gameMode) { $("bestScoreLine").textContent = ""; return; }
+  if (!gameMode) { $("bestScoreLine").textContent = ""; return; }
+  if (gameMode === "listen") { $("bestScoreLine").textContent = "🔁 เล่นวนไม่จำกัด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
+  if (!selectedLevel) { $("bestScoreLine").textContent = ""; return; }
   const best = +localStorage.getItem(bestKey()) || 0;
   $("bestScoreLine").textContent = best ? `สถิติ HSK ${selectedLevel}: ${best} คะแนน` : "";
 }
@@ -4399,6 +4426,135 @@ $("spkQuitBtn").addEventListener("click", () => {
   updateBestLine();
 });
 
+/* ================= Listening practice mode (เกมฝึกฟัง) ================= */
+// เล่นเสียง จีน→ไทย ของคำหรือประโยควนไปเรื่อยๆ สุ่มไม่ซ้ำจนครบกอง — ไม่มีเพลงพื้นหลัง
+// ช่วงห่าง (lisGap) นับจากเสียงจบจนคำถัดไปเริ่ม เหมาะสำหรับฟังตอนเดินทาง
+function lisSource() {
+  return lis.type === "sent"
+    ? (SENT_OK ? SENTENCES[String(lis.level)] || [] : [])
+    : (VOCAB[String(lis.level)] || []);
+}
+
+// ขอ Screen Wake Lock กันจอดับระหว่างฟัง (ปล่อยคืนตอนออกจากโหมด)
+async function lisRequestWake() {
+  try {
+    if (navigator.wakeLock && (!lisWakeLock || lisWakeLock.released)) {
+      lisWakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (e) {}
+}
+function lisReleaseWake() {
+  try { if (lisWakeLock) lisWakeLock.release(); } catch (e) {}
+  lisWakeLock = null;
+}
+
+// เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
+function lisPlayCurrent() {
+  if (!lis || !lis.current || !lis.playing) return;
+  const it = lis.current;
+  const done = () => {
+    if (!lis || !lis.playing) return;
+    $("lisCard").classList.remove("playing");
+    lis.timer = setTimeout(() => { if (lis && lis.playing) lisAdvance(); }, lis.gap * 1000);
+  };
+  $("lisCard").classList.add("playing");
+  if (lis.type === "sent") {
+    const zh = it[0].trim().split(/[｜|]/)[0];
+    const th = (it[2] || "").trim();
+    playWordAudio(zh, [[zh, "zh-CN"], ...(th ? [[th, "th-TH"]] : [])], done);
+  } else {
+    const zh = it[0].split(/[｜|]/)[0].trim();
+    const m = (it[2] || "").trim();
+    playWordAudio(zh, [[zh, "zh-CN"],
+      ...(m ? [[m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"]] : [])], done);
+  }
+}
+
+// ดึงตัวถัดไปจากกองที่สับไว้ — ครบกองแล้วสับใหม่ (ตัวแรกรอบใหม่จะไม่ซ้ำตัวที่เพิ่งเล่น)
+function lisAdvance() {
+  if (!lis) return;
+  clearTimeout(lis.timer);
+  if (lis.pos >= lis.deck.length) {
+    const lastZh = lis.current && lis.current[0];
+    lis.deck = shuffle(lisSource().slice());
+    if (lis.deck.length > 1 && lis.deck[0][0] === lastZh) {
+      const i = lis.deck.findIndex((x) => x[0] !== lastZh);
+      if (i > 0) [lis.deck[0], lis.deck[i]] = [lis.deck[i], lis.deck[0]];
+    }
+    lis.pos = 0;
+  }
+  if (!lis.deck.length) return;
+  lis.current = lis.deck[lis.pos++];
+  const it = lis.current;
+  $("lisZh").textContent = it[0];
+  $("lisPy").textContent = it[1] || "";
+  $("lisTh").textContent = it[2] || "";
+  $("lisSub").textContent = lis.type === "sent" && it[3] ? `📐 จุดไวยากรณ์: ${it[3]}` : "";
+  $("lisCount").textContent = ++lis.played;
+  $("lisStatus").textContent =
+    `สุ่มไม่ซ้ำ กองละ ${lis.deck.length} ${lis.type === "sent" ? "ประโยค" : "คำ"} • ห่าง ${lis.gap} วิ`;
+  lisPlayCurrent();
+}
+
+function startListenGame(level) {
+  if (lisType === "sent" && (!SENT_OK || !SENTENCES[String(level)])) return;
+  currentLevel = level;
+  lastStarter = () => startListenGame(level);
+  lis = { level, type: lisType, gap: lisGap, deck: [], pos: 0,
+          played: 0, playing: true, timer: null, current: null };
+  lis.deck = shuffle(lisSource().slice());
+  stopSpeech();
+  music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
+  switchScreen($("listen"));
+  $("lisLabel").textContent = lis.type === "sent"
+    ? "ฟังประโยคจีนแล้วตามด้วยคำแปลไทย — เล่นวนไปเรื่อยๆ"
+    : "ฟังคำจีนแล้วตามด้วยคำแปล — เล่นวนไปเรื่อยๆ";
+  $("lisPlayBtn").textContent = "⏸ พัก";
+  $("lisCount").textContent = "0";
+  lisRequestWake();
+  lisAdvance();
+}
+
+$("lisPlayBtn").addEventListener("click", () => {
+  if (!lis) return;
+  sfx.click();
+  lis.playing = !lis.playing;
+  $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
+  if (lis.playing) {
+    lisRequestWake();
+    lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
+  } else {
+    clearTimeout(lis.timer);
+    $("lisCard").classList.remove("playing");
+    stopSpeech();
+  }
+});
+$("lisReplayBtn").addEventListener("click", () => {
+  if (!lis) return;
+  sfx.click();
+  clearTimeout(lis.timer);
+  lis.playing = true;
+  $("lisPlayBtn").textContent = "⏸ พัก";
+  lisPlayCurrent();
+});
+$("lisSkipBtn").addEventListener("click", () => {
+  if (!lis) return;
+  sfx.click();
+  lis.playing = true;
+  $("lisPlayBtn").textContent = "⏸ พัก";
+  lisAdvance();
+});
+$("lisMuteBtn").addEventListener("click", toggleMute);
+$("lisQuitBtn").addEventListener("click", () => {
+  sfx.click();
+  clearTimeout(lis && lis.timer);
+  lis = null;
+  $("lisCard").classList.remove("playing");
+  stopSpeech();
+  lisReleaseWake();
+  switchScreen(menuEl);
+});
+
 $("cards").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (!card || card.classList.contains("locked")) return;
@@ -4428,14 +4584,17 @@ $("cards").addEventListener("click", (e) => {
   $("diffRow").style.display = arcade || isMatching || gameMode === "bomb" ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
-  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" ? "none" : "";
-  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" ? "none" : "";
+  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" ? "none" : "";
+  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
+  $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
+  $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
   // ปุ่ม HSK 6/7-9 แสดงเฉพาะโหมดที่ใช้ฐานคำศัพท์ VOCAB (โหมดประโยคมีแค่ HSK 1-5)
-  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb"].includes(gameMode);
+  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb"].includes(gameMode)
+    || (gameMode === "listen" && lisType === "word");
   document.querySelectorAll(".level-btn.vocab-level").forEach((b) => { b.hidden = !usesVocab; });
   // ถ้าระดับที่เลือกค้างไว้ถูกซ่อน (เช่นเลือก 7-9 แล้วมากดโหมดประโยค) ให้ยกเลิกการเลือก
   const selBtn = document.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
@@ -4507,6 +4666,33 @@ $("nextSelect").addEventListener("click", (e) => {
   autoNext = btn.dataset.next === "auto";
 });
 
+// โหมดฝึกฟัง: เลือกคำศัพท์ (HSK 1-9) หรือประโยค (HSK 1-5 เท่านั้น)
+$("lisTypeSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".lis-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".lis-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  lisType = btn.dataset.lis;
+  if (gameMode === "listen") {
+    const showVocab = lisType === "word";
+    document.querySelectorAll(".level-btn.vocab-level").forEach((b) => { b.hidden = !showVocab; });
+    const selBtn = document.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
+    if (selBtn && selBtn.hidden) { selBtn.classList.remove("selected"); selectedLevel = null; }
+  }
+  updateStartBtn();
+});
+
+$("lisSpeedSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".spd-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".spd-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  lisGap = +btn.dataset.gap;
+  updateStartBtn();
+});
+
 $("startBtn").addEventListener("click", () => {
   if (!selectedLevel || !gameMode) return;
   sfx.click();
@@ -4517,6 +4703,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "matching") startMatchingGame(selectedLevel);
   else if (gameMode === "bomb") startBombGame(selectedLevel);
   else if (gameMode === "speak") startSpeakGame(selectedLevel);
+  else if (gameMode === "listen") startListenGame(selectedLevel);
   else startGame(selectedLevel);
 });
 
@@ -4558,6 +4745,7 @@ function toggleMute() {
   $("fillMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("zMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("spkMuteBtn").textContent = muted ? "🔇" : "🔊";
+  $("lisMuteBtn").textContent = muted ? "🔇" : "🔊";
 }
 $("muteBtn").addEventListener("click", toggleMute);
 
@@ -4574,6 +4762,12 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden && zb && !zb.paused) {
     zb.paused = true;
     $("zPauseOverlay").classList.add("show");
+  }
+  // โหมดฝึกฟังไม่หยุดตอนจอซ่อน (ฟังตอนเดินทาง) — กลับมาที่จอแล้วขอ wake lock ใหม่
+  // และเล่นคำปัจจุบันซ้ำ เผื่อเสียงค้างจาก AudioContext ที่ถูกระบบ suspend
+  if (!document.hidden && lis) {
+    lisRequestWake();
+    if (lis.playing) { clearTimeout(lis.timer); lisPlayCurrent(); }
   }
 });
 
