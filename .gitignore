@@ -6,6 +6,8 @@ HSK Database/
 # เครื่องมือ Python (ใช้สร้าง data/sentences.js และ audio/ เท่านั้น)
 tools/
 gen_audio.py
+gen_sentence_audio_extra.py
+gen_vocab_audio.py
 
 # Windows artifact
 nul

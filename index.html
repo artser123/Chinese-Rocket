@@ -48,6 +48,16 @@
       <div class="card-title">เกมเรียงประโยค</div>
       <div class="card-desc">อ่านคำแปลไทย แล้วแตะเรียงชิ้นคำจีนให้เป็นประโยคที่ถูกต้อง</div>
     </button>
+    <button class="card" data-mode="speak">
+      <div class="card-icon">🎤🗣️</div>
+      <div class="card-title">เกมฝึกพูด</div>
+      <div class="card-desc">ฟังประโยคจีนแล้วกดไมค์พูดตาม ระบบตรวจว่าพูดถูกไหม เขียว = ถูก แดง = ผิด</div>
+    </button>
+    <button class="card" data-mode="fillblank">
+      <div class="card-icon">✏️</div>
+      <div class="card-title">เกมเติมคำในประโยค</div>
+      <div class="card-desc">ดูคำแปลไทยและประโยคจีนที่มีช่องว่าง แล้วเลือกการ์ดคำจีนที่หายไปให้ถูก</div>
+    </button>
     <button class="card" data-mode="bomb">
       <div class="card-icon bomb-card-icon" aria-hidden="true">字</div>
       <div class="card-title">เกมเขียนปลดระเบิด</div>
@@ -60,9 +70,18 @@
     </button>
   </div>
 
-  <div id="setupPanel" class="setup">
-    <h2 class="mode-label" id="setupTitle">เลือกโหมดด้านบนก่อน</h2>
+</div>
 
+<!-- SETUP SCREEN (หน้าตั้งค่าของแต่ละโหมด) -->
+<div id="setup" class="screen">
+  <div id="setupIcon" class="card-icon" aria-hidden="true"></div>
+  <div class="dict-header">
+    <button id="setupBackBtn" class="icon-btn" title="กลับหน้าหลัก">🔙</button>
+    <h2 class="dict-title" id="setupTitle">ตั้งค่าเกม</h2>
+    <span class="icon-btn" style="visibility:hidden" aria-hidden="true"></span>
+  </div>
+
+  <div id="setupPanel" class="setup">
     <span class="setup-label">ระดับ HSK</span>
     <div class="level-select" id="levelSelect">
       <button class="level-btn" data-level="1">HSK 1</button>
@@ -70,6 +89,8 @@
       <button class="level-btn" data-level="3">HSK 3</button>
       <button class="level-btn" data-level="4">HSK 4</button>
       <button class="level-btn" data-level="5">HSK 5</button>
+      <button class="level-btn vocab-level" data-level="6" hidden>HSK 6</button>
+      <button class="level-btn vocab-level" data-level="7-9" hidden>HSK 7-9</button>
     </div>
 
     <div class="setup-row" id="diffRow">
@@ -201,6 +222,25 @@
   <div id="sentReveal"></div>
   <button id="sentGiveUpBtn">🏳️ ยอมแพ้</button>
   <button id="sentNextBtn">ประโยคถัดไป ▶</button>
+</div>
+
+<!-- FILL-IN-THE-BLANK GAME SCREEN -->
+<div id="fill" class="screen">
+  <div class="qhud">
+    <div id="fillScore">0</div>
+    <div class="quiz-btns">
+      <button id="fillMuteBtn" class="icon-btn">🔊</button>
+      <button id="fillQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="fillLives">❤️❤️❤️</div>
+
+  <div class="sent-label">เลือกการ์ดคำจีนที่หายไปเติมในช่องว่าง</div>
+  <div id="fillTarget"></div>
+  <div id="fillSentence"></div>
+  <div id="fillOptions"></div>
+  <div id="fillReveal"></div>
+  <button id="fillNextBtn">ประโยคถัดไป ▶</button>
 </div>
 
 <!-- ZOMBIE SHOOTER SCREEN -->
@@ -344,6 +384,33 @@
   </div>
 </div>
 
+<!-- SPEAKING PRACTICE SCREEN -->
+<div id="speak" class="screen">
+  <div class="qhud">
+    <div id="spkScore">0</div>
+    <div class="quiz-btns">
+      <button id="spkMuteBtn" class="icon-btn">🔊</button>
+      <button id="spkQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="spkLives">❤️❤️❤️</div>
+
+  <div class="sent-label">ฟังประโยคจีน แล้วกด 🎤 พูดตามให้เหมือนกัน</div>
+  <div id="spkCard">
+    <div id="spkZh" lang="zh"></div>
+    <div id="spkPy"></div>
+    <div id="spkTh"></div>
+  </div>
+  <div id="spkHeard"></div>
+  <div id="spkStatus" role="status" aria-live="polite">กด 🎤 แล้วพูดประโยคด้านบน</div>
+  <div class="spk-actions">
+    <button id="spkListenBtn" class="big-btn secondary">🔊 ฟังประโยค</button>
+    <button id="spkMicBtn" class="spk-mic">🎤 พูด</button>
+    <button id="spkSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
+  </div>
+  <button id="spkNextBtn">ประโยคถัดไป ▶</button>
+</div>
+
 <!-- DICTIONARY SCREEN -->
 <div id="dict" class="screen">
   <div class="dict-header">
@@ -359,6 +426,7 @@
     <button id="dictSearchBtn" class="icon-btn" title="ค้นหาด้วยข้อความ">🔍</button>
     <button id="dictBingBtn" class="icon-btn" title="แปลคำนี้ด้วย Bing Translator">🌐</button>
     <button id="dictMicBtn" class="icon-btn" title="ค้นหาด้วยเสียงพูดภาษาจีน" hidden>🎤</button>
+    <button id="dictMicLangBtn" class="icon-btn dict-lang-btn" title="สลับภาษาที่ไมค์ฟัง" hidden>中</button>
     <button id="dictWriteBtn" class="icon-btn" title="ค้นหาด้วยลายมือ">✍️</button>
   </div>
   <div id="dictWritePanel" class="dict-write" hidden>
@@ -369,13 +437,14 @@
     <button id="dictWriteCloseBtn" class="big-btn secondary">ปิดโหมดเขียน</button>
   </div>
   <div id="dictResults" class="dict-results">
-    <p class="dict-placeholder">เริ่มพิมพ์พินอินหรือตัวจีนเพื่อค้นหา หรือกด 🎤 เพื่อพูด หรือ ✍️ เพื่อเขียน</p>
+    <p class="dict-placeholder">พิมพ์พินอิน ตัวจีน หรือภาษาไทยเพื่อค้นหา — กด 🎤 เพื่อพูด (เลือกภาษาได้ที่ปุ่มข้างๆ) หรือ ✍️ เพื่อเขียน</p>
   </div>
 </div>
 
 <script src="data/vocab.js"></script>
 <script src="data/vocab_extra.js"></script>
 <script src="data/sentences.js"></script>
+<script src="data/sentences_extra.js"></script>
 <script src="game.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
