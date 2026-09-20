@@ -3218,11 +3218,24 @@ let dictRecognition = null;
 // mic input language: "zh" = ภาษาจีน, "th" = ภาษาไทย (persisted across sessions)
 let dictMicLang = localStorage.getItem("cr_dict_mic_lang") || "zh";
 const dictLangName = () => (dictMicLang === "th" ? "ภาษาไทย" : "ภาษาจีน");
+// เครื่องยนต์จดจำเสียง: auto = ลอง Google ก่อนแล้วตกไป Whisper / google = Web Speech เท่านั้น /
+// whisper = ข้าม Google เข้าโมเดลออฟไลน์ทันที (ใช้ในที่ที่บล็อก Google เช่นจีน ไม่ต้องรอ timeout)
+let dictMicEngine = localStorage.getItem("cr_dict_mic_engine") || "auto";
+const MIC_ENGINES = {
+  auto:    { icon: "🔀", label: "อัตโนมัติ (Google → Whisper ออฟไลน์)" },
+  google:  { icon: "🌐", label: "Google Speech (ต้องเข้าถึง Google ได้)" },
+  whisper: { icon: "🤖", label: "Whisper AI ออฟไลน์ในเครื่อง" },
+};
 function dictMicLangUi() {
   const langBtn = $("dictMicLangBtn");
   langBtn.textContent = dictMicLang === "th" ? "ไทย" : "中";
   langBtn.title = "ไมค์ฟัง" + dictLangName() + " — แตะเพื่อสลับภาษา";
   $("dictMicBtn").title = "ค้นหาด้วยเสียงพูด" + dictLangName();
+}
+function dictMicEngUi() {
+  const engBtn = $("dictMicEngBtn");
+  engBtn.textContent = MIC_ENGINES[dictMicEngine].icon;
+  engBtn.title = "ตัวจดจำเสียง: " + MIC_ENGINES[dictMicEngine].label + " — แตะเพื่อสลับ (ใช้ร่วมกับโหมดฝึกพูด)";
 }
 
 // pinyin normalize: strip tone marks + lowercase for fuzzy match
@@ -3255,7 +3268,9 @@ function startDict() {
   // show mic when Web Speech exists, or when mic capture is possible (Whisper fallback)
   $("dictMicBtn").hidden = !SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   $("dictMicLangBtn").hidden = $("dictMicBtn").hidden;
+  $("dictMicEngBtn").hidden = $("dictMicBtn").hidden;
   dictMicLangUi();
+  dictMicEngUi();
   setTimeout(() => { dictInput.focus(); }, 100);
 }
 
@@ -3569,7 +3584,16 @@ function dictStartMic() {
   const micBtn = $("dictMicBtn");
   if (dictRecognition) { dictRecognition.stop(); return; }
   if (dictWRecord) { dictStopMicWhisper(); return; }
-  if (!SR) { dictStartMicWhisper(); return; }
+  if (!SR) {
+    if (dictMicEngine === "google") {
+      dictResults.innerHTML = '<p class="dict-placeholder">🌐 เบราว์เซอร์นี้ไม่มี Google Speech — แตะปุ่มข้างไมค์สลับเป็น 🤖 Whisper หรือ 🔀 Auto</p>';
+      return;
+    }
+    dictStartMicWhisper();
+    return;
+  }
+  // เลือก Whisper ไว้ = ข้าม Google ไปใช้โมเดลออฟไลน์ทันที
+  if (dictMicEngine === "whisper") { dictStartMicWhisper(); return; }
 
   const rec = new SR();
   dictRecognition = rec;
@@ -3583,7 +3607,10 @@ function dictStartMic() {
     if (dictRecognition === rec && !finalText && !dictInput.value.trim()) {
       try { rec.abort(); } catch (e) {}
       dictRecognition = null;
-      dictStartMicWhisper();
+      if (dictMicEngine === "google") {
+        micBtn.classList.remove("listening");
+        dictResults.innerHTML = '<p class="dict-placeholder">🌐 Google Speech ไม่ตอบสนอง — อาจถูกบล็อก ลองสลับเป็น 🤖 Whisper ที่ปุ่มข้างไมค์</p>';
+      } else dictStartMicWhisper();
     }
   }, 7000);
   const stopUi = () => {
@@ -3612,7 +3639,12 @@ function dictStartMic() {
   rec.onerror = (e) => {
     stopUi();
     // Google speech service unreachable (e.g. blocked network) -> on-device Whisper
-    if (e.error === "network") { dictStartMicWhisper(); return; }
+    if (e.error === "network") {
+      if (dictMicEngine === "google") {
+        dictResults.innerHTML = '<p class="dict-placeholder">🌐 เชื่อม Google Speech ไม่ได้ — แตะปุ่มข้างไมค์สลับเป็น 🤖 Whisper ออฟไลน์</p>';
+      } else dictStartMicWhisper();
+      return;
+    }
     const msgs = {
       "not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน — กดอนุญาตไมค์ที่แถบที่อยู่แล้วลองใหม่",
       "service-not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน",
@@ -3977,6 +4009,13 @@ $("dictMicLangBtn").addEventListener("click", () => {
   localStorage.setItem("cr_dict_mic_lang", dictMicLang);
   dictMicLangUi();
 });
+$("dictMicEngBtn").addEventListener("click", () => {
+  sfx.click();
+  dictMicEngine = dictMicEngine === "auto" ? "google" : dictMicEngine === "google" ? "whisper" : "auto";
+  localStorage.setItem("cr_dict_mic_engine", dictMicEngine);
+  dictMicEngUi();
+  dictResults.innerHTML = `<p class="dict-placeholder">ตัวจดจำเสียง: ${MIC_ENGINES[dictMicEngine].label}</p>`;
+});
 $("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });
 $("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
 $("dictWriteClearBtn").addEventListener("click", () => { sfx.click(); dictClearCanvas(); });
@@ -4244,7 +4283,16 @@ function spkStartMic() {
     $("spkZh").textContent = spk.current[0];
     $("spkHeard").innerHTML = "";
   }
-  if (!SR) { spkStartMicWhisper(); return; }
+  if (!SR) {
+    if (dictMicEngine === "google") {
+      spkSetStatus("🌐 เบราว์เซอร์นี้ไม่มี Google Speech — สลับ engine ได้ที่หน้าพจนานุกรม");
+      spkRearm();
+      return;
+    }
+    spkStartMicWhisper();
+    return;
+  }
+  if (dictMicEngine === "whisper") { spkStartMicWhisper(); return; }
 
   const rec = new SR();
   spkRecognition = rec;
@@ -4258,7 +4306,11 @@ function spkStartMic() {
     if (spkRecognition === rec && !finalText) {
       try { rec.abort(); } catch (e) {}
       spkRecognition = null;
-      spkStartMicWhisper();
+      if (dictMicEngine === "google") {
+        micBtn.classList.remove("listening");
+        spkSetStatus("🌐 Google Speech ไม่ตอบสนอง — สลับเป็น 🤖 Whisper ได้ที่หน้าพจนานุกรม");
+        spkRearm();
+      } else spkStartMicWhisper();
     }
   }, 7000);
   const stopUi = () => {
@@ -4293,7 +4345,13 @@ function spkStartMic() {
     rec.__errored = true;
     stopUi();
     // Google speech service unreachable -> on-device Whisper
-    if (e.error === "network") { spkStartMicWhisper(); return; }
+    if (e.error === "network") {
+      if (dictMicEngine === "google") {
+        spkSetStatus("🌐 เชื่อม Google Speech ไม่ได้ — สลับเป็น 🤖 Whisper ได้ที่หน้าพจนานุกรม");
+        spkRearm();
+      } else spkStartMicWhisper();
+      return;
+    }
     const msgs = {
       "not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน — กดอนุญาตไมค์ที่แถบที่อยู่แล้วลองใหม่",
       "service-not-allowed": "🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน",
