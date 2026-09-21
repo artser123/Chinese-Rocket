@@ -189,6 +189,7 @@
     <div id="hudTop">
       <div id="score">0</div>
       <div id="lives">❤️❤️❤️</div>
+      <div id="metProg" class="prog-tag">0%</div>
     </div>
     <div id="hudBtns">
       <button id="muteBtn" class="icon-btn">🔊</button>
@@ -218,7 +219,7 @@
 <!-- VOCAB QUIZ SCREEN -->
 <div id="quiz" class="screen">
   <div class="qhud">
-    <div id="quizScore">0</div>
+    <div class="qhud-side"><div id="quizScore">0</div><span id="quizProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="quizMuteBtn" class="icon-btn">🔊</button>
       <button id="quizQuitBtn" class="icon-btn">✖️</button>
@@ -242,7 +243,7 @@
 <!-- SENTENCE ORDERING GAME SCREEN -->
 <div id="sent" class="screen">
   <div class="qhud">
-    <div id="sentScore">0</div>
+    <div class="qhud-side"><div id="sentScore">0</div><span id="sentProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="sentMuteBtn" class="icon-btn">🔊</button>
       <button id="sentQuitBtn" class="icon-btn">✖️</button>
@@ -262,7 +263,7 @@
 <!-- FILL-IN-THE-BLANK GAME SCREEN -->
 <div id="fill" class="screen">
   <div class="qhud">
-    <div id="fillScore">0</div>
+    <div class="qhud-side"><div id="fillScore">0</div><span id="fillProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="fillMuteBtn" class="icon-btn">🔊</button>
       <button id="fillQuitBtn" class="icon-btn">✖️</button>
@@ -287,6 +288,7 @@
       <div id="zScore" class="hud-score">0</div>
       <div id="zKills" class="hud-sub">🧟 0</div>
       <div id="zWeapon" class="hud-sub">🏹 ธนู</div>
+      <div id="zProg" class="prog-tag">0%</div>
     </div>
     <div id="zTimer">⏱ 2:00</div>
     <div class="hud-btns">
@@ -337,6 +339,7 @@
   </div>
   <div class="match-stats">
     <span id="matchScore">0 คะแนน</span>
+    <span id="matchProg" class="prog-tag">0%</span>
     <span id="matchTimer" role="timer"></span>
   </div>
   <div id="matchBoard" role="group" aria-label="กระดานแฟลชการ์ด"></div>
@@ -361,6 +364,7 @@
   </header>
   <div class="bomb-stats">
     <strong id="bombScore">0 คะแนน</strong>
+    <span id="bombProg" class="prog-tag">0%</span>
     <span id="bombLives" role="status">ชีวิต 3 / 3</span>
     <span id="bombPace"></span>
   </div>
@@ -422,7 +426,7 @@
 <!-- SPEAKING PRACTICE SCREEN -->
 <div id="speak" class="screen">
   <div class="qhud">
-    <div id="spkScore">0</div>
+    <div class="qhud-side"><div id="spkScore">0</div><span id="spkProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="spkMuteBtn" class="icon-btn">🔊</button>
       <button id="spkQuitBtn" class="icon-btn">✖️</button>
@@ -449,7 +453,7 @@
 <!-- LISTENING PRACTICE SCREEN -->
 <div id="listen" class="screen">
   <div class="qhud">
-    <div id="lisCount">0</div>
+    <div class="qhud-side"><div id="lisCount">0</div><span id="lisProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="lisMuteBtn" class="icon-btn">🔊</button>
       <button id="lisQuitBtn" class="icon-btn">✖️</button>
@@ -474,7 +478,7 @@
 <!-- SENTENCE COPYING PRACTICE SCREEN -->
 <div id="copy" class="screen">
   <div class="qhud">
-    <div id="cpCount">0</div>
+    <div class="qhud-side"><div id="cpCount">0</div><span id="cpProg" class="prog-tag">0%</span></div>
     <div class="quiz-btns">
       <button id="cpMuteBtn" class="icon-btn">🔊</button>
       <button id="cpQuitBtn" class="icon-btn">✖️</button>

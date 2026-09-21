@@ -36,6 +36,7 @@ let lisWakeLock = null;     // Screen Wake Lock กันจอดับตอ�
 let zDuration = 120;        // เวลาเล่นเกมยิงซอมบี้ (วินาที), 0 = ไม่จำกัดเวลา
 const zDurLabel = () => zDuration ? `${zDuration} วิ` : "ไม่จำกัดเวลา";
 let lastStarter = null;
+let metDone = new Set();    // meteor: คำที่ยิงโดนสำเร็จในเซสชันนี้ (สำหรับแถบ % ความก้าวหน้า)
 const SENT_OK = typeof SENTENCES !== "undefined";
 // merge ประโยคเพิ่มเติมที่เขียนโดย LLM เข้ากับฐานประโยคหลัก — แยกไฟล์ไว้เพื่อให้
 // re-generate sentences.js จาก xlsx ได้โดยไม่ลบประโยคพวกนี้ทิ้ง
@@ -557,6 +558,8 @@ const music = {
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+// เปอร์เซ็นความก้าวหน้าของเซสชัน — จำนวนไอเท็มไม่ซ้ำที่ทำแล้ว / จำนวนทั้งหมดในระดับ
+const progPct = (done, total) => `${total ? Math.round(done * 100 / total) : 0}%`;
 
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -612,6 +615,7 @@ function startGame(level) {
   lives = 3; score = 0; destroyed = 0; combo = 0;
   spawnTimer = 0; nextSpawn = 0.5;
   options = [];
+  metDone = new Set();
   updateHUD();
   refreshOptions();
   renderOptions();
@@ -663,7 +667,8 @@ function startQuizGame(level) {
   pool = VOCAB[String(level)] || VOCAB["1"];
   lastStarter = () => startQuizGame(level);
   quiz = { lives: 3, score: 0, answered: false, nextTimer: null,
-           reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false };
+           reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false,
+           done: new Set() };
   stopSpeech();
   music.start("vocab");
   switchScreen(quizEl);
@@ -676,6 +681,7 @@ function updateQuizHUD() {
   $("quizLives").textContent = quizLivesOn
     ? "❤️".repeat(Math.max(0, quiz.lives)) + "🖤".repeat(Math.max(0, 3 - quiz.lives))
     : "♾️ ไม่จำกัด";
+  $("quizProg").textContent = progPct(quiz.done.size, pool.length);
 }
 
 function nextQuizQuestion() {
@@ -726,6 +732,7 @@ function answerQuiz(i) {
   if (w[0] === quiz.word[0] && w[1] === quiz.word[1]) {
     quiz.answered = true;
     quiz.score++;
+    quiz.done.add(quiz.word[0]);
     // ตอบผิดระหว่างทาง → คำนี้กลับเข้าคิวทบทวน (ถามซ้ำอีกหลังผ่านไป 5 คำ)
     if (quiz.wrongThisQ > 0) quiz.reviewQueue.push(quiz.word);
     btn.classList.add("correct");
@@ -783,7 +790,8 @@ function startSentGame(level) {
   lastStarter = () => startSentGame(level);
   sent = { lives: 3, score: 0, solved: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false,
-           repeat: false, isRetry: false, current: null, pool: [], placed: [] };
+           repeat: false, isRetry: false, current: null, pool: [], placed: [],
+           done: new Set() };
   pool = list;
   stopSpeech();
   music.start("sentence");
@@ -797,6 +805,7 @@ function updateSentHUD() {
   $("sentLives").textContent = quizLivesOn
     ? "❤️".repeat(Math.max(0, sent.lives)) + "🖤".repeat(Math.max(0, 3 - sent.lives))
     : "♾️ ไม่จำกัด";
+  $("sentProg").textContent = progPct(sent.done.size, pool.length);
 }
 
 function nextSentQuestion() {
@@ -915,6 +924,7 @@ function checkSentAnswer() {
     sent.solved = true;
     sent.repeat = false;
     sent.score++;
+    sent.done.add(sent.current[0]);
     $("sentAnswer").classList.add("correct-full");
     $("sentGiveUpBtn").classList.add("hide");
     sfx.correct();
@@ -1022,7 +1032,8 @@ function startFillGame(level) {
   lastStarter = () => startFillGame(level);
   fill = { lives: 3, score: 0, solved: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, isReview: false,
-           current: null, blankIdx: 0, answer: "", picked: null, options: [] };
+           current: null, blankIdx: 0, answer: "", picked: null, options: [],
+           done: new Set() };
   stopSpeech();
   music.start("fillblank");
   switchScreen($("fill"));
@@ -1035,6 +1046,7 @@ function updateFillHUD() {
   $("fillLives").textContent = quizLivesOn
     ? "❤️".repeat(Math.max(0, fill.lives)) + "🖤".repeat(Math.max(0, 3 - fill.lives))
     : "♾️ ไม่จำกัด";
+  $("fillProg").textContent = progPct(fill.done.size, pool.length);
 }
 
 function nextFillQuestion() {
@@ -1122,6 +1134,7 @@ function fillPick(t) {
   const correct = t === fill.answer;
   if (correct) {
     fill.score++;
+    fill.done.add(fill.current[0]);
     sfx.correct();
     confettiBurst($("fill"), 30);
   } else {
@@ -1303,6 +1316,7 @@ function fireOption(i) {
     optBtns[i].classList.add("flash-right");
     setTimeout(() => optBtns[i].classList.remove("flash-right"), 250);
     destroyed++;
+    metDone.add(m.word[0]);
     updateHUD();
     refreshOptions();
     renderOptions();
@@ -1366,6 +1380,7 @@ function showToast(html, id = "toast", duration = 1800) {
 function updateHUD() {
   $("score").textContent = score;
   $("lives").textContent = "❤️".repeat(Math.max(0, lives)) + "🖤".repeat(Math.max(0, 3 - lives));
+  $("metProg").textContent = progPct(metDone.size, pool.length);
 }
 
 /* ================= Draw ================= */
@@ -1740,7 +1755,7 @@ function startZombieGame(level) {
     zombies: [], bullets: [], particles: [], floaters: [], options: [],
     walk: 0, scroll: 0, recoil: 0, flash: 0, shake: 0,
     paused: false, ending: false, endTimer: 0, lastTime: performance.now(),
-    weaponId: "bow", upgradeFlash: 0,
+    weaponId: "bow", upgradeFlash: 0, done: new Set(),
   };
   switchScreen($("zombie"));
   $("zPauseOverlay").classList.remove("show");
@@ -1763,6 +1778,7 @@ function updateZombieHUD() {
   const el = $("zTimer");
   el.textContent = `${zDuration ? "⏱" : "♾️"} ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
   el.classList.toggle("urgent", !!zDuration && t <= 10);
+  $("zProg").textContent = progPct(zb.done.size, pool.length);
 }
 
 function spawnZombie() {
@@ -1832,6 +1848,7 @@ function fireZOption(i) {
     const pts = 10 + distBonus + Math.min(zb.combo - 1, 5) * 2;
     zb.score += pts;
     zb.kills++;
+    zb.done.add(target.word[0]);
     // weapon upgrade check — compare against current equipped weapon
     const newWp = zWeapon();
     if (newWp.id !== zb.weaponId) {
@@ -2444,7 +2461,7 @@ function startMatchingGame(level, mode = quizMode, diff = difficulty, duration =
   lastStarter = () => startMatchingGame(level, mode, diff, duration);
   matching = {
     level, mode, diff, duration, words: VOCAB[String(level)] || VOCAB["1"],
-    score: 0, pairs: 0, attempts: 0, rounds: 0, elapsed: 0,
+    score: 0, pairs: 0, attempts: 0, rounds: 0, elapsed: 0, done: new Set(),
     deck: [], open: [], waitUntil: 0, paused: false,
     lastTime: performance.now(), frame: null,
   };
@@ -2558,6 +2575,7 @@ function updateMatchingHUD() {
   const seconds = s.duration ? Math.max(0, Math.ceil(s.duration - s.elapsed)) : Math.floor(s.elapsed);
   $("matchTimer").textContent = `${s.duration ? "เหลือ" : "เล่นไป"} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   $("matchTimer").classList.toggle("urgent", s.duration > 0 && seconds <= 10);
+  $("matchProg").textContent = progPct(s.done.size, s.words.length);
   const solved = s.deck.filter((c) => c.matched).length / 2;
   const progress = $("matchProgress");
   if (progress) progress.textContent = `ชุดที่ ${s.rounds + 1} • ${solved}/${s.deck.length / 2} คู่ • จับคู่ทั้งหมด ${s.pairs} คู่ • ลอง ${s.attempts} ครั้ง`;
@@ -2608,6 +2626,7 @@ function flipMatchingCard(i) {
     if (a.pair === b.pair && a.side !== b.side) {
       a.matched = b.matched = true;
       s.pairs++; s.score += 10;
+      s.done.add(a.word[0]);
       sfx.hit();
       setTimeout(() => { if (matching === s) speakWordHit(a.word); }, 150);
       $("matchFeedback").innerHTML =
@@ -2805,6 +2824,7 @@ function updateBombHUD() {
   $("bombScore").textContent = `${s.score} คะแนน`;
   $("bombLives").textContent = `ชีวิต ${s.lives} / 3`;
   $("bombPace").textContent = `${BOMB_DIFF[s.difficulty]?.label ?? "ปานกลาง"} • ความเร็ว ${bombTier(s) + 1} • ปลดแล้ว ${s.defused} ลูก`;
+  $("bombProg").textContent = progPct(s.done.size, s.words.length);
 }
 
 function startBombGame(level, diff = difficulty) {
@@ -2814,7 +2834,8 @@ function startBombGame(level, diff = difficulty) {
   const words = bombVocabulary(level);
   bombGame = { level, difficulty: diff, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
     lives: 3, defused: 0, bonuses: 0, elapsed: 0, charIndex: 0, paused: false,
-    frame: 0, lastTime: performance.now(), request: 0, controller: null };
+    frame: 0, lastTime: performance.now(), request: 0, controller: null,
+    done: new Set() };
   $("bomb").classList.remove("bomb-paused");
   $("bombPauseOverlay").classList.remove("show");
   $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
@@ -3038,6 +3059,7 @@ function resolveBomb(success, reason = "") {
   if (success) {
     s.score += 100 + (s.bonus ? 50 : 0);
     s.defused++;
+    s.done.add(s.word[0]);
     if (s.bonus) s.bonuses++;
     sfx.hit();
   } else {
@@ -4264,7 +4286,7 @@ function startSpeakGame(level) {
   currentLevel = level;
   pool = SENTENCES[String(level)];
   lastStarter = () => startSpeakGame(level);
-  spk = { lives: 3, score: 0, nextTimer: null, repeat: false, current: null, targetPy: [] };
+  spk = { lives: 3, score: 0, nextTimer: null, repeat: false, current: null, targetPy: [], done: new Set() };
   stopSpeech();
   music.stop(); // ไม่เล่นเพลงพื้นหลัง — เสียงเพลงจะเข้าไมค์ตอนอัดเสียงพูด
   switchScreen($("speak"));
@@ -4280,6 +4302,7 @@ function updateSpkHUD() {
   $("spkLives").textContent = quizLivesOn
     ? "❤️".repeat(Math.max(0, spk.lives)) + "🖤".repeat(Math.max(0, 3 - spk.lives))
     : "♾️ ไม่จำกัด";
+  $("spkProg").textContent = progPct(spk.done.size, pool.length);
 }
 
 function nextSpkQuestion() {
@@ -4367,6 +4390,7 @@ function spkEvaluate(heardRaw) {
   speakSentence(spk.current); // เล่นประโยคที่ถูกต้องให้ฟังทั้งตอนถูกและผิด
   if (ok) {
     spk.score++;
+    spk.done.add(spk.current[0]);
     $("spkCard").classList.add("correct");
     sfx.correct();
     confettiBurst($("speak"), 26);
@@ -4698,6 +4722,8 @@ function lisAdvance() {
   }
   if (!lis.deck.length) return;
   lis.current = lis.deck[lis.pos++];
+  lis.done.add(lis.current[0]);
+  $("lisProg").textContent = progPct(lis.done.size, lis.total);
   const it = lis.current;
   $("lisZh").textContent = it[0];
   $("lisPy").textContent = it[1] || "";
@@ -4714,8 +4740,10 @@ function startListenGame(level) {
   currentLevel = level;
   lastStarter = () => startListenGame(level);
   lis = { level, type: lisType, gap: lisGap, deck: [], pos: 0,
-          played: 0, playing: true, timer: null, current: null };
+          played: 0, playing: true, timer: null, current: null,
+          done: new Set(), total: 0 };
   lis.deck = shuffle(lisSource().slice());
+  lis.total = lis.deck.length;
   stopSpeech();
   music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
   switchScreen($("listen"));
@@ -4724,6 +4752,7 @@ function startListenGame(level) {
     : "ฟังคำจีนแล้วตามด้วยคำแปล — เล่นวนไปเรื่อยๆ";
   $("lisPlayBtn").textContent = "⏸ พัก";
   $("lisCount").textContent = "0";
+  $("lisProg").textContent = "0%";
   lisRequestWake();
   lisAdvance();
 }
@@ -4779,11 +4808,13 @@ function startCopyGame(level) {
   currentLevel = level;
   lastStarter = () => startCopyGame(level);
   cp = { level, deck: shuffle(SENTENCES[String(level)].slice()), pos: 0,
-         current: null, seen: 0, chars: [], charIndex: 0, seq: 0 };
+         current: null, seen: 0, chars: [], charIndex: 0, seq: 0,
+         done: new Set() };
   stopSpeech();
   music.start("sentence");
   switchScreen($("copy"));
   $("cpCount").textContent = "0";
+  $("cpProg").textContent = "0%";
   $("cpStrokes").hidden = true;
   cpAdvance();
 }
@@ -4803,6 +4834,8 @@ function cpAdvance() {
   if (!cp.deck.length) return;
   cp.current = cp.deck[cp.pos++];
   cp.seen++;
+  cp.done.add(cp.current[0]);
+  $("cpProg").textContent = progPct(cp.done.size, cp.deck.length);
   cpRender();
   speakSentence(cp.current);
 }

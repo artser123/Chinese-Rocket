@@ -309,6 +309,9 @@ html, body {
 }
 #quizScore, #sentScore, #fillScore { font-size: clamp(24px, 6.5vw, 36px); font-weight: 800; color: #ffd76a; }
 .quiz-btns { display: flex; gap: 8px; }
+.qhud-side { display: flex; align-items: baseline; gap: 10px; }
+/* เปอร์เซ็นความก้าวหน้าของเซสชัน — จำนวนคำ/ประโยคที่ทำแล้วเทียบกับทั้งกองของระดับ */
+.prog-tag { font-size: clamp(13px, 3.6vw, 16px); font-weight: 700; color: #8fd3ff; white-space: nowrap; }
 #quizLives { font-size: clamp(16px, 4.5vw, 24px); letter-spacing: 3px; }
 
 #quizWord {
