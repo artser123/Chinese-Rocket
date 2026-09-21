@@ -828,6 +828,7 @@ function nextSentQuestion() {
   do {
     shuffled = shuffle(tokens.map((t, i) => ({ t, id: i })));
   } while (tokens.length > 1 && shuffled.every((c, i) => c.id === i));
+  shuffled.forEach((c, i) => { c.pi = i; c.used = false; });
   sent.pool = shuffled;
   sent.placed = [];
   $("sentTarget").textContent = (sent.isRetry ? "🔁 ลองอีกครั้ง: " : sent.isReview ? "🔁 ทบทวน: " : "") + sent.current[2];
@@ -855,17 +856,24 @@ function renderSent() {
     const b = document.createElement("button");
     b.className = "chip";
     b.textContent = c.t;
-    b.disabled = sent.solved;
-    b.addEventListener("pointerdown", (e) => { e.preventDefault(); sentAdd(c.id); });
+    // ชิปที่ถูกเลือกแล้วคงช่องว่างไว้ที่ตำแหน่งเดิม (มองไม่เห็นแต่ยังกินที่)
+    // เพื่อไม่ให้ชิปอื่นไหลมารวมกันตอนแตะเร็วๆ
+    if (c.used) {
+      b.classList.add("ghost");
+      b.disabled = true;
+    } else {
+      b.disabled = sent.solved;
+      b.addEventListener("pointerdown", (e) => { e.preventDefault(); sentAdd(c.id); });
+    }
     poolEl.appendChild(b);
   });
 }
 
 function sentAdd(id) {
   if (sent.solved) return;
-  const i = sent.pool.findIndex((c) => c.id === id);
-  if (i < 0) return;
-  const chip = sent.pool.splice(i, 1)[0];
+  const chip = sent.pool.find((c) => c.id === id);
+  if (!chip || chip.used) return;
+  chip.used = true;
   sent.placed.push(chip);
   const complete = sent.placed.length === sent.current[4].length;
   // ชิปสุดท้ายไม่ต้องพูดคำเดี่ยว — checkSentAnswer จะเล่นเสียงทั้งประโยคต่อทันที เสียงจะทับกัน
@@ -876,7 +884,9 @@ function sentAdd(id) {
 
 function sentRemove(i) {
   if (sent.solved) return;
-  sent.pool.push(sent.placed.splice(i, 1)[0]);
+  // เอาชิปออกจากช่องคำตอบ — ชิปกลับไปโผล่ที่ตำแหน่งเดิมในกอง (pool ไม่เคยถูก splice)
+  const chip = sent.placed.splice(i, 1)[0];
+  if (chip) chip.used = false;
   renderSent();
 }
 

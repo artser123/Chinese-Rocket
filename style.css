@@ -475,6 +475,8 @@ html, body {
 .chip.ok { border-color: #58ff88; background: #14502c; }
 .chip.bad { border-color: #ff3b3b; background: #561313; }
 .chip:disabled { opacity: .6; cursor: default; }
+/* ช่องว่างของชิปที่ถูกเลือกไปแล้ว — มองไม่เห็นแต่ยังกินที่เดิม ชิปอื่นไม่ขยับ */
+.chip.ghost { visibility: hidden; }
 #sentReveal, #fillReveal {
   display: none;
   width: min(680px, 94vw);
