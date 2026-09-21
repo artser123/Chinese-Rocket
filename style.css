@@ -698,6 +698,81 @@ html, body {
 }
 .lis-play:active { transform: scale(.96); }
 
+/* ---------- Sentence copying practice mode ---------- */
+#copy {
+  background: radial-gradient(ellipse at 50% 0%, #16204d 0%, #05081e 65%);
+  justify-content: flex-start;
+  padding-top: calc(14px + env(safe-area-inset-top));
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  gap: 12px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+#copy > * { flex-shrink: 0; }
+#cpCount { font-size: clamp(24px, 6.5vw, 36px); font-weight: 800; color: #ffd76a; }
+#cpCard {
+  width: min(680px, 94vw);
+  background: rgba(19, 26, 61, .9);
+  border: 2px solid #3d4a9e;
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+#cpZh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(28px, 8vw, 44px);
+  font-weight: 800;
+  color: #fff;
+}
+#cpPy { font-size: clamp(15px, 4.2vw, 21px); color: #8fd3ff; }
+#cpTh { font-size: clamp(14px, 4vw, 19px); color: #9dff9d; }
+#cpFocus { font-size: clamp(12px, 3.4vw, 15px); color: #8b95c9; min-height: 0; }
+#cpFocus:empty { display: none; }
+#cpTokens {
+  width: min(680px, 94vw);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.cp-tok { font-size: clamp(20px, 5.5vw, 28px); }
+.cp-tok.current { border-color: #ffc46b; color: #ffe0a1; }
+.cp-tok-plain {
+  padding: 10px 4px;
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(20px, 5.5vw, 28px);
+  font-weight: 700;
+  color: #8b95c9;
+}
+#cpStrokes {
+  width: min(680px, 94vw);
+  background: rgba(19, 26, 61, .9);
+  border: 2px solid #3d4a9e;
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+#cpStrokeWriter { width: min(220px, 62vw); }
+.cp-next {
+  flex: 1.4;
+  min-width: 150px;
+  padding: 14px 18px;
+  font-size: clamp(16px, 4.5vw, 22px);
+  font-weight: 800;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffd23c, #ff7b1c);
+  color: #301400;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 140, 0, .45);
+  touch-action: manipulation;
+}
+.cp-next:active { transform: scale(.96); }
+
 /* ---------- Overlays ---------- */
 #pauseOverlay, .pause-overlay, #gameover {
   background: rgba(3, 5, 18, .85);
@@ -1192,6 +1267,62 @@ html, body {
 }
 .dict-example-actions button:active { transform: scale(.93); }
 .dict-no-examples { color: #666; font-size: clamp(12px, 3.4vw, 14px); font-style: italic; }
+.dict-stroke-btn.on { border-color: #ffc46b; color: #ffe0a1; }
+.dict-strokes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid #2a3360;
+}
+.dict-strokes[hidden] { display: none; }
+.dict-stroke-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+.dict-stroke-label { color: #8fd3ff; font-size: clamp(13px, 3.5vw, 15px); font-weight: 700; }
+.dict-stroke-stage { position: relative; display: flex; justify-content: center; }
+.dict-stroke-writer {
+  width: min(200px, 60vw);
+  aspect-ratio: 1;
+  border: 2px solid #93a9c0;
+  border-radius: 14px;
+  overflow: hidden;
+  background-color: #fbf7ee;
+  background-image:
+    linear-gradient(90deg, transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px));
+}
+.dict-stroke-writer svg { display: block; width: 100%; height: 100%; }
+.dict-stroke-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  color: #b08000;
+  font-size: clamp(12px, 3.4vw, 14px);
+  font-weight: 600;
+  pointer-events: none;
+}
+.dict-stroke-chars { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.dict-stroke-chars[hidden] { display: none; }
+.dict-stroke-chip {
+  padding: 3px 10px;
+  border: 1px solid #496482;
+  border-radius: 8px;
+  background: #131a3d;
+  font: 24px "Noto Sans SC", sans-serif;
+  color: #90a6bf;
+  cursor: pointer;
+}
+.dict-stroke-chip.current { border-color: #ffc46b; color: #ffe0a1; background: #483923; }
+.dict-stroke-chip:active { transform: scale(.93); }
 .dict-not-found {
   text-align: center;
   padding: 30px 20px;

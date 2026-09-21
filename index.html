@@ -81,6 +81,11 @@
       <div class="card-title">เกมฝึกฟัง</div>
       <div class="card-desc">ฟังคำศัพท์หรือประโยคจีน-ไทยวนไปเรื่อยๆ สุ่มไม่ซ้ำ เลือกจังหวะเปลี่ยนคำได้ เหมาะตอนเดินทาง</div>
     </button>
+    <button class="card" data-mode="copy">
+      <div class="card-icon">✍️📜</div>
+      <div class="card-title">เกมเขียนเป็นประโยค</div>
+      <div class="card-desc">สุ่มประโยคมาให้คัดลงลงสมุดฝึกเขียน แตะคำเพื่อดูลำดับขีด สุ่มไม่ซ้ำจนครบกอง</div>
+    </button>
   </div>
 
 </div>
@@ -463,6 +468,39 @@
     <button id="lisReplayBtn" class="big-btn secondary">🔁 ฟังซ้ำ</button>
     <button id="lisPlayBtn" class="lis-play">⏸ พัก</button>
     <button id="lisSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
+  </div>
+</div>
+
+<!-- SENTENCE COPYING PRACTICE SCREEN -->
+<div id="copy" class="screen">
+  <div class="qhud">
+    <div id="cpCount">0</div>
+    <div class="quiz-btns">
+      <button id="cpMuteBtn" class="icon-btn">🔊</button>
+      <button id="cpQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+
+  <div class="sent-label">คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำเพื่อดูลำดับขีด</div>
+  <div id="cpCard">
+    <div id="cpZh" lang="zh"></div>
+    <div id="cpPy"></div>
+    <div id="cpTh"></div>
+    <div id="cpFocus"></div>
+  </div>
+  <div id="cpTokens"></div>
+  <div id="cpStrokes" class="dict-strokes" hidden>
+    <div class="dict-stroke-head"><span class="dict-stroke-label">ลำดับขีด: <span id="cpStrokeWord" lang="zh"></span></span></div>
+    <div class="dict-stroke-stage">
+      <div class="dict-stroke-writer" id="cpStrokeWriter"></div>
+      <div class="dict-stroke-status" id="cpStrokeStatus"></div>
+    </div>
+    <div class="dict-stroke-chars" id="cpStrokeChars"></div>
+  </div>
+  <div class="spk-actions">
+    <button id="cpListenBtn" class="big-btn secondary">🔊 ฟังประโยค</button>
+    <button id="cpSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
+    <button id="cpNextBtn" class="cp-next">✅ เขียนเสร็จ — ประโยคถัดไป</button>
   </div>
 </div>
 

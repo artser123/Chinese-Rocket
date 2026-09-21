@@ -29,6 +29,7 @@ let sent = null;            // sentence-ordering game state
 let fill = null;            // fill-in-the-blank game state
 let zb = null;              // zombie shooter game state
 let lis = null;             // listening practice state
+let cp = null;              // sentence copying practice state
 let lisType = "word";       // 'word' | 'sent' — ฟังเป็นคำหรือประโยค
 let lisGap = 1.2;           // วินาที — ช่วงห่างก่อนเปลี่ยนคำ/ประโยคถัดไป
 let lisWakeLock = null;     // Screen Wake Lock กันจอดับตอนฟังระหว่างเดินทาง
@@ -624,7 +625,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("setup")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
 }
 
@@ -3158,6 +3159,7 @@ MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
 MODE_TITLES.dict = "📚 พจนานุกรมจีน";
 MODE_TITLES.speak = "🎤 เกมฝึกพูด";
 MODE_TITLES.listen = "🎧 เกมฝึกฟัง";
+MODE_TITLES.copy = "✍️ เกมเขียนเป็นประโยค";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
@@ -3189,11 +3191,13 @@ const startLabel = () => gameMode === "bomb"
         ? `🎤 เริ่มฝึกพูด HSK ${selectedLevel} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`
         : gameMode === "listen"
           ? `🎧 เริ่มฝึกฟัง HSK ${selectedLevel} (${lisType === "sent" ? "ประโยค" : "คำศัพท์"}, ห่าง ${lisGap} วิ)`
-          : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
+          : gameMode === "copy"
+            ? `✍️ เริ่มฝึกเขียนประโยค HSK ${selectedLevel}`
+            : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
 
 function updateStartBtn() {
   if (!gameMode) return;
-  const noSent = gameMode === "listen" && lisType === "sent" && !SENT_OK;
+  const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent")) && !SENT_OK;
   $("startBtn").disabled = !selectedLevel || noSent;
   $("startBtn").textContent = noSent
     ? "⚠️ รัน python tools\\extract_sentences.py ก่อน"
@@ -3203,6 +3207,7 @@ function updateStartBtn() {
 function updateBestLine() {
   if (!gameMode) { $("bestScoreLine").textContent = ""; return; }
   if (gameMode === "listen") { $("bestScoreLine").textContent = "🔁 เล่นวนไม่จำกัด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
+  if (gameMode === "copy") { $("bestScoreLine").textContent = "✍️ คัดลงประโยคลงสมุด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
   if (!selectedLevel) { $("bestScoreLine").textContent = ""; return; }
   const best = +localStorage.getItem(bestKey()) || 0;
   $("bestScoreLine").textContent = best ? `สถิติ HSK ${selectedLevel}: ${best} คะแนน` : "";
@@ -3356,6 +3361,14 @@ async function dictTranslate(text, langpair) {
 const dictTranslateZh = (t) => dictTranslate(t, "zh-CN|th");
 const dictTranslateTh = (t) => dictTranslate(t, "th|zh-CN");
 
+// hidden stroke-order viewer panel (populated lazily by dictToggleStrokes)
+const DICT_STROKES_HTML = `<div class="dict-strokes" hidden>
+  <div class="dict-stroke-head"><span class="dict-stroke-label">ลำดับเส้นขีด</span></div>
+  <div class="dict-stroke-stage"><div class="dict-stroke-writer"></div>
+    <div class="dict-stroke-status"></div></div>
+  <div class="dict-stroke-chars" hidden></div>
+</div>`;
+
 // local pinyin for arbitrary Chinese text: greedy longest-match word
 // segmentation over VOCAB (keeps word-context readings for polyphonic
 // chars), falling back to a per-char map for unknown characters
@@ -3387,13 +3400,14 @@ function dictSentencePinyin(text) {
   while (i < chars.length) {
     const ch = chars[i];
     if (!/[一-鿿]/.test(ch)) { parts.push(ch); i++; continue; }
+    // VOCAB เป็นตัวย่อทั้งหมด — แปลงตัวเต็มเป็นตัวย่อผ่าน TRAD2SIMP ก่อนค้น
     let py = null, len = 0;
     for (let l = Math.min(6, chars.length - i); l >= 2; l--) {
-      const w = chars.slice(i, i + l).join("");
+      const w = chars.slice(i, i + l).map((c) => TRAD2SIMP[c] || c).join("");
       if (wordPy.has(w)) { py = wordPy.get(w); len = l; break; }
     }
     if (py) { parts.push(py); i += len; }
-    else { parts.push(charPy.get(ch) || ch); i++; }
+    else { parts.push(charPy.get(TRAD2SIMP[ch] || ch) || ch); i++; }
   }
   return parts.join(" ");
 }
@@ -3403,15 +3417,22 @@ async function dictAddTranslation(q) {
   const seq = ++dictTransSeq;
   const box = document.createElement("div");
   box.className = "dict-entry dict-translate";
+  const hasCjk = /[一-鿿]/.test(q);
   box.innerHTML = `<div class="dict-translate-label">🌐 แปลประโยค (จีน → ไทย)</div>
     <div class="dict-translate-zh" lang="zh"></div>
     <div class="dict-translate-pinyin"></div>
     <div class="dict-translate-th">กำลังแปล...</div>
-    <div class="dict-entry-actions"><button class="dict-copy-btn">📋 คัดลอก</button></div>`;
+    <div class="dict-entry-actions"><button class="dict-speak-btn">🔊 ฟังเสียงจีน</button>
+    <button class="dict-copy-btn">📋 คัดลอก</button>
+    ${hasCjk ? `<button type="button" class="dict-stroke-btn">✍️ ดูเส้นขีด</button>` : ""}</div>
+    ${hasCjk ? DICT_STROKES_HTML : ""}`;
   box.querySelector(".dict-translate-zh").textContent = q;
   box.querySelector(".dict-translate-pinyin").textContent = dictSentencePinyin(q);
+  box.querySelector(".dict-speak-btn").addEventListener("click", () => speak(q));
   const copyBtn = box.querySelector(".dict-copy-btn");
   copyBtn.addEventListener("click", () => { sfx.click(); dictCopyText(copyBtn, q); });
+  const strokeBtn = box.querySelector(".dict-stroke-btn");
+  if (strokeBtn) strokeBtn.addEventListener("click", () => { sfx.click(); dictToggleStrokes(box, strokeBtn, q); });
   dictResults.prepend(box);
   const thBox = box.querySelector(".dict-translate-th");
   try {
@@ -3434,10 +3455,14 @@ async function dictAddTranslationTh(q) {
     <div class="dict-translate-pinyin"></div>
     <div class="dict-translate-th"></div>
     <div class="dict-entry-actions"><button class="dict-speak-btn" hidden>🔊 ฟังเสียงจีน</button>
-    <button class="dict-copy-btn" hidden>📋 คัดลอก</button></div>`;
+    <button class="dict-copy-btn" hidden>📋 คัดลอก</button>
+    <button type="button" class="dict-stroke-btn" hidden>✍️ ดูเส้นขีด</button></div>
+    ${DICT_STROKES_HTML}`;
   box.querySelector(".dict-translate-th").textContent = q;
   dictResults.prepend(box);
   const zhBox = box.querySelector(".dict-translate-zh");
+  const strokeBtn = box.querySelector(".dict-stroke-btn");
+  strokeBtn.addEventListener("click", () => { sfx.click(); dictToggleStrokes(box, strokeBtn, strokeBtn.dataset.zh || ""); });
   try {
     const zh = await dictTranslateTh(q);
     if (seq !== dictTransSeq) return;
@@ -3446,6 +3471,8 @@ async function dictAddTranslationTh(q) {
     const spkBtn = box.querySelector(".dict-speak-btn");
     spkBtn.hidden = false;
     spkBtn.addEventListener("click", () => speak(zh));
+    strokeBtn.dataset.zh = zh;
+    strokeBtn.hidden = !/[一-鿿]/.test(zh);
     const copyBtn = box.querySelector(".dict-copy-btn");
     copyBtn.hidden = false;
     copyBtn.addEventListener("click", () => { sfx.click(); dictCopyText(copyBtn, zh); });
@@ -3494,6 +3521,7 @@ function dictRenderResults(results, query) {
     const altHtml = (extra && extra.alt && extra.alt.length > 1)
       ? `<div class="dict-entry-alt">≈ ${extra.alt.slice(1).join(", ")}</div>` : "";
 
+    const hasCjk = /[㐀-鿿豈-﫿]/.test(r.zh);
     let html = `<div class="dict-entry-top">
       <div class="dict-entry-zh" lang="zh">${r.zh}</div>
       <div class="dict-entry-pinyin">${pyText}</div>
@@ -3505,8 +3533,10 @@ function dictRenderResults(results, query) {
     <div class="dict-entry-actions">
       <button class="dict-speak-btn" data-zh="${r.zh}">🔊 ฟังเสียง</button>
       <button class="dict-copy-btn" data-zh="${r.zh}">📋 คัดลอก</button>
+      ${hasCjk ? `<button class="dict-stroke-btn" data-zh="${r.zh}">✍️ ดูเส้นขีด</button>` : ""}
       <a class="bing-link" href="${bingUrl}" target="_blank" rel="noopener">🌐 แปลด้วย Bing</a>`;
     html += `</div>`;
+    if (hasCjk) html += DICT_STROKES_HTML;
     if (examples.length) {
       html += `<div class="dict-examples"><div class="dict-examples-label">📝 ประโยคตัวอย่าง (${examples.length})</div>`;
       for (const ex of examples) {
@@ -3532,6 +3562,10 @@ function dictRenderResults(results, query) {
   dictResults.querySelectorAll(".dict-copy-btn").forEach((btn) => {
     btn.addEventListener("click", () => { sfx.click(); dictCopyText(btn, btn.dataset.zh); });
   });
+  // wire up stroke-order buttons
+  dictResults.querySelectorAll(".dict-stroke-btn").forEach((btn) => {
+    btn.addEventListener("click", () => { sfx.click(); dictToggleStrokes(btn.closest(".dict-entry"), btn, btn.dataset.zh); });
+  });
 }
 
 // clipboard copy with fallback for older browsers / non-secure contexts
@@ -3551,6 +3585,107 @@ async function dictCopyText(btn, text) {
   const orig = btn.textContent;
   btn.textContent = "✅ คัดลอกแล้ว";
   setTimeout(() => { btn.textContent = orig; }, 1200);
+}
+
+/* ---- stroke-order viewer inside a dict entry ---- */
+// Reuses the bomb game's HanziWriter loader (loadBombLibrary) and shared
+// stroke-data cache (bombCharData). One writer instance per expanded entry,
+// reused across all of its characters — animation only, no quiz listeners.
+async function dictToggleStrokes(entry, btn, zh) {
+  const panel = entry.querySelector(".dict-strokes");
+  if (!panel) return;
+  if (!panel.hidden) {
+    panel.hidden = true;
+    btn.classList.remove("on");
+    return;
+  }
+  panel.hidden = false;
+  btn.classList.add("on");
+  const st = entry._stroke || (entry._stroke = {
+    chars: [...zh].filter((c) => /[㐀-鿿豈-﫿]/.test(c)),
+    writer: null, charIndex: 0, seq: 0,
+  });
+  if (st.writer) { // reopening: refit in case the viewport resized, then replay
+    dictStrokeFit(entry, st);
+    dictStrokePlay(entry);
+    return;
+  }
+  const status = panel.querySelector(".dict-stroke-status");
+  const seq = ++st.seq;
+  status.textContent = "กำลังโหลดระบบเส้นอักษร…";
+  try {
+    await loadBombLibrary();
+    await Promise.all([...new Set(st.chars)].map(async (char) => {
+      if (bombCharData.has(char)) return;
+      try {
+        const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+        const data = res.ok ? await res.json() : null;
+        bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
+      } catch (e) { /* network error — leave uncached so the next open retries */ }
+    }));
+    if (!entry.isConnected || st.seq !== seq) return;
+    if (!st.chars.length) { status.textContent = "คำนี้ไม่มีตัวอักษรจีนให้ดูเส้นขีด"; return; }
+    if (!st.chars.some((c) => bombCharData.has(c))) throw new Error("no stroke data");
+    const box = panel.querySelector(".dict-stroke-writer");
+    const size = dictStrokeSize(box);
+    st.writer = new window.HanziWriter(box, {
+      width: size, height: size, padding: 10,
+      showCharacter: false, showOutline: true,
+      strokeColor: "#203954", outlineColor: "#b8c4d0",
+      charDataLoader: (char) => bombCharData.get(char),
+    });
+    const chips = panel.querySelector(".dict-stroke-chars");
+    chips.replaceChildren();
+    st.chars.forEach((char, i) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "dict-stroke-chip";
+      chip.textContent = char;
+      chip.lang = "zh";
+      chip.addEventListener("click", () => { sfx.click(); dictStrokePlay(entry, i); });
+      chips.appendChild(chip);
+    });
+    chips.hidden = st.chars.length < 2;
+    status.textContent = "";
+    dictStrokePlay(entry);
+  } catch (e) {
+    if (!entry.isConnected || st.seq !== seq) return;
+    status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก ซ่อนแล้วแตะปุ่มอีกครั้งเพื่อลองใหม่";
+  }
+}
+
+function dictStrokeSize(box) {
+  return Math.min(200, Math.max(120, box.clientWidth || 200));
+}
+
+function dictStrokeFit(entry, st) {
+  const box = entry.querySelector(".dict-stroke-writer");
+  const size = dictStrokeSize(box);
+  if (size && st.writer) st.writer.updateDimensions({ width: size, height: size, padding: 10 });
+}
+
+async function dictStrokePlay(entry, index = null) {
+  const st = entry._stroke;
+  if (!st || !st.writer) return;
+  if (index !== null) st.charIndex = index;
+  const char = st.chars[st.charIndex];
+  const seq = ++st.seq;
+  const status = entry.querySelector(".dict-stroke-status");
+  entry.querySelectorAll(".dict-stroke-chip").forEach((c, i) => {
+    c.classList.toggle("current", i === st.charIndex);
+  });
+  if (!bombCharData.get(char)) {
+    status.textContent = `ไม่มีข้อมูลเส้นขีดของ "${char}"`;
+    return;
+  }
+  status.textContent = "";
+  try {
+    await st.writer.setCharacter(char);
+    if (!entry.isConnected || st.seq !== seq) return;
+    st.writer.loopCharacterAnimation();
+  } catch (e) {
+    if (entry.isConnected && st.seq === seq) status.textContent = `โหลดเส้นขีดของ "${char}" ไม่สำเร็จ`;
+  }
 }
 
 function dictFindExamples(zh, lvl) {
@@ -4623,6 +4758,183 @@ $("lisQuitBtn").addEventListener("click", () => {
   switchScreen(menuEl);
 });
 
+/* ================= Sentence copying mode (เกมเขียนเป็นประโยค) ================= */
+// สุ่มประโยคจาก SENTENCES ให้คัดลงลงสมุดฝึกเขียน — สับกองไม่ซ้ำจนครบแล้วสับใหม่
+// แตะชิปคำเพื่อดูลำดับขีด (HanziWriter animation) ใช้ loadBombLibrary + แคช bombCharData
+// ร่วมกับเกมระเบิดและพจนานุกรม — ไม่มีคะแนน/ชีวิต เล่นเพลงธีม sentence
+let cpWriter = null; // HanziWriter instance เดียว ใช้ซ้ำทั้งเซสชันและข้ามคำ
+
+function startCopyGame(level) {
+  if (!SENT_OK || !SENTENCES[String(level)]) return;
+  currentLevel = level;
+  lastStarter = () => startCopyGame(level);
+  cp = { level, deck: shuffle(SENTENCES[String(level)].slice()), pos: 0,
+         current: null, seen: 0, chars: [], charIndex: 0, seq: 0 };
+  stopSpeech();
+  music.start("sentence");
+  switchScreen($("copy"));
+  $("cpCount").textContent = "0";
+  $("cpStrokes").hidden = true;
+  cpAdvance();
+}
+
+// ดึงประโยคถัดไปจากกองที่สับไว้ — ครบกองแล้วสับใหม่ (ตัวแรกรอบใหม่ไม่ซ้ำตัวที่เพิ่งแสดง)
+function cpAdvance() {
+  if (!cp) return;
+  if (cp.pos >= cp.deck.length) {
+    const lastZh = cp.current && cp.current[0];
+    cp.deck = shuffle(SENTENCES[String(cp.level)].slice());
+    if (cp.deck.length > 1 && cp.deck[0][0] === lastZh) {
+      const i = cp.deck.findIndex((x) => x[0] !== lastZh);
+      if (i > 0) [cp.deck[0], cp.deck[i]] = [cp.deck[i], cp.deck[0]];
+    }
+    cp.pos = 0;
+  }
+  if (!cp.deck.length) return;
+  cp.current = cp.deck[cp.pos++];
+  cp.seen++;
+  cpRender();
+  speakSentence(cp.current);
+}
+
+function cpRender() {
+  const s = cp.current;
+  $("cpZh").textContent = s[0];
+  $("cpPy").textContent = s[1] || "";
+  $("cpTh").textContent = s[2] || "";
+  $("cpFocus").textContent = s[3] ? `📐 จุดไวยากรณ์: ${s[3]}` : "";
+  $("cpCount").textContent = cp.seen;
+  cpHideStrokes();
+  const wrap = $("cpTokens");
+  wrap.replaceChildren();
+  (s[4] || []).forEach((tok) => {
+    if (![...tok].some((c) => /[㐀-鿿豈-﫿]/.test(c))) {
+      const span = document.createElement("span");
+      span.className = "cp-tok-plain";
+      span.textContent = tok;
+      wrap.appendChild(span);
+      return;
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip cp-tok";
+    b.textContent = tok;
+    b.lang = "zh";
+    b.addEventListener("click", () => { sfx.click(); cpOpenStrokes(tok, b); });
+    wrap.appendChild(b);
+  });
+}
+
+function cpHideStrokes() {
+  $("cpStrokes").hidden = true;
+  if (cp) cp.seq++; // invalidate any in-flight stroke-data load from the old word
+  if (cpWriter) try { cpWriter.cancelCharacterAnimation(); } catch (e) {}
+}
+
+function cpStrokeFit() {
+  const size = Math.min(220, Math.max(140, $("cpStrokeWriter").clientWidth || 200));
+  if (cpWriter) cpWriter.updateDimensions({ width: size, height: size, padding: 10 });
+  return size;
+}
+
+// เปิดแผงลำดับขีดของคำที่แตะ — โหลด HanziWriter + ข้อมูลเส้นครั้งแรกเท่านั้น
+// (ต้องใช้อินเทอร์เน็ต; โหลดไม่สำเร็จแตะคำเดิมซ้ำเพื่อลองใหม่ ไม่กระทบอะไร)
+async function cpOpenStrokes(word, chip) {
+  if (!cp) return;
+  document.querySelectorAll("#cpTokens .cp-tok").forEach((c) => c.classList.remove("current"));
+  chip.classList.add("current");
+  $("cpStrokes").hidden = false;
+  $("cpStrokeWord").textContent = word;
+  const chars = [...word].filter((c) => /[㐀-鿿豈-﫿]/.test(c));
+  const seq = ++cp.seq;
+  const status = $("cpStrokeStatus");
+  status.textContent = "กำลังโหลดข้อมูลเส้นขีด…";
+  try {
+    await loadBombLibrary();
+    await Promise.all([...new Set(chars)].map(async (char) => {
+      if (bombCharData.has(char)) return;
+      try {
+        const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+        const data = res.ok ? await res.json() : null;
+        bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
+      } catch (e) { /* network error — leave uncached so the next tap retries */ }
+    }));
+    if (!cp || cp.seq !== seq) return;
+    if (!chars.length) { status.textContent = "คำนี้ไม่มีตัวอักษรจีนให้ดูเส้นขีด"; return; }
+    if (!chars.some((c) => bombCharData.get(c))) throw new Error("no stroke data");
+    cp.chars = chars;
+    cp.charIndex = 0;
+    if (!cpWriter) {
+      const size = cpStrokeFit();
+      cpWriter = new window.HanziWriter($("cpStrokeWriter"), {
+        width: size, height: size, padding: 10,
+        showCharacter: false, showOutline: true,
+        strokeColor: "#203954", outlineColor: "#b8c4d0",
+        charDataLoader: (char) => bombCharData.get(char),
+      });
+    } else {
+      cpStrokeFit();
+    }
+    const chips = $("cpStrokeChars");
+    chips.replaceChildren();
+    chars.forEach((char, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "dict-stroke-chip";
+      b.textContent = char;
+      b.lang = "zh";
+      b.addEventListener("click", () => { sfx.click(); cpStrokePlay(i); });
+      chips.appendChild(b);
+    });
+    chips.hidden = chars.length < 2;
+    status.textContent = "";
+    cpStrokePlay(0);
+  } catch (e) {
+    if (cp && cp.seq === seq) status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก แตะคำอีกครั้งเพื่อลองใหม่";
+  }
+}
+
+async function cpStrokePlay(index) {
+  if (!cp || !cpWriter) return;
+  cp.charIndex = index;
+  const char = cp.chars[index];
+  const seq = ++cp.seq;
+  document.querySelectorAll("#cpStrokeChars .dict-stroke-chip").forEach((c, i) => {
+    c.classList.toggle("current", i === index);
+  });
+  const status = $("cpStrokeStatus");
+  if (!bombCharData.get(char)) {
+    status.textContent = `ไม่มีข้อมูลเส้นขีดของ "${char}"`;
+    return;
+  }
+  status.textContent = "";
+  try {
+    await cpWriter.setCharacter(char);
+    if (!cp || cp.seq !== seq) return;
+    cpWriter.loopCharacterAnimation();
+  } catch (e) {
+    if (cp && cp.seq === seq) status.textContent = `โหลดเส้นขีดของ "${char}" ไม่สำเร็จ`;
+  }
+}
+
+$("cpListenBtn").addEventListener("click", () => {
+  sfx.click();
+  if (cp && cp.current) speakSentence(cp.current);
+});
+$("cpSkipBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
+$("cpNextBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
+$("cpMuteBtn").addEventListener("click", toggleMute);
+$("cpQuitBtn").addEventListener("click", () => {
+  sfx.click();
+  cp = null;
+  cpHideStrokes();
+  stopSpeech();
+  music.stop();
+  switchScreen(menuEl);
+  updateBestLine();
+});
+window.addEventListener("resize", () => { if (cp && cpWriter && !$("cpStrokes").hidden) cpStrokeFit(); });
+
 $("cards").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (!card || card.classList.contains("locked")) return;
@@ -4639,7 +4951,7 @@ $("cards").addEventListener("click", (e) => {
     startDict();
     return;
   }
-  if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak") && !SENT_OK) {
+  if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !SENT_OK) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
     $("startBtn").disabled = true;
@@ -4652,8 +4964,8 @@ $("cards").addEventListener("click", (e) => {
   $("diffRow").style.display = arcade || isMatching || gameMode === "bomb" ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
-  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" ? "none" : "";
-  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" ? "none" : "";
+  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" ? "none" : "";
+  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
   $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
@@ -4772,6 +5084,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "bomb") startBombGame(selectedLevel);
   else if (gameMode === "speak") startSpeakGame(selectedLevel);
   else if (gameMode === "listen") startListenGame(selectedLevel);
+  else if (gameMode === "copy") startCopyGame(selectedLevel);
   else startGame(selectedLevel);
 });
 
@@ -4814,6 +5127,7 @@ function toggleMute() {
   $("zMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("spkMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("lisMuteBtn").textContent = muted ? "🔇" : "🔊";
+  $("cpMuteBtn").textContent = muted ? "🔇" : "🔊";
 }
 $("muteBtn").addEventListener("click", toggleMute);
 
