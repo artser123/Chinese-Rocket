@@ -3676,18 +3676,28 @@ function loadDictWhisper(onProgress) {
     env.allowLocalModels = true;
     env.localModelPath = "models/";
     // onnxruntime-web wasm/jsep files are self-hosted too (default = jsDelivr CDN)
-    if (env.backends && env.backends.onnx && env.backends.onnx.wasm)
-      env.backends.onnx.wasm.wasmPaths = "vendor3/";
+    // wasmPaths ต้องเป็น URL เต็ม — ort เอาไปต่อชื่อไฟล์แล้ว import() ตรงๆ
+    // ส่ง "vendor3/" เปล่าๆ จะกลายเป็น bare specifier แล้ว resolve ไม่ได้
+    if (env.backends && env.backends.onnx && env.backends.onnx.wasm) {
+      env.backends.onnx.wasm.wasmPaths = new URL("vendor3/", document.baseURI).href;
+      // เซิร์ฟเวอร์ธรรมดา/GitHub Pages ไม่ส่ง COOP+COEP -> ไม่มี SharedArrayBuffer
+      // บังคับเธรดเดียวไม่ให้ ort สร้าง pthread worker แล้วล้มตอนโหลด wasm
+      env.backends.onnx.wasm.numThreads =
+        (typeof crossOriginIsolated !== "undefined" && crossOriginIsolated)
+          ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;
+    }
     const mk = (device) => pipeline("automatic-speech-recognition", "whisper-tiny", {
       device,
       dtype: "q8", // maps to the *_quantized.onnx files in models/whisper-tiny/
       progress_callback: (p) => { if (onProgress) onProgress(p); },
     });
-    // WebGPU runs whisper on the GPU — much faster than single-threaded WASM
-    if (navigator.gpu) {
-      try { return await mk("webgpu"); } catch (e) { /* fall back to wasm */ }
+    // WebGPU เร็วกว่าแต่ให้ผลถอดเสียงเพี้ยน (สุ่มหลายภาษา) กับโมเดล q8 ตัวนี้
+    // -> ใช้ wasm เป็นหลัก ค่อย fallback เป็น webgpu ถ้า wasm โหลดไม่ได้
+    try { return await mk("wasm"); }
+    catch (e) {
+      if (navigator.gpu) return mk("webgpu");
+      throw e;
     }
-    return mk("wasm");
   })();
   dictWhisperPromise.catch(() => { dictWhisperPromise = null; }); // allow retry after a failed load
   return dictWhisperPromise;
