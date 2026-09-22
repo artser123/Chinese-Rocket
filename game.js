@@ -46,9 +46,9 @@ if (SENT_OK && typeof SENTENCES_EXTRA !== "undefined") {
   }
 }
 const DIFF = {
-  easy:   { label: "ง่าย",     base: 10, cap: 35, ramp: 0.8, spawn0: 2.8, spawnDecay: 0.012, spawnMin: 1.5  },
-  medium: { label: "ปานกลาง", base: 28, cap: 55, ramp: 1.9, spawn0: 2.4, spawnDecay: 0.025, spawnMin: 0.95 },
-  hard:   { label: "ยากมาก",  base: 42, cap: 90, ramp: 3.0, spawn0: 2.0, spawnDecay: 0.040, spawnMin: 0.6  },
+  easy:   { label: "ง่าย",     base: 7,  cap: 30, ramp: 0.45, spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
+  medium: { label: "ปานกลาง", base: 19, cap: 48, ramp: 1.1,  spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
+  hard:   { label: "ยากมาก",  base: 30, cap: 78, ramp: 1.8,  spawn0: 2.3, spawnDecay: 0.028, spawnMin: 0.75 },
 };
 
 /* ================= Audio (WebAudio, no assets) ================= */
@@ -1679,9 +1679,9 @@ const zctx = zcanvas.getContext("2d");
 const zoptBtns = Array.from(document.querySelectorAll(".zopt"));
 // base/ramp/cap = ความเร็วซอมบี้ (px/s) เพิ่มขึ้นตามเวลาที่ผ่านไป, spawn ลดลงตามจำนวนที่ยิงได้
 const ZDIFF = {
-  easy:   { base: 34, ramp: 0.55, cap: 130, spawn0: 3.2, spawnDecay: 0.045, spawnMin: 1.7 },
-  medium: { base: 50, ramp: 1.1,  cap: 190, spawn0: 2.6, spawnDecay: 0.06,  spawnMin: 1.2 },
-  hard:   { base: 70, ramp: 1.9,  cap: 270, spawn0: 2.1, spawnDecay: 0.08,  spawnMin: 0.8 },
+  easy:   { base: 24, ramp: 0.3,  cap: 110, spawn0: 3.5, spawnDecay: 0.03,  spawnMin: 1.8 },
+  medium: { base: 35, ramp: 0.6,  cap: 160, spawn0: 2.9, spawnDecay: 0.04,  spawnMin: 1.3 },
+  hard:   { base: 50, ramp: 1.1,  cap: 230, spawn0: 2.4, spawnDecay: 0.055, spawnMin: 0.9 },
 };
 // weapon tiers — auto-upgrade based on kills
 const ZWEAPONS = [
