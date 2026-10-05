@@ -171,6 +171,22 @@
       </div>
     </div>
 
+    <div class="setup-row" id="cpWriteRow" style="display:none">
+      <span class="setup-label">รูปแบบการเขียน</span>
+      <div class="level-select" id="cpWriteSelect">
+        <button class="cpw-btn selected" data-write="off">📝 เขียนนอกเกม</button>
+        <button class="cpw-btn" data-write="on">✍️ เขียนในเกม</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="cpOutlineRow" style="display:none">
+      <span class="setup-label">เส้นนำการเขียน</span>
+      <div class="level-select" id="cpOutlineSelect">
+        <button class="cpo-btn selected" data-outline="on">👁️ เปิด (มีเส้นนำ)</button>
+        <button class="cpo-btn" data-outline="off">🙈 ปิด (ใบ้เมื่อเขียนผิด)</button>
+      </div>
+    </div>
+
     <div class="setup-row" id="bombSetupRow" style="display:none">
       <label class="bomb-toggle"><input id="bombOutlineSetup" type="checkbox" checked> แสดงเงาเส้นช่วยเขียน</label>
       <p class="bomb-instructions">แตะลูกระเบิดเพื่อเขียน (100 คะแนน) หรือเลือกพินอินที่ถูกเพื่อรับโบนัสอีก 50 คะแนนเมื่อปลดสำเร็จ<br>ตอบผิด ตกถึงพื้น หรือเขียนไม่ทัน เสีย 1 ชีวิต • ยิ่งเล่นยิ่งเร็ว<br>เลือกความยาก: ง่าย = ระเบิดตกช้า + เวลาเขียนมาก • ยากมาก = ระเบิดตกเร็ว + เวลาเขียนน้อย<br>สุ่มไม่ซ้ำจนครบระดับ • ตรวจลำดับขีดทีละตัว • ต้องใช้อินเทอร์เน็ตโหลดเส้นอักษร</p>
@@ -485,7 +501,7 @@
     </div>
   </div>
 
-  <div class="sent-label">คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำเพื่อดูลำดับขีด</div>
+  <div class="sent-label" id="cpLabel">คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำเพื่อดูลำดับขีด</div>
   <div id="cpCard">
     <div id="cpZh" lang="zh"></div>
     <div id="cpPy"></div>
@@ -500,6 +516,15 @@
       <div class="dict-stroke-status" id="cpStrokeStatus"></div>
     </div>
     <div class="dict-stroke-chars" id="cpStrokeChars"></div>
+  </div>
+  <div id="cpWrite" class="dict-strokes" hidden>
+    <div class="dict-stroke-head"><span class="dict-stroke-label">เขียนตามประโยค: <span id="cpWriteProgress"></span></span></div>
+    <div class="cpw-stage">
+      <div class="dict-stroke-writer" id="cpWriteWriter"></div>
+    </div>
+    <div class="cpw-status" id="cpWriteStatus"></div>
+    <div class="dict-stroke-chars" id="cpWriteChars"></div>
+    <button id="cpWriteResetBtn" class="big-btn secondary">🧹 ล้างตัวนี้ — เขียนใหม่</button>
   </div>
   <div class="spk-actions">
     <button id="cpListenBtn" class="big-btn secondary">🔊 ฟังประโยค</button>

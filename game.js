@@ -53,8 +53,8 @@ const DIFF = {
 
 /* ================= Audio (WebAudio, no assets) ================= */
 let AC = null, muted = false;
+// หมายเหตุ: ปุ่มปิดเสียงสั่งปิดเฉพาะเพลงเบื้องหลัง (music.setMuted) — เสียงเอฟเฟกต์และเสียงเขียนยังเล่นปกติ
 function beep(freq, dur, type = "square", vol = 0.12, slide = 0, force = false) {
-  if (muted && !force) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
@@ -68,7 +68,6 @@ function beep(freq, dur, type = "square", vol = 0.12, slide = 0, force = false) 
   } catch (e) {}
 }
 function noiseBurst(dur, vol, hp, lp, force = false) {
-  if (muted && !force) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
@@ -110,7 +109,7 @@ const sfx = {
   click1:  () => { noiseBurst(0.03, 0.25, 2500, 9000); setTimeout(() => noiseBurst(0.025, 0.18, 3000, 9000), 70); },
   click3:  () => { for (let i = 0; i < 3; i++) setTimeout(() => { noiseBurst(0.03, 0.25, 2500, 9000); }, i * 90); },
   upgrade: () => { beep(523, 0.1, "square", 0.15); setTimeout(() => beep(659, 0.1, "square", 0.15), 100); setTimeout(() => beep(784, 0.15, "square", 0.15), 200); },
-  // แฟนแฟร์ตอบถูก — force=true เล่นแม้ปิดเพลงพื้นหลังอยู่
+  // แฟนแฟร์ตอบถูก — ปุ่มปิดเสียงมีผลเฉพาะเพลงเบื้องหลัง เสียงเอฟเฟกต์ยังเล่นเสมอ
   correct: () => {
     [523, 659, 784].forEach((f, i) => setTimeout(() => {
       beep(f, 0.13, "square", 0.15, 80, true);
@@ -2716,10 +2715,16 @@ $("matchMuteBtn").addEventListener("click", toggleMute);
 
 let bombGame = null, bombWriter = null, bombLibraryPromise = null;
 const bombCharData = new Map();
+// เสียงดินสอขีดเขียน ใช้ร่วมกันทั้งเกมเขียนปลดระเบิดและโหมดเขียนในเกมของเกมเขียนเป็นประโยค
+function pencilAllowed() {
+  if (bombGame && !bombGame.paused && bombGame.phase === "writing") return true;
+  if (cpWriteMode === "on" && cp && !$("cpWrite").hidden) return true;
+  return false;
+}
 const pencilSound = {
   source: null, gain: null, pointerId: null, buffer: null,
   start(e) {
-    if (!e.isPrimary || e.button !== 0 || muted || !bombGame || bombGame.paused || bombGame.phase !== "writing") return;
+    if (!e.isPrimary || e.button !== 0 || !pencilAllowed()) return;
     this.stop();
     try {
       AC = AC || new (window.AudioContext || window.webkitAudioContext)();
@@ -2747,7 +2752,7 @@ const pencilSound = {
   },
   move(e) {
     if (e.pointerId !== this.pointerId || !this.source) return;
-    if (muted || !bombGame || bombGame.paused || bombGame.phase !== "writing" || !e.buttons) { this.stop(); return; }
+    if (!pencilAllowed() || !e.buttons) { this.stop(); return; }
     const distance = Math.hypot(e.clientX - this.x, e.clientY - this.y);
     const speed = Math.min(2, distance / Math.max(8, e.timeStamp - this.time));
     this.x = e.clientX; this.y = e.clientY; this.time = e.timeStamp;
@@ -3178,6 +3183,9 @@ $("bombWriter").addEventListener("pointerdown", (e) => pencilSound.start(e));
 $("bombWriter").addEventListener("pointermove", (e) => pencilSound.move(e));
 const stopPencilPointer = (e) => { if (e.pointerId === pencilSound.pointerId) pencilSound.stop(); };
 $("bombWriter").addEventListener("pointerleave", stopPencilPointer);
+$("cpWriteWriter").addEventListener("pointerdown", (e) => pencilSound.start(e));
+$("cpWriteWriter").addEventListener("pointermove", (e) => pencilSound.move(e));
+$("cpWriteWriter").addEventListener("pointerleave", stopPencilPointer);
 document.addEventListener("pointerup", stopPencilPointer, true);
 document.addEventListener("pointercancel", stopPencilPointer, true);
 window.addEventListener("blur", () => pencilSound.stop());
@@ -4802,6 +4810,19 @@ $("lisQuitBtn").addEventListener("click", () => {
 // แตะชิปคำเพื่อดูลำดับขีด (HanziWriter animation) ใช้ loadBombLibrary + แคช bombCharData
 // ร่วมกับเกมระเบิดและพจนานุกรม — ไม่มีคะแนน/ชีวิต เล่นเพลงธีม sentence
 let cpWriter = null; // HanziWriter instance เดียว ใช้ซ้ำทั้งเซสชันและข้ามคำ
+let cpWriteMode = localStorage.getItem("cr_copy_write_mode") || "off"; // 'off' = เขียนนอกเกม, 'on' = เขียนในเกม
+let cpOutline = localStorage.getItem("cr_copy_outline") !== "off"; // true = แสดงเส้นนำการเขียน, false = ซ่อนแล้วใบ้เมื่อเขียนผิด
+let cpWriteWriter = null; // HanziWriter ตรวจการเขียนในเกม (ใช้ซ้ำทั้งเซสชัน)
+
+// อัปเดตแถวตั้งค่าของโหมดเขียนเป็นประโยค (รูปแบบการเขียน + เส้นนำ ใช้เฉพาะเขียนในเกม)
+function cpSyncSetupUI() {
+  const isCopy = gameMode === "copy";
+  $("cpWriteRow").style.display = isCopy ? "" : "none";
+  $("cpOutlineRow").style.display = isCopy && cpWriteMode === "on" ? "" : "none";
+  if (!isCopy) return;
+  document.querySelectorAll(".cpw-btn").forEach((b) => b.classList.toggle("selected", b.dataset.write === cpWriteMode));
+  document.querySelectorAll(".cpo-btn").forEach((b) => b.classList.toggle("selected", b.dataset.outline === (cpOutline ? "on" : "off")));
+}
 
 function startCopyGame(level) {
   if (!SENT_OK || !SENTENCES[String(level)]) return;
@@ -4809,13 +4830,14 @@ function startCopyGame(level) {
   lastStarter = () => startCopyGame(level);
   cp = { level, deck: shuffle(SENTENCES[String(level)].slice()), pos: 0,
          current: null, seen: 0, chars: [], charIndex: 0, seq: 0,
-         done: new Set() };
+         done: new Set(), writeChars: [], writeIndex: 0 };
   stopSpeech();
   music.start("sentence");
   switchScreen($("copy"));
   $("cpCount").textContent = "0";
   $("cpProg").textContent = "0%";
   $("cpStrokes").hidden = true;
+  cpHideWrite();
   cpAdvance();
 }
 
@@ -4848,8 +4870,15 @@ function cpRender() {
   $("cpFocus").textContent = s[3] ? `📐 จุดไวยากรณ์: ${s[3]}` : "";
   $("cpCount").textContent = cp.seen;
   cpHideStrokes();
+  $("cpLabel").textContent = cpWriteMode === "on"
+    ? "เขียนตามประโยคในช่องด้านล่าง — ระบบจะตรวจว่าถูกต้อง"
+    : "คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำเพื่อดูลำดับขีด";
+  cpWriteSetup();
+  // โหมดเขียนในเกมมีช่องเขียนด้านล่างแล้ว จึงซ่อนแถวปุ่มคำ + แผงลำดับขีด (ซ้ำซ้อน)
   const wrap = $("cpTokens");
   wrap.replaceChildren();
+  wrap.hidden = cpWriteMode === "on";
+  if (cpWriteMode === "on") return;
   (s[4] || []).forEach((tok) => {
     if (![...tok].some((c) => /[㐀-鿿豈-﫿]/.test(c))) {
       const span = document.createElement("span");
@@ -4874,6 +4903,137 @@ function cpHideStrokes() {
   if (cpWriter) try { cpWriter.cancelCharacterAnimation(); } catch (e) {}
 }
 
+/* ---------- In-game writing check (เขียนในเกม) ---------- */
+// ใช้ HanziWriter.quiz ตรวจการเขียนทีละตัวอักษรจีนของประโยค (ฟังก์ชันตรวจเดียวกับเกมเขียนปลดระเบิด)
+// โหลดข้อมูลเส้นขีดผ่าน loadBombLibrary + แคช bombCharData ร่วมกับโหมดอื่น
+
+async function cpLoadCharData(chars) {
+  await loadBombLibrary();
+  await Promise.all([...new Set(chars)].map(async (char) => {
+    if (bombCharData.has(char)) return;
+    try {
+      const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+      const data = res.ok ? await res.json() : null;
+      bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
+    } catch (e) { /* network error — leave uncached so the next try retries */ }
+  }));
+}
+
+function cpWriteFit() {
+  const size = Math.min(260, Math.max(160, $("cpWriteWriter").clientWidth || 220));
+  if (cpWriteWriter) cpWriteWriter.updateDimensions({ width: size, height: size, padding: 16 });
+  return size;
+}
+
+function cpHideWrite() {
+  $("cpWrite").hidden = true;
+  pencilSound.stop();
+  if (cp) cp.seq++; // invalidate any in-flight load/quiz of the old sentence
+  if (cpWriteWriter) try { cpWriteWriter.cancelQuiz(); } catch (e) {}
+}
+
+function cpWriteSetup() {
+  if (!cp) return;
+  const chars = [...(cp.current[0] || "")].filter((c) => /[㐀-鿿豈-﫿]/.test(c));
+  cp.writeChars = chars;
+  cp.writeIndex = 0;
+  if (cpWriteMode !== "on" || !chars.length) { cpHideWrite(); return; }
+  $("cpWrite").hidden = false;
+  cpWriteChar();
+}
+
+function renderCpWriteChips() {
+  const wrap = $("cpWriteChars");
+  wrap.replaceChildren();
+  if (!cp) return;
+  const n = cp.writeChars.length;
+  $("cpWriteProgress").textContent = `${Math.min(cp.writeIndex + 1, n)} / ${n}`;
+  cp.writeChars.forEach((char, i) => {
+    const span = document.createElement("span");
+    span.className = "bomb-char" + (i < cp.writeIndex ? " done" : i === cp.writeIndex ? " current" : "");
+    span.textContent = char;
+    wrap.appendChild(span);
+  });
+}
+
+async function cpWriteChar() {
+  if (!cp || cpWriteMode !== "on") return;
+  const index = cp.writeIndex;
+  const char = cp.writeChars[index];
+  if (!char) return;
+  const seq = ++cp.seq;
+  const status = $("cpWriteStatus");
+  status.textContent = "กำลังโหลดข้อมูลเส้นขีด…";
+  renderCpWriteChips();
+  try {
+    await cpLoadCharData([char]);
+    if (!cp || cp.seq !== seq) return;
+    if (!bombCharData.get(char)) throw new Error("no stroke data");
+    if (!cpWriteWriter) {
+      const size = cpWriteFit();
+      cpWriteWriter = new window.HanziWriter($("cpWriteWriter"), {
+        width: size, height: size, padding: 16,
+        showCharacter: false, showOutline: true,
+        strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86", drawingWidth: 64,
+        highlightColor: "#26a477", highlightOnComplete: false,
+        strokeHighlightSpeed: 0.7, strokeFadeDuration: 120,
+        charDataLoader: (c) => bombCharData.get(c),
+      });
+    } else {
+      cpWriteFit();
+    }
+    await cpWriteWriter.setCharacter(char);
+    if (!cp || cp.seq !== seq) return;
+    // เส้นนำการเขียน: เปิด = โชว์เงาตัวอักษร, ปิด = ซ่อนแล้วใบ้ขีดถัดไปเมื่อเขียนผิด
+    try {
+      if (cpOutline) cpWriteWriter.showOutline({ duration: 0 });
+      else cpWriteWriter.hideOutline({ duration: 0 });
+    } catch (e) {}
+    status.textContent = `เขียนตัวที่ ${index + 1}: ${char}`;
+    cpWriteWriter.quiz({
+      leniency: 1.4,
+      markStrokeCorrectAfterMisses: 4,
+      showHintAfterMisses: cpOutline ? 4 : 1,
+      strokeHighlightSpeed: cpOutline ? 0.7 : 0.35,
+      onMistake: (data) => {
+        if (!cp || cp.seq !== seq) return;
+        if (!cpOutline) {
+          status.textContent = `เขียนผิด — ดูอนิเมชั่นใบ้ขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตาม • ไม่มีโทษ`;
+          return;
+        }
+        status.textContent = data.mistakesOnStroke >= 4
+          ? `ดูเส้นสีเขียวสาธิตขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตาม • ไม่มีโทษ`
+          : `ขีดที่ ${data.strokeNum + 1} ยังไม่ถูก ลองใหม่ได้`;
+      },
+      onCorrectStroke: (data) => {
+        if (!cp || cp.seq !== seq) return;
+        status.textContent = data.strokesRemaining
+          ? `ถูกต้อง! ต่อไปขีดที่ ${data.strokeNum + 2} • เหลือ ${data.strokesRemaining} ขีด`
+          : "ถูกต้อง! เขียนครบทุกขีดแล้ว";
+      },
+      onComplete: () => {
+        if (!cp || cp.seq !== seq) return;
+        cpWriteCompleteChar();
+      },
+    });
+  } catch (e) {
+    if (cp && cp.seq === seq) status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก แตะ 'ล้างตัวนี้' เพื่อลองใหม่";
+  }
+}
+
+function cpWriteCompleteChar() {
+  if (!cp) return;
+  sfx.hit();
+  if (cp.writeChars[cp.writeIndex]) speak(cp.writeChars[cp.writeIndex]);
+  cp.writeIndex++;
+  renderCpWriteChips();
+  if (cp.writeIndex >= cp.writeChars.length) {
+    $("cpWriteStatus").textContent = "🎉 เขียนครบทุกตัวแล้ว! กด 'เขียนเสร็จ — ประโยคถัดไป' ได้เลย";
+    return;
+  }
+  cpWriteChar();
+}
+
 function cpStrokeFit() {
   const size = Math.min(220, Math.max(140, $("cpStrokeWriter").clientWidth || 200));
   if (cpWriter) cpWriter.updateDimensions({ width: size, height: size, padding: 10 });
@@ -4883,7 +5043,7 @@ function cpStrokeFit() {
 // เปิดแผงลำดับขีดของคำที่แตะ — โหลด HanziWriter + ข้อมูลเส้นครั้งแรกเท่านั้น
 // (ต้องใช้อินเทอร์เน็ต; โหลดไม่สำเร็จแตะคำเดิมซ้ำเพื่อลองใหม่ ไม่กระทบอะไร)
 async function cpOpenStrokes(word, chip) {
-  if (!cp) return;
+  if (!cp || cpWriteMode === "on") return;
   document.querySelectorAll("#cpTokens .cp-tok").forEach((c) => c.classList.remove("current"));
   chip.classList.add("current");
   $("cpStrokes").hidden = false;
@@ -4893,15 +5053,7 @@ async function cpOpenStrokes(word, chip) {
   const status = $("cpStrokeStatus");
   status.textContent = "กำลังโหลดข้อมูลเส้นขีด…";
   try {
-    await loadBombLibrary();
-    await Promise.all([...new Set(chars)].map(async (char) => {
-      if (bombCharData.has(char)) return;
-      try {
-        const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
-        const data = res.ok ? await res.json() : null;
-        bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
-      } catch (e) { /* network error — leave uncached so the next tap retries */ }
-    }));
+    await cpLoadCharData(chars);
     if (!cp || cp.seq !== seq) return;
     if (!chars.length) { status.textContent = "คำนี้ไม่มีตัวอักษรจีนให้ดูเส้นขีด"; return; }
     if (!chars.some((c) => bombCharData.get(c))) throw new Error("no stroke data");
@@ -4967,8 +5119,15 @@ $("cpListenBtn").addEventListener("click", () => {
 $("cpSkipBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
 $("cpNextBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
 $("cpMuteBtn").addEventListener("click", toggleMute);
+$("cpWriteResetBtn").addEventListener("click", () => {
+  sfx.click();
+  if (!cp) return;
+  if (cp.writeIndex >= cp.writeChars.length) cp.writeIndex = 0;
+  cpWriteChar();
+});
 $("cpQuitBtn").addEventListener("click", () => {
   sfx.click();
+  cpHideWrite();
   cp = null;
   cpHideStrokes();
   stopSpeech();
@@ -4976,7 +5135,10 @@ $("cpQuitBtn").addEventListener("click", () => {
   switchScreen(menuEl);
   updateBestLine();
 });
-window.addEventListener("resize", () => { if (cp && cpWriter && !$("cpStrokes").hidden) cpStrokeFit(); });
+window.addEventListener("resize", () => {
+  if (cp && cpWriter && !$("cpStrokes").hidden) cpStrokeFit();
+  if (cp && cpWriteWriter && !$("cpWrite").hidden) cpWriteFit();
+});
 
 $("cards").addEventListener("click", (e) => {
   const card = e.target.closest(".card");
@@ -5012,6 +5174,7 @@ $("cards").addEventListener("click", (e) => {
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
   $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
+  cpSyncSetupUI();
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
@@ -5116,6 +5279,29 @@ $("lisSpeedSelect").addEventListener("click", (e) => {
   updateStartBtn();
 });
 
+// โหมดเขียนเป็นประโยค: เขียนนอกเกม (คัดลงสมุด) หรือเขียนในเกม (มีช่องเขียน + ตรวจการเขียน)
+$("cpWriteSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".cpw-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".cpw-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  cpWriteMode = btn.dataset.write;
+  localStorage.setItem("cr_copy_write_mode", cpWriteMode);
+  cpSyncSetupUI();
+});
+
+// โหมดเขียนในเกม: เปิด/ปิดเส้นนำการเขียน (ปิด = ใบ้ลำดับขีดถัดไปเมื่อเขียนผิด)
+$("cpOutlineSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".cpo-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".cpo-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  cpOutline = btn.dataset.outline === "on";
+  localStorage.setItem("cr_copy_outline", cpOutline ? "on" : "off");
+});
+
 $("startBtn").addEventListener("click", () => {
   if (!selectedLevel || !gameMode) return;
   sfx.click();
@@ -5157,8 +5343,7 @@ $("quitBtn").addEventListener("click", () => {
 
 function toggleMute() {
   muted = !muted;
-  if (muted) pencilSound.stop();
-  music.setMuted(muted); // ปิดเฉพาะเพลงพื้นหลัง เสียงพูดภาษาจีนยังเล่นต่อ
+  music.setMuted(muted); // ปิดเฉพาะเพลงพื้นหลัง เสียงพูดภาษาจีนและเสียงเอฟเฟกต์/เสียงเขียนยังเล่นต่อ
   $("matchMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("matchMuteBtn").setAttribute("aria-pressed", String(muted));
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
