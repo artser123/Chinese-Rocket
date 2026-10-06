@@ -576,6 +576,53 @@ function resize() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
 window.addEventListener("resize", resize);
+
+/* ================= Additive glow (bloom ปลอม) =================
+   ไฟ/ระเบิด/แสงปากกระบอก/ตัวอักษรเรืองแสง ใช้ "แสงแบบบวก" (lighter) แทนการวางสีทับ
+   → สีซ้อนกันยิ่งสว่าง เหมือนแสงจริง ไม่ใช่คราบสีทึบ. ทั้งเซสชันใช้ ctx.globalCompositeOperation
+   ที่เก็บ/คืนด้วย save/restore เสมอ เพื่อไม่ให้สถานะรั่วไปฟังก์ชันวาดอื่น */
+function glowOn(c, alpha = 1) {
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.globalAlpha = alpha;
+}
+const glowOff = (c) => c.restore();
+// เงามืดรอบตัวอักษรจีน ให้ตัวอักษรลอยออกจากพื้นหลัง (อ่านง่ายขึ้นบนมือถือ)
+function textShadowOn(c, blur = 6, color = "rgba(0,0,0,.65)") {
+  c.shadowColor = color; c.shadowBlur = blur; c.shadowOffsetY = 1;
+}
+function textShadowOff(c) { c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0; }
+
+/* ================= Bloom ปลอม =================
+   ย่อ canvas → เบลอ → วาดทับแบบบวก: ไฟ/ระเบิด/แสงปากกระบอกจะ "ฟุ้ง" เป็นแสงจริง
+   เก็บสำเนาย่อในออฟสกรีนบัฟเฟอร์ 1 ใบต่อ canvas (WeakMap) จึงไม่สร้าง canvas ใหม่ทุกเฟรม
+   ต้นทุนต่อเฟรม: drawImage ย่อ 1 ครั้ง + drawImage เบลอ 1 ครั้ง (เบลอจ่ายที่ภาพเล็ก 1/4)
+   ต้องประกาศ "ก่อน" ฟังก์ชันที่เรียกใช้ เพราะ const/function ที่อยู่หลังจะยังไม่ถูก hoist
+   (เดิมวางไว้หลัง loop → เฟรมแรก throw ReferenceError ทำให้เกมหยุดวาด) */
+const bloomBuf = new WeakMap();
+const BLOOM_DIV = 4;          // ย่อเหลือ 1/4 ก่อนเบลอ → เร็วและเบลอกว้างพอ
+const BLOOM_BLUR = 7;         // รัศมีเบลอ (หน่วยของภาพย่อ)
+const BLOOM_ALPHA = 0.5;      // ความแรงของแสงที่ทับกลับ
+function bloom(src, sc, lw, lh) {
+  if (!lw || !lh) return;
+  let b = bloomBuf.get(src);
+  if (!b) { b = document.createElement("canvas"); bloomBuf.set(src, b); }
+  const bw = Math.max(1, Math.ceil(lw / BLOOM_DIV)), bh = Math.max(1, Math.ceil(lh / BLOOM_DIV));
+  if (b.width !== bw || b.height !== bh) { b.width = bw; b.height = bh; }
+  const bc = b.getContext("2d");
+  bc.setTransform(1, 0, 0, 1, 0, 0);
+  bc.globalAlpha = 1;
+  bc.globalCompositeOperation = "source-over";
+  bc.clearRect(0, 0, bw, bh);
+  bc.drawImage(src, 0, 0, bw, bh);
+  bc.filter = `blur(${BLOOM_BLUR}px)`; // เบลอตอนวาดกลับ → ต้นทุนจ่ายที่ภาพเล็ก
+  sc.save();
+  sc.globalCompositeOperation = "lighter";
+  sc.globalAlpha = BLOOM_ALPHA;
+  sc.drawImage(b, 0, 0, lw, lh);
+  sc.restore();
+  bc.filter = "none";
+}
 window.addEventListener("orientationchange", () => setTimeout(resize, 200));
 resize();
 
@@ -1421,8 +1468,9 @@ function drawBase() {
   ctx.moveTo(x - 34, groundY()); ctx.lineTo(x + 34, groundY());
   ctx.lineTo(x + 20, y - 14); ctx.lineTo(x - 20, y - 14);
   ctx.closePath(); ctx.fill();
-  // engine flame flicker
+  // engine flame flicker — โหมดแสงบวก ให้เปลวไฟ "สว่างจริง" และทับกันแล้วสว่างขึ้น
   const fl = 8 + Math.random() * 10;
+  glowOn(ctx);
   const fg = ctx.createLinearGradient(0, y - 14, 0, y + fl);
   fg.addColorStop(0, "rgba(255,235,150,.95)");
   fg.addColorStop(0.5, "rgba(255,140,40,.7)");
@@ -1431,6 +1479,9 @@ function drawBase() {
   ctx.beginPath();
   ctx.moveTo(x - 5, y - 14); ctx.lineTo(x, y + fl); ctx.lineTo(x + 5, y - 14);
   ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,220,140,.5)";
+  ctx.beginPath(); ctx.arc(x, y + fl * 0.35, fl * 0.7, 0, 6.28); ctx.fill();
+  glowOff(ctx);
 
   // fins
   ctx.fillStyle = "#d84343";
@@ -1474,7 +1525,8 @@ function drawBase() {
 }
 
 function drawMeteor(m) {
-  // flame trail
+  // flame trail — แสงบวก ทำให้นุ่งลุกซ้อนทับกันแล้วสว่างขึ้น
+  glowOn(ctx);
   const trail = ctx.createLinearGradient(m.x, m.y - m.r * 2.6, m.x, m.y);
   trail.addColorStop(0, "rgba(255,120,30,0)");
   trail.addColorStop(1, "rgba(255,160,40,.75)");
@@ -1483,11 +1535,22 @@ function drawMeteor(m) {
   ctx.moveTo(m.x - m.r * 0.7, m.y);
   ctx.quadraticCurveTo(m.x, m.y - m.r * 3, m.x + m.r * 0.7, m.y);
   ctx.closePath(); ctx.fill();
+  // เงาแสงร้อนจางๆ รอบลูกหิน ให้ดูมีบรรยากาศร้อน
+  const halo = ctx.createRadialGradient(m.x, m.y, m.r * 0.3, m.x, m.y, m.r * 2.1);
+  halo.addColorStop(0, "rgba(255,150,50,.35)");
+  halo.addColorStop(1, "rgba(255,90,20,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 2.1, 0, 6.28); ctx.fill();
+  glowOff(ctx);
 
-  // rock
+  // rock — เงาหลักด้านล่างทำให้ก้อนหินหลุดจากพื้นหลัง (ตัดกับแสงด้านบน)
   const rock = ctx.createRadialGradient(m.x - m.r * 0.3, m.y - m.r * 0.3, m.r * 0.2, m.x, m.y, m.r);
   rock.addColorStop(0, "#8a5a3a");
   rock.addColorStop(1, "#4a2c1c");
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.6)";
+  ctx.shadowBlur = m.r * 0.7;
+  ctx.shadowOffsetY = m.r * 0.18;
   ctx.fillStyle = rock;
   ctx.beginPath();
   const n = m.verts.length;
@@ -1510,25 +1573,32 @@ function drawMeteor(m) {
     ctx.arc(m.x + Math.cos(a) * m.r * 0.5, m.y + Math.sin(a) * m.r * 0.5, m.r * 0.16, 0, 6.28);
     ctx.fill();
   }
-  // pinyin label
+  ctx.restore(); // ปิดเงาของก้อนหิน ก่อนวาดตัวอักษร
+  // pinyin label — ตัวอักษรมีเงามืด+เส้นขอบดำ อ่านชัดบนพื้นหลังที่วุ่นวาย
   ctx.font = `700 ${Math.max(15, m.r * 0.52)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  textShadowOn(ctx, 5);
   ctx.lineWidth = 4;
   ctx.strokeStyle = "rgba(0,0,0,.85)";
   ctx.strokeText(m.word[1], m.x, m.y);
   ctx.fillStyle = "#ffe9b0";
   ctx.fillText(m.word[1], m.x, m.y);
+  textShadowOff(ctx);
 }
 
 function drawMissileBody() {
-  // engine flame
+  // engine flame — แสงบวก
   const fl = 6 + Math.random() * 5;
+  glowOn(ctx);
   const fg = ctx.createLinearGradient(0, 6, 0, 6 + fl + 4);
   fg.addColorStop(0, "rgba(255,220,120,.95)");
   fg.addColorStop(1, "rgba(255,90,20,0)");
   ctx.fillStyle = fg;
   ctx.beginPath(); ctx.moveTo(-2.5, 6); ctx.lineTo(0, 6 + fl); ctx.lineTo(2.5, 6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,210,140,.45)";
+  ctx.beginPath(); ctx.arc(0, 6 + fl * 0.3, fl * 0.55, 0, 6.28); ctx.fill();
+  glowOff(ctx);
   // body
   ctx.fillStyle = "#e8ecf5";
   ctx.beginPath();
@@ -1600,12 +1670,16 @@ function drawRings(dt) {
     g.age += dt;
     const t = g.age / g.life;
     if (t >= 1) { rings.splice(i, 1); continue; }
-    ctx.globalAlpha = 1 - t;
+    glowOn(ctx, 1 - t);
     ctx.strokeStyle = g.color;
     ctx.lineWidth = Math.max(1, 6 * (1 - t));
+    // วงแหวน 2 ชั้น: วงหลัก + วงจางด้านนอก ให้ดูเป็นคลื่นแสง
     ctx.beginPath(); ctx.arc(g.x, g.y, g.r + (g.max - g.r) * t, 0, 6.28); ctx.stroke();
+    ctx.globalAlpha = (1 - t) * 0.5;
+    ctx.lineWidth = Math.max(1, 2 * (1 - t));
+    ctx.beginPath(); ctx.arc(g.x, g.y, (g.r + (g.max - g.r) * t) * 0.72, 0, 6.28); ctx.stroke();
   }
-  ctx.globalAlpha = 1;
+  glowOff(ctx);
 }
 
 function drawFloaters(dt) {
@@ -1617,8 +1691,10 @@ function drawFloaters(dt) {
     const t = f.age / f.life;
     if (t >= 1) { floaters.splice(i, 1); continue; }
     ctx.globalAlpha = 1 - t;
+    textShadowOn(ctx, 6);           // คะแนนที่ลอยขึ้นมีเงา อ่านชัดทุกพื้นหลัง
     ctx.fillStyle = f.color;
     ctx.fillText(f.text, f.x, f.y - t * 50);
+    textShadowOff(ctx);
   }
   ctx.globalAlpha = 1;
 }
@@ -1630,11 +1706,17 @@ function drawParticles(dt) {
     if (p.age >= p.life) { particles.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt;
     p.vy += 200 * dt;
-    ctx.globalAlpha = 1 - p.age / p.life;
+    const a = 1 - p.age / p.life;
+    // ประกายไฟ: วาดด้วยแสงบวก ให้ซ้อนทับกันแล้วสว่างวาบเหมือนประกายจริง
+    glowOn(ctx, a);
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill();
+    // แกนสว่างจางตรงกลาง
+    ctx.globalAlpha = a * 0.6;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.6, p.r * 0.45), 0, 6.28); ctx.fill();
+    glowOff(ctx);
   }
-  ctx.globalAlpha = 1;
 }
 
 /* ================= Loop ================= */
@@ -1672,6 +1754,7 @@ function loop(t) {
   drawMissiles(paused ? 0 : dt);
   drawParticles(paused ? 0 : dt);
   drawRings(paused ? 0 : dt);
+  bloom(canvas, ctx, W, H);   // Bloom ปลอม: ย่อ→เบลอ→ทับแบบบวก (สะสมทุก "lighter" ให้เป็นแสงฟุ้ง)
   drawFloaters(paused ? 0 : dt);
   ctx.restore();
 
@@ -2106,13 +2189,25 @@ function zDrawPolice(c) {
   c.fillStyle = "rgba(0,0,0,0.45)";
   c.beginPath(); c.ellipse(x, y + 2, 26, 6, 0, 0, 6.28); c.fill();
   c.translate(x, y);
+  // rim light ด้านหลังตัว ให้ silhouette ตำรวจหลุดจากฉากหลัง
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.fillStyle = "rgba(120,170,255,.16)";
+  zRoundRect(c, -16, -86, 32, 44, 8);
+  c.beginPath(); c.arc(0, -98, 13.6, 0, 6.28); c.fill();
+  c.restore();
   c.lineCap = "round";
-  // legs (with shading)
+  // legs (with shading) — เงาใต้ขาให้ตัวอิงพื้น ไม่ลอย
+  c.save();
+  c.shadowColor = "rgba(0,0,0,.55)";
+  c.shadowBlur = 10;
+  c.shadowOffsetY = 2;
   const lg = c.createLinearGradient(-8, -46, -8, -5);
   lg.addColorStop(0, "#2a3a8b"); lg.addColorStop(1, "#141d52");
   c.strokeStyle = lg; c.lineWidth = 9;
   c.beginPath(); c.moveTo(-4, -46); c.lineTo(-4 + swing * 12, -5); c.moveTo(4, -46); c.lineTo(4 - swing * 12, -5); c.stroke();
   c.fillStyle = "#0a0a0a"; c.fillRect(-4 + swing * 12 - 7, -6, 16, 6); c.fillRect(4 - swing * 12 - 7, -6, 16, 6);
+  c.restore();
   // back arm
   c.strokeStyle = "#2a45b8"; c.lineWidth = 8;
   c.beginPath(); c.moveTo(-8, -76); c.lineTo(-16, -52); c.stroke();
@@ -2216,6 +2311,12 @@ function zDrawZombie(c, z) {
   c.scale(z.scale, z.scale);
   const bob = Math.sin(z.phase) * 3, swing = Math.sin(z.phase);
   c.lineCap = "round";
+  // เงาหลักด้านหลังตัว (fallback ให้ silhouette หลุดจากพื้นหลังถ้าพื้นหลังสว่าง)
+  c.save();
+  c.shadowColor = "rgba(0,0,0,.55)"; c.shadowBlur = 14;
+  c.fillStyle = "rgba(0,0,0,.01)";
+  zRoundRect(c, -15, -82 + bob, 30, 40, 6);
+  c.restore();
   // legs (shaded)
   const lg = c.createLinearGradient(0, -44, 0, -5);
   lg.addColorStop(0, "#4a6a36"); lg.addColorStop(1, "#2a401c");
@@ -2244,6 +2345,13 @@ function zDrawZombie(c, z) {
   const hg = c.createRadialGradient(-3, -98 + bob, 2, 0, -96 + bob, 15);
   hg.addColorStop(0, z.skin); hg.addColorStop(1, z.skinDark);
   c.fillStyle = hg; c.beginPath(); c.arc(0, -96 + bob, 14, 0, 6.28); c.fill();
+  // rim light: ขอบเรืองแสงด้านซ้าย (เหมือนแสงจันทร์ส่องข้างหลัง) ให้หัวหลุดจากฉากหลัง
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.strokeStyle = "rgba(150,235,150,.5)";
+  c.lineWidth = 2;
+  c.beginPath(); c.arc(0, -96 + bob, 13.2, Math.PI * 0.6, Math.PI * 1.75); c.stroke();
+  c.restore();
   // messy hair
   c.fillStyle = "#2d4a1c"; c.fillRect(-12, -111 + bob, 20, 6);
   c.strokeStyle = "#2d4a1c"; c.lineWidth = 2;
@@ -2271,8 +2379,17 @@ function zDrawZombie(c, z) {
     zRoundRect(c, -bw / 2, by, bw, bh, 10);
     c.beginPath(); c.moveTo(-6, by + bh - 1); c.lineTo(6, by + bh - 1); c.lineTo(0, by + bh + 7); c.fill();
     c.shadowBlur = 0; c.shadowOffsetY = 0;
+    textShadowOn(c, 0, "transparent");
     c.fillStyle = "#1a1a1a"; c.textAlign = "center"; c.textBaseline = "middle";
     c.fillText(text, 0, by + bh / 2 + 1);
+    // ขอบตัวอักษรเรืองแสง (rim light) จากด้านบน ให้ตัวอักษรดูมีมิติ ไม่แบนติดบับเบิล
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    c.strokeStyle = "rgba(140,200,255,.35)";
+    c.lineWidth = 1.2;
+    c.strokeText(text, 0, by + bh / 2);
+    c.restore();
+    textShadowOff(c);
   }
   c.restore();
 }
@@ -2293,6 +2410,7 @@ function zDraw() {
     const col = b.color || "#ffe66b";
     const style = b.style || "tracer";
     c.globalAlpha = 0.9;
+    glowOn(c);   // หัวกระสุน/แสง trail เป็นแสงบวก ให้ดูเป็นกระสุนเรืองแสง
     if (style === "arrow") {
       c.strokeStyle = col; c.lineWidth = 2;
       c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 80), b.y); c.lineTo(b.x, b.y); c.stroke();
@@ -2321,6 +2439,7 @@ function zDraw() {
       c.beginPath(); c.moveTo(Math.max(tip.x, b.x - 60), b.y); c.lineTo(b.x, b.y); c.stroke();
       c.globalAlpha = 0.9;
     }
+    glowOff(c);
   }
   c.globalAlpha = 1;
   // particles (smoke uses radial gradient, others solid)
@@ -2337,11 +2456,14 @@ function zDraw() {
     }
   }
   c.globalAlpha = 1;
+  bloom(canvas, c, ZW, ZH);   // Bloom ปลอม: ปากกระบอก/ระเบิด/rocket trail จะฟุ้งเป็นแสง
   c.font = "800 22px 'Noto Sans Thai', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
   for (const f of zb.floaters) {
     c.globalAlpha = 1 - f.age / f.life;
+    textShadowOn(c, 6);
     c.fillStyle = "#ffd76a";
     c.fillText(f.text, f.x, f.y);
+    textShadowOff(c);
   }
   c.globalAlpha = 1;
   c.restore();

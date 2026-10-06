@@ -183,12 +183,17 @@ html, body {
   gap: 12px;
   width: min(720px, 94vw);
 }
+/* การ์ดแบบ "กระจกฝ้า": พื้นหลังโปร่งแสงกึ่งเบลอ + ไฮไลต์ด้านบน + เงาหนุนด้านล่าง
+   (ก่อนหน้านี้เป็นพื้นทึบแบนๆ — ตอนนี้เห็น "ชั้น" ของพื้นหลังทะลุผ่าน) */
 .card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
-  border: 1px solid var(--line-1);
-  border-radius: var(--r-lg);
+  /* การ์ดแบบกระจกฝ้า (สไตล์ของคุณ): พื้นหลังโปร่งแสงกึ่งเบลอ + ไฮไลต์ด้านบน + เงาหนุนด้านล่าง */
+  background: linear-gradient(180deg, rgba(43, 54, 108, .62), rgba(18, 24, 56, .72));
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  backdrop-filter: blur(10px) saturate(1.25);
+  border: 1px solid rgba(122, 144, 240, .42);
+  border-radius: 18px;
   padding: 18px 12px;
   color: var(--fg);
   text-align: center;
@@ -198,9 +203,8 @@ html, body {
   align-items: center;
   gap: 8px;
   touch-action: manipulation;
-  box-shadow: var(--sh-2), var(--hi-top);
-  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast),
-              box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .14);
+  transition: border-color .15s, box-shadow .18s, transform .15s;
   animation: cardIn .5s var(--ease-spring) backwards;
 }
 /* การ์ดโผล่ทีละใบแบบ stagger — ใช้ nth-child จึงไม่ต้องแก้ JS/HTML */
@@ -217,32 +221,30 @@ html, body {
 .card:nth-child(11) { animation-delay: 400ms; }
 .card:nth-child(12) { animation-delay: 440ms; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
-/* ไฮไลต์ด้านบนการ์ด ให้ดูมีมิติแบบกระจก */
-.card::after {
+/* แสงสะท้อนด้านบน (เหมือนขอบกระจกส่องแสง) */
+.card::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 46%;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 74% at 50% -18%, rgba(255, 255, 255, .17), rgba(255, 255, 255, 0) 62%);
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .07), transparent);
 }
-.card > * { position: relative; z-index: 1; }
+.card > * { position: relative; } /* ให้เนื้อหาลอยเหนือชั้นแสงสะท้อน */
 .card:not(.locked):active { transform: scale(.97); }
+.card:hover:not(.locked) { border-color: #7f8ef7; box-shadow: 0 12px 30px rgba(0, 0, 0, .5), 0 0 20px rgba(106, 122, 240, .35), inset 0 1px 0 rgba(255, 255, 255, .18); }
+/* ยกการ์ดขึ้นเล็กน้อยเฉพาะอุปกรณ์ที่มีเมาส์จริง — จอสัมผัสจะไม่เกิด hover ค้าง */
 @media (hover: hover) {
-  .card:hover:not(.locked) {
-    border-color: var(--line-2);
-    transform: translateY(-2px);
-    box-shadow: var(--sh-2), var(--hi-top), var(--sh-glow-cold);
-  }
+  .card:hover:not(.locked) { transform: translateY(-2px); }
 }
 .card.selected {
-  border-color: var(--accent-warm-3);
-  box-shadow: var(--sh-2), var(--hi-top), 0 0 18px rgba(255, 170, 40, .5);
-  background: linear-gradient(180deg, var(--surface-hi), rgba(24, 31, 69, .82));
+  border-color: rgba(255, 196, 107, .85);
+  box-shadow: 0 0 22px rgba(255, 170, 40, .5), 0 10px 26px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .18);
+  background: linear-gradient(180deg, rgba(70, 79, 150, .68), rgba(28, 35, 78, .78));
 }
-.card-icon { font-size: clamp(36px, 10vw, 52px); filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .45)); }
-.card-title { font-size: clamp(16px, 4.5vw, 21px); font-weight: 800; color: var(--accent); }
-.card-desc { font-size: clamp(12px, 3.4vw, 14px); color: var(--fg-mute); line-height: 1.65; }
+.card-icon { font-size: clamp(36px, 10vw, 52px); filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .5)); }
+.card-title { font-size: clamp(16px, 4.5vw, 21px); font-weight: 800; color: #ffd76a; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
+.card-desc { font-size: clamp(12px, 3.4vw, 14px); color: #a9b3e0; line-height: 1.6; }
 .card.locked { opacity: .45; cursor: default; }
 
 .setup {
@@ -309,8 +311,18 @@ html, body {
   align-items: flex-start;
   pointer-events: none;
 }
-#hudTop, .hud-top { display: flex; flex-direction: column; gap: 2px; }
-#score, .hud-score { font-size: clamp(22px, 6vw, 34px); font-weight: 800; color: #ffd76a; text-shadow: 0 0 12px rgba(255,190,0,.7); }
+#hudTop, .hud-top {
+  display: flex; flex-direction: column; gap: 2px;
+  /* แผ่นกระจกฝ้าโปร่งๆ ใต้ตัวเลข — บังข้อความเกมที่อยู่ข้างหลังพอให้อ่านออก */
+  padding: 6px 14px 7px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(19, 26, 61, .52), rgba(19, 26, 61, .28));
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  border: 1px solid rgba(122, 144, 240, .3);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+#score, .hud-score { font-size: clamp(22px, 6vw, 34px); font-weight: 800; color: #ffd76a; text-shadow: 0 0 12px rgba(255,190,0,.7), 0 2px 6px rgba(0,0,0,.6); }
 #lives { font-size: clamp(15px, 4vw, 22px); letter-spacing: 3px; }
 .hud-sub { font-size: clamp(15px, 4vw, 22px); color: #9dff9d; }
 #zWeapon { color: #ffd76a; font-size: clamp(14px, 3.5vw, 20px); text-shadow: 0 0 8px rgba(255,190,0,.5); }
@@ -318,7 +330,10 @@ html, body {
 .icon-btn {
   width: 44px; height: 44px;
   font-size: 20px;
-  border: 1px solid #3d4a9e;
+  background: rgba(19, 26, 61, .55);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  border: 1px solid rgba(122, 144, 240, .42);
   border-radius: 12px;
   background: rgba(19, 26, 61, .85);
   cursor: pointer;
@@ -354,8 +369,10 @@ html, body {
   bottom: calc(clamp(180px, 26vh, 260px) + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) scale(.8);
-  background: rgba(8, 12, 34, .94);
-  border: 2px solid #6a7af0;
+  background: rgba(12, 18, 44, .72);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid rgba(122, 144, 240, .5);
   border-radius: 16px;
   padding: 12px 24px;
   font-size: clamp(22px, 6.5vw, 34px);
@@ -369,7 +386,7 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   z-index: 5;
-  box-shadow: 0 0 24px rgba(106, 122, 240, .5);
+  box-shadow: 0 0 24px rgba(106, 122, 240, .45), 0 12px 30px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .12);
 }
 #toast.show, .toast.show { transform: translateX(-50%) scale(1); }
 #toast .toast-zh, .toast .toast-zh { color: #ffd76a; }
@@ -393,11 +410,14 @@ html, body {
   font-size: clamp(20px, 5.5vw, 30px);
   font-weight: 800;
   color: #fff;
-  background: rgba(19, 26, 61, .85);
-  border: 1px solid #3d4a9e;
+  background: rgba(19, 26, 61, .6);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  border: 1px solid rgba(122, 144, 240, .4);
   border-radius: 12px;
   padding: 6px 14px;
-  text-shadow: 0 0 10px rgba(143, 211, 255, .6);
+  text-shadow: 0 0 10px rgba(143, 211, 255, .6), 0 2px 6px rgba(0, 0, 0, .6);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .1);
 }
 #ztoast {
   bottom: auto;
@@ -449,17 +469,25 @@ html, body {
   padding-top: calc(14px + env(safe-area-inset-top));
   gap: 10px;
 }
+/* แถบ HUD ของโหมดคำถาม — เป็นแผ่นกระจกฝ้าลอยเหนือฉากหลัง */
 .qhud {
   width: min(680px, 94vw);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 7px 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(21, 29, 68, .6), rgba(13, 18, 46, .38));
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  border: 1px solid rgba(122, 144, 240, .3);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .38), inset 0 1px 0 rgba(255, 255, 255, .1);
 }
-#quizScore, #sentScore, #fillScore { font-size: clamp(24px, 6.5vw, 36px); font-weight: 800; color: #ffd76a; }
+#quizScore, #sentScore, #fillScore { font-size: clamp(24px, 6.5vw, 36px); font-weight: 800; color: #ffd76a; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
 .quiz-btns { display: flex; gap: 8px; }
 .qhud-side { display: flex; align-items: baseline; gap: 10px; }
 /* เปอร์เซ็นความก้าวหน้าของเซสชัน — จำนวนคำ/ประโยคที่ทำแล้วเทียบกับทั้งกองของระดับ */
-.prog-tag { font-size: clamp(13px, 3.6vw, 16px); font-weight: 700; color: #8fd3ff; white-space: nowrap; }
+.prog-tag { font-size: clamp(13px, 3.6vw, 16px); font-weight: 700; color: #8fd3ff; white-space: nowrap; text-shadow: 0 1px 5px rgba(0,0,0,.6); }
 #quizLives { font-size: clamp(16px, 4.5vw, 24px); letter-spacing: 3px; }
 
 #quizWord {
@@ -1183,13 +1211,16 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  background: #101736;
-  border: 1px solid #3d4a9e;
+  background: linear-gradient(180deg, rgba(28, 37, 82, .72), rgba(13, 18, 42, .82));
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(122, 144, 240, .45);
   border-radius: 20px;
   padding: 26px 30px;
   text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .12);
 }
-.final-score { font-size: clamp(30px, 9vw, 44px); font-weight: 800; color: #ffd76a; }
+.final-score { font-size: clamp(30px, 9vw, 44px); font-weight: 800; color: #ffd76a; text-shadow: 0 0 20px rgba(255, 190, 0, .5), 0 2px 8px rgba(0,0,0,.6); }
 .new-best { color: #58ff88; font-weight: 700; min-height: 1.2em; }
 
 .bomb-card-icon { border-radius: 50%; background: #263044; border: 3px solid #ffb25a; width: 72px; height: 72px; line-height: 66px; color: #fff4cd; }
