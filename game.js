@@ -683,6 +683,9 @@ function startGame(level) {
 function switchScreen(el) {
   [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
+  // เลเยอร์ FX ของโหมดระเบิดเป็น fixed เต็มจอ — ซ่อนไว้เสมอถ้าไม่ได้อยู่หน้าเกมระเบิด
+  const bombFxEl = $("bombFx");
+  if (bombFxEl) bombFxEl.style.display = el === $("bomb") ? "" : "none";
 }
 
 function endGame() {
@@ -2594,8 +2597,8 @@ function startMatchingGame(level, mode = quizMode, diff = difficulty, duration =
   };
   $("matching").classList.remove("match-paused");
   $("matchPauseOverlay").classList.remove("show");
-  const info = $("matchInfo");
-  if (info) info.textContent = `HSK ${level} • ${MATCH_DIFF[diff].label} • จีน–${matchModeLabel(mode)} • ${matchTimeLabel(duration)}`;
+  const mark = $("matchProg");
+  if (mark) mark.textContent = `HSK ${level} • ${MATCH_DIFF[diff].label} • จีน–${matchModeLabel(mode)} • ${matchTimeLabel(duration)}`;
   $("matchMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("matchMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("matching"));
@@ -2703,9 +2706,6 @@ function updateMatchingHUD() {
   $("matchTimer").textContent = `${s.duration ? "เหลือ" : "เล่นไป"} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   $("matchTimer").classList.toggle("urgent", s.duration > 0 && seconds <= 10);
   $("matchProg").textContent = progPct(s.done.size, s.words.length);
-  const solved = s.deck.filter((c) => c.matched).length / 2;
-  const progress = $("matchProgress");
-  if (progress) progress.textContent = `ชุดที่ ${s.rounds + 1} • ${solved}/${s.deck.length / 2} คู่ • จับคู่ทั้งหมด ${s.pairs} คู่ • ลอง ${s.attempts} ครั้ง`;
 }
 
 function advanceMatching(now) {
@@ -2915,6 +2915,213 @@ const bombTier = (s) => Math.floor((Math.floor(s.elapsed / 45) + Math.floor(s.de
 const bombFallSeconds = (s) => Math.max(3, (12 - bombTier(s) * 0.65) * (BOMB_DIFF[s.difficulty]?.fallMul ?? 1));
 const bombWriteSeconds = (s, strokes) => Math.max(8, (8 + strokes * 2) * Math.max(0.4, 1 - bombTier(s) * 0.04) * (BOMB_DIFF[s.difficulty]?.writeMul ?? 1));
 
+/* ---- ธีมท้องฟ้าตามระดับความเร็ว (bombTier): กลางวัน → พลบค่ำ → พระอาทิตย์ตก → กลางคืน ---- */
+const BOMB_SKY = [
+  { sky1: "#2f6d9e", sky2: "#79aecb", sky3: "#d8c8a0", far: "#3f6485", near: "#2d4a5d", night: false },
+  { sky1: "#2a4f78", sky2: "#5684a2", sky3: "#bbac86", far: "#375673", near: "#28404f", night: false },
+  { sky1: "#6b3f63", sky2: "#b9705f", sky3: "#edb069", far: "#4e3459", near: "#332338", night: false },
+  { sky1: "#3b2a56", sky2: "#7b3f63", sky3: "#c96a4a", far: "#332a4d", near: "#221b34", night: true },
+  { sky1: "#131a3a", sky2: "#242f5a", sky3: "#463a58", far: "#1b2240", near: "#11162a", night: true },
+];
+const BOMB_FRAME_PERIMETER = 100;   // pathLength ของ #bombFrameFill (เส้นรอบกรอบเขียน)
+const bombMotionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+const bombQuiet = () => !!(bombMotionQuery && bombMotionQuery.matches);
+
+/* ================= FX เต็มจอ (particle + แฟลช + สั่นจอ) =================
+   canvas ใบเดียวลอยเต็มจอ (position: fixed) เพื่อให้เอฟเฟกต์ระเบิดเล่นต่อได้
+   แม้ฉากหลังจะถูกซ่อนตอนสลับไปหน้าผลลัพธ์ — วาดเฉพาะเมื่อมีอนุภาคจริง */
+const bombFx = { canvas: null, ctx: null, parts: [], w: 0, h: 0, fuseAcc: 0 };
+function bombFxInit() {
+  if (bombFx.canvas) return;
+  bombFx.canvas = $("bombFx");
+  bombFx.ctx = bombFx.canvas.getContext("2d");
+}
+function bombFxResize() {
+  bombFxInit();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  bombFx.w = w; bombFx.h = h;
+  bombFx.canvas.width = Math.floor(w * dpr);
+  bombFx.canvas.height = Math.floor(h * dpr);
+  bombFx.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bombFx.ctx.clearRect(0, 0, w, h);
+}
+function bombFxClear() {
+  bombFx.parts.length = 0;
+  bombFx.fuseAcc = 0;
+  if (bombFx.ctx) bombFx.ctx.clearRect(0, 0, bombFx.w, bombFx.h);
+}
+const bombFxAdd = (p) => { if (bombFx.parts.length < 260) bombFx.parts.push(p); };
+function bombFxUpdate(dt) {
+  if (!bombFx.ctx) return;
+  const c = bombFx.ctx;
+  c.clearRect(0, 0, bombFx.w, bombFx.h);
+  const ps = bombFx.parts;
+  if (!ps.length) return;
+  for (let i = ps.length - 1; i >= 0; i--) {
+    const p = ps[i];
+    p.age += dt;
+    if (p.age >= p.life) { ps.splice(i, 1); continue; }
+    const drag = p.drag ?? 0.99;
+    p.vx *= drag;
+    p.vy = p.vy * drag + (p.grav || 0) * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    const t = 1 - p.age / p.life;
+    if (p.kind === "ring") {
+      c.save(); c.globalCompositeOperation = "lighter"; c.globalAlpha = t * 0.8;
+      c.strokeStyle = p.color; c.lineWidth = 2 + 9 * t;
+      c.beginPath(); c.arc(p.x, p.y, p.r * (1 + p.age * 7), 0, Math.PI * 2); c.stroke();
+      c.restore(); continue;
+    }
+    if (p.kind === "smoke") {
+      const rr = p.r * (1 + p.age * 1.8);
+      const g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr);
+      g.addColorStop(0, p.color); g.addColorStop(1, "rgba(0,0,0,0)");
+      c.save(); c.globalAlpha = t * 0.4; c.fillStyle = g;
+      c.beginPath(); c.arc(p.x, p.y, rr, 0, Math.PI * 2); c.fill();
+      c.restore(); continue;
+    }
+    c.save(); c.globalCompositeOperation = "lighter"; c.globalAlpha = Math.min(1, t * 1.5);
+    c.fillStyle = p.color;
+    if (p.kind === "confetti") {
+      c.translate(p.x, p.y); c.rotate(p.age * p.spin);
+      c.fillRect(-p.r, -p.r * 0.55, p.r * 2, p.r * 1.1);
+    } else {
+      c.beginPath(); c.arc(p.x, p.y, p.r * (0.4 + t * 0.9), 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+}
+const BOMB_SFX_COLORS = ["#fff3c8", "#ffc46b", "#ff9d3c", "#ff5722"];
+const BOMB_OK_COLORS = ["#9dffbc", "#3ce07f", "#8fd3ff", "#ffd76a", "#ffffff"];
+function bombExplode(x, y) {
+  if (bombQuiet()) return;
+  bombFxResize();
+  bombFxAdd({ kind: "ring", x, y, vx: 0, vy: 0, r: 18, life: 0.5, age: 0, color: "#ffd08a" });
+  for (let i = 0; i < 46; i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(90, 420);
+    bombFxAdd({ kind: "spark", x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, r: rand(2, 5), life: rand(0.35, 0.8), age: 0, color: pick(BOMB_SFX_COLORS), grav: 520, drag: 0.965 });
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(20, 90);
+    bombFxAdd({ kind: "smoke", x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, r: rand(18, 40), life: rand(0.7, 1.3), age: 0, color: "rgba(72,84,104,.85)", drag: 0.95 });
+  }
+  bombShakeScreen();
+  bombFlash("rgba(255,236,200,.9)");
+}
+function bombCelebrate(x, y) {
+  if (bombQuiet()) return;
+  bombFxResize();
+  for (let i = 0; i < 26; i++) {
+    const a = rand(Math.PI * 0.75, Math.PI * 1.25), sp = rand(140, 340);
+    bombFxAdd({ kind: "confetti", x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rand(3, 6), life: rand(0.7, 1.1), age: 0, color: pick(BOMB_OK_COLORS), grav: 620, drag: 0.99, spin: rand(-8, 8) });
+  }
+}
+function bombFuseTrail(x, y, dt) {
+  bombFx.fuseAcc += dt;
+  const every = 0.055;
+  const n = Math.min(3, Math.floor(bombFx.fuseAcc / every));
+  bombFx.fuseAcc -= n * every;
+  for (let i = 0; i < n; i++) {
+    bombFxAdd({ kind: "spark", x: x + rand(-4, 4), y: y + rand(-3, 2), vx: rand(-26, 26), vy: rand(-42, -8), r: rand(1.4, 2.6), life: rand(0.25, 0.5), age: 0, color: pick(BOMB_SFX_COLORS), grav: 90, drag: 0.94 });
+  }
+}
+let bombShakeTimer = 0, bombFlashTimer = 0;
+function bombShakeScreen() {
+  const el = $("bomb");
+  el.classList.remove("bomb-shake");
+  void el.offsetWidth;
+  el.classList.add("bomb-shake");
+  clearTimeout(bombShakeTimer);
+  bombShakeTimer = setTimeout(() => el.classList.remove("bomb-shake"), 560);
+}
+function bombFlash(color) {
+  const el = $("bombFlash");
+  el.style.setProperty("--flash-color", color);
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+  clearTimeout(bombFlashTimer);
+  bombFlashTimer = setTimeout(() => el.classList.remove("show"), 640);
+}
+// ตำแหน่งปะทุ (พิกัด viewport) — ใช้ตัวระเบิดจริงถ้ายังมองเห็น ไม่งั้นใช้ตำแหน่งที่จำไว้
+function bombBlastPoint() {
+  const r = $("bombBody").getBoundingClientRect();
+  if (bombGame?.phase === "falling" && r.width) return { x: r.left + r.width / 2, y: r.top + Math.min(24, r.height * 0.25) };
+  const s = bombGame;
+  if (s && s.lastBombPos) return s.lastBombPos;
+  return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+}
+// ประกายเล็ก ๆ ตอนเขียนขีดถูก — วางที่ปลายขีดจริง
+// ใช้ getScreenCTM() ของกลุ่มเส้นใน SVG ของ HanziWriter เพื่อแปลงพิกัดข้อมูล → px
+// (HanziWriter พลิกแกน Y: scale(s, -s) จึงคำนวณเองตรง ๆ ไม่ได้)
+function bombSparkPoint(char, strokeNum) {
+  const median = bombCharData.get(char)?.medians?.[strokeNum];
+  if (!median || !median.length) return null;
+  const svg = document.querySelector("#bombWriter svg");
+  const group = svg && svg.querySelector("g[transform]");
+  if (!group || !group.getScreenCTM) return null;
+  const ctm = group.getScreenCTM();
+  const p = median[median.length - 1];
+  const frame = $("bombWriterFrame"), writer = $("bombWriter");
+  const fr = frame.getBoundingClientRect(), wr = writer.getBoundingClientRect();
+  const x = ctm.a * p[0] + ctm.c * p[1] + ctm.e - fr.left;
+  const y = ctm.b * p[0] + ctm.d * p[1] + ctm.f - fr.top;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    x: Math.max(wr.left - fr.left + 6, Math.min(wr.right - fr.left - 6, x)),
+    y: Math.max(wr.top - fr.top + 6, Math.min(wr.bottom - fr.top - 6, y)),
+  };
+}
+function bombWriterSpark(char, strokeNum) {
+  if (bombQuiet()) return;
+  const at = bombSparkPoint(char, strokeNum);
+  if (!at) return;
+  const frame = $("bombWriterFrame");
+  for (let i = 0; i < 4; i++) {
+    const dot = document.createElement("span");
+    dot.className = "bomb-spark";
+    dot.style.left = `${at.x}px`;
+    dot.style.top = `${at.y}px`;
+    frame.appendChild(dot);
+    if (dot.animate) {
+      dot.animate(
+        [{ opacity: 1, transform: "translate(0, 0) scale(1)" }, { opacity: 0, transform: `translate(${rand(-18, 18)}px, ${rand(-24, 4)}px) scale(.2)` }],
+        { duration: rand(320, 540), easing: "cubic-bezier(.2,.7,.3,1)" }
+      );
+    }
+    setTimeout(() => dot.remove(), 720);
+  }
+}
+// ธีมท้องฟ้า + ป้าย "ระดับใหม่"
+function applyBombSky(tier) {
+  const s = bombGame;
+  const t = Math.max(0, Math.min(BOMB_SKY.length - 1, tier));
+  if (s && s.skyTier === t) return;
+  const sky = BOMB_SKY[t], arena = $("bombArena");
+  arena.style.setProperty("--sky-1", sky.sky1);
+  arena.style.setProperty("--sky-2", sky.sky2);
+  arena.style.setProperty("--sky-3", sky.sky3);
+  arena.style.setProperty("--hills-far", sky.far);
+  arena.style.setProperty("--hills-near", sky.near);
+  arena.classList.toggle("bomb-night", sky.night);
+  if (s) {
+    const prev = s.skyTier;
+    s.skyTier = t;
+    if (prev !== undefined && prev >= 0 && t > prev) showBombTierBanner(t);
+  }
+}
+function showBombTierBanner(tier) {
+  const el = $("bombTierBanner");
+  el.textContent = `⚡ ระดับ ${tier + 1} • ระเบิดเร็วขึ้น!`;
+  el.hidden = false;
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+  clearTimeout(showBombTierBanner.t);
+  showBombTierBanner.t = setTimeout(() => { el.classList.remove("show"); el.hidden = true; }, 1900);
+}
+
 function bombVocabulary(level) {
   const unique = new Map();
   for (const entry of VOCAB[String(level)] || []) {
@@ -2954,10 +3161,26 @@ function showBombView(view) {
 function updateBombHUD() {
   const s = bombGame;
   if (!s) return;
-  $("bombScore").textContent = `${s.score} คะแนน`;
-  $("bombLives").textContent = `ชีวิต ${s.lives} / 3`;
+  const scoreEl = $("bombScore");
+  scoreEl.textContent = `${s.score} คะแนน`;
+  if (s.hudScore !== undefined && s.score > s.hudScore) {
+    scoreEl.classList.remove("pop");
+    void scoreEl.offsetWidth;
+    scoreEl.classList.add("pop");
+  }
+  s.hudScore = s.score;
+  const livesEl = $("bombLives");
+  livesEl.textContent = `ชีวิต ${s.lives} / 3 ${"💣".repeat(Math.max(0, s.lives))}`;
+  if (s.hudLives !== undefined && s.lives < s.hudLives) {
+    livesEl.classList.remove("lost");
+    void livesEl.offsetWidth;
+    livesEl.classList.add("lost");
+  }
+  s.hudLives = s.lives;
   $("bombPace").textContent = `${BOMB_DIFF[s.difficulty]?.label ?? "ปานกลาง"} • ความเร็ว ${bombTier(s) + 1} • ปลดแล้ว ${s.defused} ลูก`;
   $("bombProg").textContent = progPct(s.done.size, s.words.length);
+  $("bombCombo").textContent = s.perfectStreak >= 2 ? `🔥 เขียนไม่ผิดติดกัน ${s.perfectStreak} ตัว` : "";
+  applyBombSky(bombTier(s));
 }
 
 function startBombGame(level, diff = difficulty) {
@@ -2965,12 +3188,22 @@ function startBombGame(level, diff = difficulty) {
   currentLevel = level;
   lastStarter = () => startBombGame(level, diff);
   const words = bombVocabulary(level);
+  $("bombFx").style.display = "";
   bombGame = { level, difficulty: diff, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
     lives: 3, defused: 0, bonuses: 0, elapsed: 0, charIndex: 0, paused: false,
     frame: 0, lastTime: performance.now(), request: 0, controller: null,
+    perfectStreak: 0, charHadMistake: false, lastBombPos: null, fuseWorld: null, skyTier: -1, hudScore: 0, hudLives: 3,
     done: new Set() };
-  $("bomb").classList.remove("bomb-paused");
+  $("bomb").classList.remove("bomb-paused", "bomb-shake");
   $("bombPauseOverlay").classList.remove("show");
+  $("bombArena").classList.remove("bomb-alarm");
+  $("bombArena").style.setProperty("--bomb-danger", "0");
+  $("bombTierBanner").hidden = true;
+  $("bombTierBanner").classList.remove("show");
+  $("bombCombo").textContent = "";
+  bombFxResize();
+  bombFxClear();
+  $("bombFlash").classList.remove("show");
   $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
   $("bombLevel").textContent = `HSK ${level} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
@@ -2986,6 +3219,7 @@ function startBombGame(level, diff = difficulty) {
 function nextBombWord() {
   const s = bombGame;
   if (!s || s.paused) return;
+  $("bombFlash").classList.remove("show");
   if (!s.deck.length) {
     s.deck = shuffle(s.words.slice());
     if (s.deck.length > 1 && s.deck[s.deck.length - 1][0] === s.lastWord) {
@@ -2999,6 +3233,8 @@ function nextBombWord() {
   s.charIndex = 0;
   s.bonus = false;
   s.pendingComplete = false;
+  $("bombArena").classList.remove("bomb-alarm");
+  $("bombArena").style.setProperty("--bomb-danger", "0");
   prepareBombWord();
 }
 
@@ -3065,9 +3301,20 @@ async function prepareBombWord() {
 function renderBombFall() {
   const s = bombGame;
   if (!s || s.phase !== "falling") return;
-  const distance = Math.max(0, $("bombArena").clientHeight - 48 - 78 - $("bombDrop").offsetHeight);
-  const y = distance * (1 - Math.max(0, s.remaining) / s.fallDuration);
+  const arena = $("bombArena");
+  const distance = Math.max(0, arena.clientHeight - 48 - 78 - $("bombDrop").offsetHeight);
+  const prog = 1 - Math.max(0, s.remaining) / s.fallDuration;
+  const y = distance * prog;
   $("bombDrop").style.transform = `translate(-50%, ${y}px)`;
+  // โซนอันตราย + สัญญาณเตือน: ยิ่งใกล้พื้นยิ่งแดง/สั่น
+  const danger = Math.min(1, Math.max(0, (prog - 0.7) / 0.3));
+  arena.style.setProperty("--bomb-danger", danger.toFixed(2));
+  arena.classList.toggle("bomb-alarm", danger > 0.3);
+  const r = $("bombDrop").getBoundingClientRect();
+  const fp = { x: r.left + r.width / 2, y: r.top + Math.min(24, r.height * 0.25) };
+  s.lastBombPos = fp;
+  const tube = bombFx.canvas.getBoundingClientRect();
+  s.fuseWorld = { x: fp.x - tube.left, y: fp.y - tube.top };
 }
 
 function answerBomb(pinyin = null) {
@@ -3106,8 +3353,14 @@ async function beginBombCharacter() {
     chip.className = `bomb-char${i < index ? " done" : i === index ? " current" : ""}`;
     chip.textContent = char;
     if (i === index) chip.setAttribute("aria-current", "step");
+    chip.addEventListener("click", () => {
+      if (i === index) bombWriter?.animateCharacter?.();
+    });
     $("bombCharList").appendChild(chip);
   });
+  s.charHadMistake = false;
+  $("bombFrameFill").style.strokeDashoffset = BOMB_FRAME_PERIMETER;
+  $("bombFrameFill").classList.remove("urgent");
   if (!bombWriter) {
     bombWriter = new window.HanziWriter("bombWriter", {
       width: 300, height: 300, padding: 16, showCharacter: false, showOutline: false,
@@ -3130,6 +3383,7 @@ async function beginBombCharacter() {
     leniency: 1.4,
     markStrokeCorrectAfterMisses: 4,
     onMistake: (data) => {
+      s.charHadMistake = true;
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
         $("bombStrokeHint").textContent = data.mistakesOnStroke >= BOMB_HINT_AFTER_MISSES
           ? `ดูเส้นสีเขียวสาธิตขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตามทิศทางนั้น • ไม่เสียชีวิต`
@@ -3137,6 +3391,7 @@ async function beginBombCharacter() {
       }
     },
     onCorrectStroke: (data) => {
+      bombWriterSpark(s.chars[index], data.strokeNum);
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
         $("bombStrokeHint").textContent = data.strokesRemaining
           ? `ถูกต้อง! ต่อไปเขียนขีดที่ ${data.strokeNum + 2} • เหลือ ${data.strokesRemaining} ขีด`
@@ -3157,6 +3412,8 @@ function completeBombCharacter() {
   advanceBomb(performance.now());
   if (s.phase !== "writing") return;
   s.pendingComplete = false;
+  if (s.charHadMistake) s.perfectStreak = 0;
+  else s.perfectStreak++;
   if (s.charIndex + 1 === s.chars.length) {
     speakWordHit(s.word);
   } else {
@@ -3176,8 +3433,13 @@ function syncBombOutline() {
 function renderBombTimer() {
   const s = bombGame;
   $("bombWriteTimer").textContent = `${Math.max(0, s.remaining).toFixed(1)} วิ`;
-  $("bombWriteTimer").classList.toggle("urgent", s.remaining <= 5);
+  const urgent = s.remaining <= 5;
+  $("bombWriteTimer").classList.toggle("urgent", urgent);
   $("bombTimeBar").value = Math.max(0, s.remaining) / s.writeDuration;
+  const frac = Math.max(0, Math.min(1, s.remaining / s.writeDuration));
+  const frame = $("bombFrameFill");
+  frame.style.strokeDashoffset = BOMB_FRAME_PERIMETER * (1 - frac);
+  frame.classList.toggle("urgent", urgent);
 }
 
 function resolveBomb(success, reason = "") {
@@ -3193,9 +3455,13 @@ function resolveBomb(success, reason = "") {
     s.done.add(s.word[0]);
     if (s.bonus) s.bonuses++;
     sfx.hit();
+    const fr = $("bombFeedback").getBoundingClientRect();
+    bombCelebrate(fr.width ? fr.left + fr.width / 2 : window.innerWidth / 2, fr.height ? fr.top + 42 : window.innerHeight * 0.3);
   } else {
     s.lives--;
     sfx.bombBlast();
+    const p = bombBlastPoint();
+    bombExplode(p.x, p.y);
   }
   $("bombFeedback").className = `bomb-message ${success ? "success" : "failure"}`;
   $("bombResultTitle").textContent = success ? "ปลดระเบิดสำเร็จ!" : `ระเบิดแล้ว! ${reason}`;
@@ -3219,8 +3485,12 @@ function advanceBomb(now) {
   if (s.paused || !["falling", "writing", "feedback"].includes(s.phase)) return;
   if (s.phase !== "feedback") s.elapsed += dt;
   s.remaining -= dt;
-  if (s.phase === "falling") renderBombFall();
+  if (s.phase === "falling") {
+    renderBombFall();
+    if (!bombQuiet() && s.fuseWorld) bombFuseTrail(s.fuseWorld.x, s.fuseWorld.y, dt);
+  }
   if (s.phase === "writing") renderBombTimer();
+  bombFxUpdate(dt);
   if (s.remaining > 0) return;
   if (s.phase === "feedback") continueBombGame();
   else resolveBomb(false, s.phase === "falling" ? "ตกถึงพื้น" : "เขียนไม่ทันเวลา");
@@ -3276,6 +3546,13 @@ function stopBombGame() {
   pencilSound.stop();
   bombWriter?.cancelQuiz();
   bombGame = null;
+  bombFxClear();
+  $("bombFlash").classList.remove("show");
+  $("bomb").classList.remove("bomb-shake");
+  $("bombArena").classList.remove("bomb-alarm");
+  $("bombArena").style.setProperty("--bomb-danger", "0");
+  $("bombTierBanner").hidden = true;
+  clearTimeout(showBombTierBanner.t);
   music.stop();
   stopSpeech();
 }
@@ -3317,6 +3594,7 @@ document.addEventListener("pointercancel", stopPencilPointer, true);
 window.addEventListener("blur", () => pencilSound.stop());
 new ResizeObserver(resizeBombWriter).observe($("bombWriter"));
 window.addEventListener("resize", renderBombFall);
+window.addEventListener("resize", bombFxResize);
 
 let selectedLevel = null;
 const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต", vocab: "📖 เกมคำศัพท์", sentence: "🧩 เกมเรียงประโยค", zombie: "🧟 เกมยิงซอมบี้", fillblank: "✏️ เกมเติมคำในประโยค" };

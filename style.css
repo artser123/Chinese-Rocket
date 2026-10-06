@@ -1229,24 +1229,93 @@ html, body {
 .bomb-instructions { color: #aebfdf; font-size: 14px; line-height: 1.7; text-align: center; }
 #bomb { padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); justify-content: flex-start; gap: 10px; overflow-y: auto; touch-action: pan-y; background: radial-gradient(ellipse at 50% 0%, #1b3358, #080e24 80%); }
 #bomb [hidden] { display: none !important; }
-#bomb > :not(.pause-overlay) { width: min(800px, 100%); flex-shrink: 0; }
+#bomb > :not(.pause-overlay):not(.bomb-overlay) { width: min(800px, 100%); flex-shrink: 0; }
+/* เลเยอร์ FX เต็มจอ (particle + แฟลช) — ต้องเป็น fixed และไม่ถูกกฎความกว้างด้านบนบีบ */
+.bomb-overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 15; }
+#bombFx { display: block; }
+.bomb-flash { opacity: 0; background: radial-gradient(ellipse at 50% 50%, var(--flash-color, #ffe9c0), transparent 68%); mix-blend-mode: screen; }
+.bomb-flash.show { animation: bombFlash .55s ease-out; }
+@keyframes bombFlash { 0% { opacity: .9; } 100% { opacity: 0; } }
+#bomb.bomb-shake { animation: bombShake .5s cubic-bezier(.36, .07, .19, .97); }
+@keyframes bombShake {
+  10%, 90% { transform: translate(-3px, 1px); }
+  20%, 80% { transform: translate(6px, -2px); }
+  30%, 50%, 70% { transform: translate(-9px, 2px); }
+  40%, 60% { transform: translate(9px, -1px); }
+}
 .bomb-header, .bomb-stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .bomb-header h2 { font-size: clamp(20px, 5vw, 28px); color: #ffd76a; }
 #bombLevel { color: #9cb7d7; font-size: 13px; }
 .bomb-header .match-control { padding: 8px 12px; font-size: 14px; }
-.bomb-stats { border: 1px solid #385578; border-radius: 12px; background: #10203b; padding: 10px 14px; font-size: clamp(14px, 3.8vw, 18px); }
-#bombScore { color: #ffd76a; }
+.bomb-stats { border: 1px solid #385578; border-radius: 12px; background: linear-gradient(180deg, #15294a, #0d1b31); padding: 10px 14px; font-size: clamp(14px, 3.8vw, 18px); box-shadow: var(--hi-top); }
+#bombScore { color: #ffd76a; display: inline-block; }
+#bombScore.pop { animation: bombScorePop .5s var(--ease-spring); }
+@keyframes bombScorePop { 0% { transform: scale(1); } 38% { transform: scale(1.3); text-shadow: 0 0 20px rgba(255, 215, 106, .95); } 100% { transform: scale(1); } }
 #bombLives { color: #ffb7ab; }
+#bombLives.lost { animation: bombLivesLost .55s ease-out; }
+@keyframes bombLivesLost {
+  0%, 100% { transform: none; }
+  20% { transform: translateX(-5px) rotate(-4deg); }
+  45% { transform: translateX(5px) rotate(4deg); }
+  70% { transform: translateX(-3px); }
+}
 #bombPace { color: #96d5ef; font-size: 13px; }
-#bomb .bomb-arena { position: relative; flex: 1 0 380px; min-height: 380px; max-height: 850px; overflow: hidden; border: 1px solid #416082; border-radius: 22px; background: linear-gradient(#294e75, #5684a2 70%, #bbac86); isolation: isolate; }
-.bomb-cloud { position: absolute; width: 140px; height: 24px; border-radius: 50%; background: #cedcea; opacity: .22; box-shadow: 25px -10px 0 6px #cedcea, 65px -4px 0 #cedcea; pointer-events: none; }
-.cloud-one { top: 25%; left: -35px; }
-.cloud-two { top: 52%; right: 20px; transform: scale(.7); }
-.bomb-plane { position: absolute; top: 8px; left: calc(50% - 90px); width: 180px; height: 70px; filter: drop-shadow(0 8px 5px #11233b55); animation: bombPlane 3s ease-in-out infinite alternate; }
+#bombCombo { color: #ffc46b; font-size: 13px; font-weight: 700; }
+#bomb .bomb-arena {
+  --sky-1: #2a4f78; --sky-2: #5684a2; --sky-3: #bbac86;
+  --hills-far: #375673; --hills-near: #28404f;
+  --bomb-danger: 0;
+  position: relative; flex: 1 0 380px; min-height: 380px; max-height: 850px; overflow: hidden;
+  border: 1px solid #416082; border-radius: 22px;
+  background: linear-gradient(var(--sky-1), var(--sky-2) 68%, var(--sky-3));
+  isolation: isolate;
+}
+#bombArena.bomb-alarm { animation: bombAlarm 1.1s ease-in-out infinite; }
+@keyframes bombAlarm {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 90, 60, 0); border-color: #416082; }
+  50% { box-shadow: inset 0 0 70px 0 rgba(255, 90, 60, .38); border-color: #e86a4c; }
+}
+/* --- ฉากหลัง: ดาว / ดวงอาทิตย์-จันทร์ / เนินเขา --- */
+.bomb-scenery { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.bomb-stars {
+  position: absolute; inset: 0; opacity: 0; transition: opacity 1s ease;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.95) 1.2px, transparent 1.9px),
+    radial-gradient(circle, rgba(255,255,255,.7) 1.1px, transparent 1.8px);
+  background-size: 73px 61px, 127px 97px;
+  background-position: 0 0, 34px 18px;
+}
+#bombArena.bomb-night .bomb-stars { opacity: .9; }
+.bomb-sun {
+  position: absolute; top: 13%; right: 11%; width: 54px; height: 54px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff8d8, #ffd76a 55%, #ff9d3c);
+  box-shadow: 0 0 46px 14px rgba(255, 190, 90, .45);
+  transition: background .9s ease, box-shadow .9s ease;
+}
+#bombArena.bomb-night .bomb-sun { background: radial-gradient(circle at 38% 34%, #fdfdff, #cfd8ea 60%, #8fa0bd); box-shadow: 0 0 32px 9px rgba(190, 215, 255, .35); }
+.bomb-hills { position: absolute; left: -4%; right: -4%; bottom: 44px; width: 108%; height: 34%; }
+.hills-far { fill: var(--hills-far); opacity: .82; }
+.hills-near { fill: var(--hills-near); }
+/* --- เมฆ parallax 4 ชั้น --- */
+.bomb-cloud { position: absolute; width: 140px; height: 24px; border-radius: 50%; background: #cedcea; opacity: .22; box-shadow: 25px -10px 0 6px #cedcea, 65px -4px 0 #cedcea; pointer-events: none; animation: bombDrift linear infinite; }
+.cloud-one { top: 22%; left: -35px; animation-duration: 46s; }
+.cloud-two { top: 52%; right: 20px; transform: scale(.7); opacity: .18; animation-duration: 64s; animation-direction: reverse; }
+.cloud-three { top: 34%; left: 30%; transform: scale(.5); opacity: .16; animation-duration: 80s; }
+.cloud-four { top: 64%; left: 6%; transform: scale(.86); opacity: .19; animation-duration: 56s; animation-direction: reverse; }
+@keyframes bombDrift { from { translate: -78px 0; } to { translate: 78px 0; } }
+/* --- เครื่องบิน + ใบพัด + contrail --- */
+.bomb-plane-wrap { position: absolute; top: 8px; left: calc(50% - 100px); width: 200px; height: 70px; filter: drop-shadow(0 8px 5px #11233b55); animation: bombPlane 3s ease-in-out infinite alternate; }
+.bomb-plane { display: block; width: 100%; height: 100%; }
+.bomb-prop { transform-box: fill-box; transform-origin: center; animation: bombProp .16s linear infinite; }
+@keyframes bombProp { to { transform: rotate(360deg); } }
+.bomb-trail { position: absolute; top: 28px; left: -56px; width: 66px; height: 10px; border-radius: 999px; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55)); filter: blur(3px); }
 @keyframes bombPlane { to { transform: translateX(22px) rotate(-3deg); } }
 #bombDrop { position: absolute; top: 78px; left: 50%; width: min(94%, 480px); display: flex; flex-direction: column; align-items: center; will-change: transform; }
-#bombBody { position: relative; width: 190px; min-height: 114px; padding: 22px 12px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 3px solid #9ba9b8; border-radius: 48% 48% 45% 45%; background: radial-gradient(ellipse at 30% 25%, #485c70, #151e2b 70%); color: #fff3c6; box-shadow: inset -7px -9px 14px #0005, 0 8px 15px #15284455; cursor: pointer; touch-action: manipulation; }
+#bombBody { position: relative; width: 190px; min-height: 114px; padding: 22px 12px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 3px solid #9ba9b8; border-radius: 48% 48% 45% 45%; background: radial-gradient(ellipse at 30% 25%, #485c70, #151e2b 70%); color: #fff3c6; box-shadow: inset -7px -9px 14px #0005, 0 8px 15px #15284455; cursor: pointer; touch-action: manipulation; animation: bombWobble 1.7s ease-in-out infinite; }
+@keyframes bombWobble { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
 #bombBody::before { content: ""; position: absolute; top: -15px; width: 30px; height: 16px; border: 3px solid #9ba9b8; background: #243446; border-radius: 4px 4px 0 0; }
+#bombBody::after { content: ""; position: absolute; top: -32px; left: 50%; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle, #fff6c8, #ffb347 55%, #ff5722); box-shadow: 0 0 15px 6px rgba(255, 150, 40, .75); animation: bombSpark .42s ease-in-out infinite alternate; }
+@keyframes bombSpark { from { opacity: .55; transform: scale(.72); } to { opacity: 1; transform: scale(1.25); } }
 #bombWord { font-family: "Noto Sans SC", sans-serif; font-size: clamp(24px, 6.8vw, 34px); font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
 #bombBody small { font: 11px "Noto Sans Thai", sans-serif; color: #c3d4e6; margin-top: 5px; }
 #bombOptions { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding-top: 26px; }
@@ -1255,8 +1324,18 @@ html, body {
 .bomb-option:hover, #bombBody:hover { filter: brightness(1.15); }
 .bomb-option:focus-visible, #bombBody:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
 .bomb-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; border-top: 5px solid #8db178; background: repeating-linear-gradient(115deg, #364d3e 0 25px, #3d5644 25px 50px); text-align: center; color: #deeed6; font-size: 12px; padding-top: 8px; }
+.bomb-ground::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 14px; background: radial-gradient(ellipse at 50% 100%, #ff5a3c, transparent 72%); opacity: calc(var(--bomb-danger) * .9); pointer-events: none; }
 #bombArenaHint { position: absolute; left: 8px; right: 8px; bottom: 62px; text-align: center; color: #fff; font-size: 12px; pointer-events: none; text-shadow: 0 1px 3px #172c40; }
-.bomb-writing { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; border-radius: 20px; border: 1px solid #385578; background: #111f37; }
+.bomb-tier-banner { position: absolute; left: 50%; bottom: 96px; padding: 12px 24px; border-radius: 16px; background: rgba(10, 18, 36, .9); border: 2px solid #ffd76a; color: #ffd76a; font: 800 clamp(17px, 4.6vw, 24px) "Noto Sans Thai", sans-serif; box-shadow: 0 0 40px 8px rgba(255, 190, 90, .4); opacity: 0; pointer-events: none; z-index: 6; transform: translateX(-50%) scale(.8); }
+.bomb-tier-banner.show { animation: bombTierBanner 1.8s var(--ease-out) forwards; }
+@keyframes bombTierBanner {
+  0% { opacity: 0; transform: translateX(-50%) translateY(12px) scale(.68); }
+  18% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.06); }
+  32% { transform: translateX(-50%) scale(1); }
+  76% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(1); }
+}
+.bomb-writing { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; border-radius: 20px; border: 1px solid #385578; background: linear-gradient(180deg, #16274a, #0e1932); box-shadow: var(--hi-top), 0 10px 26px rgba(3, 6, 24, .4); }
 .bomb-write-heading { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; }
 #bombWritingWord { font: 700 clamp(24px, 6vw, 36px) "Noto Sans SC", sans-serif; color: #ffe0a1; overflow-wrap: anywhere; }
 #bombCharProgress, #bombBonusLabel { font-size: 13px; color: #aebfdf; }
@@ -1266,19 +1345,51 @@ html, body {
 #bombTimeBar::-webkit-progress-bar { background: #263c59; }
 #bombTimeBar::-webkit-progress-value { background: #ffc46b; }
 #bombCharList { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.bomb-char { padding: 3px 10px; border: 1px solid #496482; border-radius: 8px; font: 24px "Noto Sans SC", sans-serif; color: #90a6bf; }
-.bomb-char.current { border-color: #ffc46b; color: #ffe0a1; background: #483923; }
-.bomb-char.done { color: #9dffbc; background: #1a473b; border-color: #64ad8a; }
-#bombWriter { width: min(320px, 100%, 43vh); aspect-ratio: 1; min-width: 190px; position: relative; border: 2px solid #93a9c0; border-radius: 14px; overflow: hidden; background-color: #fbf7ee; background-image: linear-gradient(90deg, transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)), linear-gradient(transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)); touch-action: none; user-select: none; }
+.bomb-char { padding: 3px 10px; border: 1px solid #496482; border-radius: 8px; font: 24px "Noto Sans SC", sans-serif; color: #90a6bf; transition: color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast); }
+.bomb-char.current { border-color: #ffc46b; color: #ffe0a1; background: #483923; animation: bombChipPulse 1.5s ease-in-out infinite; }
+.bomb-char.done { color: #9dffbc; background: #1a473b; border-color: #64ad8a; animation: bombChipDone .45s var(--ease-spring); }
+@keyframes bombChipPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 196, 107, .28); }
+  50% { box-shadow: 0 0 0 3px rgba(255, 196, 107, .55), 0 0 22px rgba(255, 196, 107, .5); }
+}
+@keyframes bombChipDone { 0% { transform: scale(1); } 45% { transform: scale(1.24); } 100% { transform: scale(1); } }
+/* --- กรอบเขียน: วงแหวนนับถอยหลัง + กระดาษตารางมี่จื้อเก๋อ --- */
+.bomb-writer-frame { position: relative; display: flex; justify-content: center; width: min(320px, 100%, 43vh); min-width: 190px; }
+/* แถบนับถอยหลัง = เส้นวิ่งรอบกรอบช่องเขียน (วางทับขอบของ #bombWriter พอดี) */
+.bomb-time-frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.bomb-time-frame rect { fill: none; stroke-linecap: round; }
+.bomb-frame-track { stroke: #2a3f5f; stroke-width: 3; }
+.bomb-frame-fill { stroke: #ffc46b; stroke-width: 3; stroke-dasharray: 100; stroke-dashoffset: 100; }
+.bomb-frame-fill.urgent { stroke: #ff8f83; filter: drop-shadow(0 0 6px rgba(255, 110, 90, .85)); }
+#bombWriter {
+  width: 100%; aspect-ratio: 1; position: relative; border: 2px solid #93a9c0; border-radius: 14px; overflow: hidden;
+  background-color: #fbf7ee;
+  background-image:
+    linear-gradient(45deg, transparent calc(50% - .5px), #dfcdaf calc(50% - .5px), #dfcdaf calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(-45deg, transparent calc(50% - .5px), #dfcdaf calc(50% - .5px), #dfcdaf calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(90deg, transparent calc(50% - .5px), #b9c3cc calc(50% - .5px), #b9c3cc calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(transparent calc(50% - .5px), #b9c3cc calc(50% - .5px), #b9c3cc calc(50% + .5px), transparent calc(50% + .5px));
+  touch-action: none; user-select: none;
+}
 #bombWriter svg { display: block; width: 100%; height: 100%; touch-action: none; }
+.bomb-spark { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, #fffbe6, #ffc46b 55%, rgba(255, 140, 60, 0)); }
 #bombStrokeHint { min-height: 24px; color: #ffd76a; text-align: center; font-size: 14px; }
+.bomb-streak { color: #9dffbc; font-weight: 700; }
 #bomb .bomb-message { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; flex: 1 0 auto; max-width: 680px; margin: auto; padding: 24px; border: 1px solid #385578; border-radius: 22px; background: #101e34; text-align: center; overflow-wrap: anywhere; }
 #bombLoading p { color: #b9cbe0; }
 #bombFeedback.success { border-color: #69d6a3; background: radial-gradient(ellipse at 50% 10%, #1e5143, #101e34 75%); }
-#bombFeedback.failure { border-color: #ff977d; background: radial-gradient(ellipse at 50% 10%, #692f2f, #101e34 75%); }
+#bombFeedback.failure { border-color: #ff977d; background: radial-gradient(ellipse at 50% 10%, #692f2f, #101e34 75%); animation: bombPanelShake .5s cubic-bezier(.36, .07, .19, .97); }
+@keyframes bombPanelShake {
+  10%, 90% { transform: translate(-2px, 0); }
+  20%, 80% { transform: translate(4px, -1px); }
+  30%, 50%, 70% { transform: translate(-6px, 1px); }
+  40%, 60% { transform: translate(6px, 0); }
+}
 .bomb-result-mark { width: 64px; height: 64px; border: 3px solid #69d6a3; border-radius: 50%; position: relative; }
 .success .bomb-result-mark::after { content: ""; position: absolute; width: 26px; height: 14px; border-left: 5px solid #a2ffd3; border-bottom: 5px solid #a2ffd3; transform: rotate(-45deg); left: 16px; top: 17px; }
 .failure .bomb-result-mark { border-color: #ffb378; background: #ff9c55; box-shadow: 0 0 0 12px #ff753544, 0 0 40px 20px #ff532044; animation: bombExplosion .6s ease-out; }
+.failure .bomb-result-mark::before, .failure .bomb-result-mark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 6px; border-radius: 3px; background: #fff6e6; transform: translate(-50%, -50%) rotate(45deg); }
+.failure .bomb-result-mark::after { transform: translate(-50%, -50%) rotate(-45deg); }
 @keyframes bombExplosion { from { transform: scale(.2); opacity: .3; } 60% { transform: scale(1.4); } to { transform: scale(1); opacity: 1; } }
 #bombRevealWord { font: 700 clamp(32px, 9vw, 52px) "Noto Sans SC", sans-serif; color: #ffe0a1; }
 #bombRevealPinyin { color: #a6daff; font-size: clamp(20px, 5vw, 28px); }
@@ -1286,7 +1397,7 @@ html, body {
 #bombResultDetail { color: #c2d3e8; }
 #bombPauseOverlay { position: fixed; padding: 16px; }
 #bomb.bomb-paused > :not(.pause-overlay) { visibility: hidden; }
-#bomb.bomb-paused .bomb-plane { animation-play-state: paused; }
+#bomb.bomb-paused .bomb-plane-wrap, #bomb.bomb-paused .bomb-prop, #bomb.bomb-paused .bomb-cloud, #bomb.bomb-paused #bombBody, #bomb.bomb-paused #bombBody::after { animation-play-state: paused; }
 @media (max-width: 480px) {
   #bomb { padding-left: 10px; padding-right: 10px; gap: 8px; }
   .bomb-header h2 { font-size: 20px; }
@@ -1294,9 +1405,12 @@ html, body {
   .bomb-header .match-control { padding: 7px 9px; font-size: 12px; }
   .bomb-writing { padding: 10px; gap: 8px; }
   #bombBody { width: 160px; }
+  .bomb-sun { width: 40px; height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bomb-plane, .failure .bomb-result-mark { animation: none; }
+  .bomb-plane-wrap, .bomb-prop, .bomb-cloud, #bombBody, #bombBody::after,
+  .bomb-char.current, #bombScore.pop, #bombLives.lost,
+  .failure .bomb-result-mark, #bombFeedback.failure, #bombArena.bomb-alarm { animation: none !important; }
 }
 
 /* ---------- Dictionary mode ---------- */

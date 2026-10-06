@@ -383,14 +383,30 @@
     <span id="bombProg" class="prog-tag">0%</span>
     <span id="bombLives" role="status">ชีวิต 3 / 3</span>
     <span id="bombPace"></span>
+    <span id="bombCombo"></span>
   </div>
   <div id="bombArena" class="bomb-arena">
-    <div class="bomb-cloud cloud-one" aria-hidden="true"></div>
-    <div class="bomb-cloud cloud-two" aria-hidden="true"></div>
-    <svg class="bomb-plane" viewBox="0 0 180 70" aria-hidden="true">
-      <path d="M10 31 L48 26 L76 4 L95 4 L83 26 L143 26 Q161 27 174 38 L173 43 L82 45 L95 64 L76 64 L48 45 L15 44 L3 17 L16 17 L31 31Z" fill="#d6e8fa" stroke="#708ea9" stroke-width="2"/>
-      <path d="M140 27 L153 29 L162 36 L138 36Z" fill="#447a9a"/>
-    </svg>
+    <div class="bomb-scenery" aria-hidden="true">
+      <div class="bomb-stars"></div>
+      <div class="bomb-sun"></div>
+      <div class="bomb-cloud cloud-one"></div>
+      <div class="bomb-cloud cloud-two"></div>
+      <div class="bomb-cloud cloud-three"></div>
+      <div class="bomb-cloud cloud-four"></div>
+      <svg class="bomb-hills" viewBox="0 0 800 140" preserveAspectRatio="none">
+        <path class="hills-far" d="M0 140 L0 86 Q88 34 188 72 Q286 110 378 64 Q468 22 558 68 Q648 112 718 72 Q768 46 800 60 L800 140Z"/>
+        <path class="hills-near" d="M0 140 L0 110 Q112 78 232 106 Q352 132 472 100 Q592 70 702 104 Q762 120 800 108 L800 140Z"/>
+      </svg>
+    </div>
+    <div class="bomb-plane-wrap" aria-hidden="true">
+      <span class="bomb-trail"></span>
+      <svg class="bomb-plane" viewBox="0 0 200 70">
+        <path d="M10 31 L48 26 L76 4 L95 4 L83 26 L143 26 Q161 27 174 38 L173 43 L82 45 L95 64 L76 64 L48 45 L15 44 L3 17 L16 17 L31 31Z" fill="#d6e8fa" stroke="#708ea9" stroke-width="2"/>
+        <path d="M140 27 L153 29 L162 36 L138 36Z" fill="#447a9a"/>
+        <rect class="bomb-prop" x="178" y="20" width="7" height="36" rx="3.5" fill="#9fb6c9"/>
+        <rect x="171" y="34" width="20" height="8" rx="4" fill="#8ba6bb"/>
+      </svg>
+    </div>
     <div id="bombDrop" hidden>
       <button id="bombBody" aria-label="แตะระเบิดเพื่อเขียนโดยไม่รับโบนัส">
         <span id="bombWord" lang="zh"></span><small>แตะเพื่อเขียน</small>
@@ -399,6 +415,7 @@
     </div>
     <div class="bomb-ground"><span>อย่าให้ระเบิดถึงพื้น</span></div>
     <p id="bombArenaHint">เลือกพินอินรับโบนัส หรือแตะระเบิดเพื่อเขียน</p>
+    <div id="bombTierBanner" class="bomb-tier-banner" aria-live="polite" hidden></div>
   </div>
   <section id="bombWriting" class="bomb-writing" hidden aria-label="ฝึกเขียนคำศัพท์">
     <div class="bomb-write-heading">
@@ -407,7 +424,13 @@
     </div>
     <progress id="bombTimeBar" max="1" value="1" aria-label="เวลาเขียนที่เหลือ"></progress>
     <div id="bombCharList" aria-label="ตัวอักษรในคำ"></div>
-    <div id="bombWriter" aria-label="ลากเส้นเขียนตัวอักษรจีนตามลำดับขีด"></div>
+    <div id="bombWriterFrame" class="bomb-writer-frame">
+      <div id="bombWriter" aria-label="ลากเส้นเขียนตัวอักษรจีนตามลำดับขีด"></div>
+      <svg id="bombTimeFrame" class="bomb-time-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="bomb-frame-track" x="0.75" y="0.75" width="98.5" height="98.5" rx="6" ry="6" pathLength="100"/>
+        <rect id="bombFrameFill" class="bomb-frame-fill" x="0.75" y="0.75" width="98.5" height="98.5" rx="6" ry="6" pathLength="100"/>
+      </svg>
+    </div>
     <p id="bombStrokeHint" role="status" aria-live="polite"></p>
     <label class="bomb-toggle"><input id="bombOutlinePlay" type="checkbox" checked> แสดงเงาเส้นช่วยเขียน</label>
     <p class="bomb-instructions">ใช้นิ้ว เมาส์ หรือปากกาเขียนตามลำดับขีด • เขียนครบทุกตัวเพื่อปลดระเบิด</p>
@@ -429,6 +452,8 @@
     <p id="bombResultDetail"></p>
     <button id="bombNextBtn" class="big-btn">ลูกถัดไป</button>
   </section>
+  <canvas id="bombFx" class="bomb-overlay" aria-hidden="true"></canvas>
+  <div id="bombFlash" class="bomb-overlay bomb-flash" aria-hidden="true"></div>
   <div id="bombPauseOverlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="bombPauseTitle">
     <div class="overlay-box">
       <h2 id="bombPauseTitle">หยุดชั่วคราว</h2>
