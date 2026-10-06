@@ -524,7 +524,7 @@
     </div>
     <div class="cpw-status" id="cpWriteStatus"></div>
     <div class="dict-stroke-chars" id="cpWriteChars"></div>
-    <button id="cpWriteResetBtn" class="big-btn secondary">🧹 ล้างตัวนี้ — เขียนใหม่</button>
+    <button id="cpWriteNextBtn" class="cpw-next" disabled>✅ เขียนเสร็จ — ประโยคถัดไป</button>
   </div>
   <div class="spk-actions">
     <button id="cpListenBtn" class="big-btn secondary">🔊 ฟังประโยค</button>
@@ -562,6 +562,19 @@
   </div>
   <div id="dictResults" class="dict-results">
     <p class="dict-placeholder">พิมพ์พินอิน ตัวจีน หรือภาษาไทยเพื่อค้นหา — กด 🎤 เพื่อพูด (เลือกภาษาได้ที่ปุ่มข้างๆ) หรือ ✍️ เพื่อเขียน</p>
+  </div>
+</div>
+
+<!-- WORD POPUP — แตะคำในประโยค (เกมเขียนเป็นประโยค) เพื่อดูคำแปลไทยรายคำ ลอยอยู่เหนือคำนั้น -->
+<div id="cpWordPopup" hidden>
+  <button id="cpWordCloseBtn" class="cpw-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
+  <div id="cpWordTitle" class="cpw-zh" lang="zh"></div>
+  <div id="cpWordPy" class="cpw-py"></div>
+  <div id="cpWordTh" class="cpw-th"></div>
+  <div id="cpWordPos" class="cpw-pos"></div>
+  <div id="cpWordBreak" class="cpw-break" hidden></div>
+  <div class="cpw-actions">
+    <button id="cpWordSpeakBtn" class="cpw-btn" type="button">🔊 ฟังเสียงคำนี้</button>
   </div>
 </div>
 

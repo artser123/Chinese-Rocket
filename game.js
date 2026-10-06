@@ -4868,21 +4868,25 @@ function cpAdvance() {
 
 function cpRender() {
   const s = cp.current;
-  $("cpZh").textContent = s[0];
+  cpHideWordPopup();
+  cpRenderSentence(s);
   $("cpPy").textContent = s[1] || "";
   $("cpTh").textContent = s[2] || "";
   $("cpFocus").textContent = s[3] ? `📐 จุดไวยากรณ์: ${s[3]}` : "";
   $("cpCount").textContent = cp.seen;
   cpHideStrokes();
   $("cpLabel").textContent = cpWriteMode === "on"
-    ? "เขียนตามประโยคในช่องด้านล่าง — ระบบจะตรวจว่าถูกต้อง"
-    : "คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำเพื่อดูลำดับขีด";
+    ? "เขียนตามประโยคในช่องด้านล่าง — ระบบจะตรวจว่าถูกต้อง • แตะคำในประโยคเพื่อดูคำแปล"
+    : "คัดลงประโยคลงสมุดเพื่อฝึกเขียน — แตะคำในประโยคเพื่อดูคำแปล • แตะชิปด้านล่างเพื่อดูลำดับขีด";
   cpWriteSetup();
   // โหมดเขียนในเกมมีช่องเขียนด้านล่างแล้ว จึงซ่อนแถวปุ่มคำ + แผงลำดับขีด (ซ้ำซ้อน)
   const wrap = $("cpTokens");
   wrap.replaceChildren();
-  wrap.hidden = cpWriteMode === "on";
-  if (cpWriteMode === "on") return;
+  const inGameWrite = cpWriteMode === "on";
+  wrap.hidden = inGameWrite;
+  // ปุ่มไปประโยคถัดไปย้ายไปอยู่ใต้ช่องเขียนแล้ว — ซ่อนปุ่มเดิมในแถบล่างไม่ให้ซ้ำ
+  $("cpNextBtn").hidden = inGameWrite;
+  if (inGameWrite) return;
   (s[4] || []).forEach((tok) => {
     if (![...tok].some((c) => /[㐀-鿿豈-﫿]/.test(c))) {
       const span = document.createElement("span");
@@ -4900,6 +4904,177 @@ function cpRender() {
     wrap.appendChild(b);
   });
 }
+
+/* ---------- แตะคำในประโยค → ป๊อปอัปคำแปลรายคำ (ไม่ต้องมีช่องแยกในหน้า) ---------- */
+// ประโยคใน #cpZh ถูกแบ่งเป็นชิ้นคำตาม s[4] (หน่วยเดียวกับชิปด้านล่าง) แล้วทำให้แต่ละชิ้นแตะได้
+// แตะแล้วเด้งกล่องข้อความลอยเหนือคำนั้นพร้อมพินอิน + คำแปลไทย + ชนิดคำ
+// หาคำแปลจาก VOCAB (HSK 1-9); คำที่ไม่พบทั้งคำจะแบ่งเป็นชิ้นที่รู้จักให้แทน
+let cpPopupWord = null; // คำที่ป๊อปอัปกำลังแสดง (ให้ปุ่ม 🔊 ใช้)
+let cpPopupChip = null; // ชิปที่แตะ — ใช้อ้างตำแหน่งลอยและไฮไลต์
+
+const CP_POS_TH = {
+  NOUN: "คำนาม", VERB: "คำกริยา", ADJ: "คำคุณศัพท์", ADV: "คำวิเศษณ์",
+  PRON: "คำสรรพนาม", PREP: "คำบุพบท", CONJ: "คำสันธาน", DET: "คำนำหน้านาม",
+  MODAL: "คำกริยาช่วย",
+};
+
+function cpRenderSentence(s) {
+  const el = $("cpZh");
+  el.replaceChildren();
+  const zh = s[0] || "";
+  let pos = 0;
+  const text = (t) => { if (t) el.appendChild(document.createTextNode(t)); };
+  for (const tok of s[4] || []) {
+    if (!tok) continue;
+    const at = zh.indexOf(tok, pos);
+    if (at < 0) continue; // ชิ้นคำไม่ตรงกับประโยค — ปล่อยให้เป็นข้อความธรรมดา
+    text(zh.slice(pos, at));
+    if (/[㐀-鿿豈-﫿]/.test(tok)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cp-zh-tok";
+      b.lang = "zh";
+      b.textContent = tok;
+      b.addEventListener("click", () => { sfx.click(); cpShowWordPopup(tok, b); });
+      el.appendChild(b);
+    } else {
+      text(tok);
+    }
+    pos = at + tok.length;
+  }
+  text(zh.slice(pos));
+}
+
+// ดัชนีคำศัพท์ (สร้างครั้งเดียว): คำย่อ -> { py, th }
+// รองรับรูปแบบหลายรูปในช่องเดียวอย่าง "爸爸｜爸" โดยจับคู่พินอินที่คั่นด้วย ｜ ให้ตรงกันด้วย
+let cpWordIdx = null;
+function cpWordIndex() {
+  if (cpWordIdx) return cpWordIdx;
+  cpWordIdx = new Map();
+  for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
+    for (const w of VOCAB[lvl] || []) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  return cpWordIdx;
+}
+
+const cpSimp = (s) => [...s].map((c) => TRAD2SIMP[c] || c).join("");
+
+// ค้นคำแปลไทยของชิ้นคำจาก VOCAB (HSK 1-9)
+function cpLookupWord(word) {
+  const simp = cpSimp(word);
+  const hit = cpWordIndex().get(simp);
+  return {
+    simp,
+    py: hit ? hit.py : dictSentencePinyin(simp),
+    th: hit ? hit.th : "",
+    pos: cpWordPos(simp),
+  };
+}
+
+function cpWordPos(simp) {
+  if (typeof VOCAB_EXTRA === "undefined") return "";
+  const e = VOCAB_EXTRA[simp];
+  return e && e.pos ? (CP_POS_TH[e.pos] || e.pos) : "";
+}
+
+// คำที่ไม่พบทั้งคำ → แบ่งเป็นชิ้นที่รู้จัก (จับคู่ยาวสุดก่อน) เพื่อโชว์คำแปลรายชิ้น
+function cpSegment(simp) {
+  const idx = cpWordIndex();
+  const { charPy } = dictPinyinIndex();
+  const chars = [...simp];
+  const parts = [];
+  for (let i = 0; i < chars.length;) {
+    for (let l = Math.min(6, chars.length - i); l >= 1; l--) {
+      const cand = chars.slice(i, i + l).join("");
+      const hit = idx.get(cand);
+      if (hit || l === 1) {
+        parts.push({ zh: cand, py: hit ? hit.py : (charPy.get(cand) || ""), th: hit ? hit.th : "" });
+        i += l;
+        break;
+      }
+    }
+  }
+  return parts;
+}
+
+function cpShowWordPopup(word, chip) {
+  const info = cpLookupWord(word);
+  $("cpWordTitle").textContent = word;
+  $("cpWordPy").textContent = info.py || "";
+  $("cpWordTh").textContent = info.th || "ไม่พบคำแปลเดี่ยวในคลังคำศัพท์";
+  $("cpWordPos").textContent = info.pos ? `🔖 ${info.pos}` : "";
+  const brk = $("cpWordBreak");
+  brk.replaceChildren();
+  if (!info.th) {
+    for (const p of cpSegment(info.simp)) {
+      const row = document.createElement("div");
+      row.className = "cpw-break-row";
+      const a = document.createElement("span"); a.className = "cpw-bzh"; a.lang = "zh"; a.textContent = p.zh;
+      const b = document.createElement("span"); b.className = "cpw-bpy"; b.textContent = p.py || "";
+      const d = document.createElement("span"); d.className = "cpw-bth"; d.textContent = p.th || "—";
+      row.append(a, b, d);
+      brk.appendChild(row);
+    }
+  }
+  brk.hidden = !brk.childElementCount;
+  cpPopupWord = word;
+  if (cpPopupChip && cpPopupChip !== chip) cpPopupChip.classList.remove("active");
+  cpPopupChip = chip;
+  chip.classList.add("active");
+  const pop = $("cpWordPopup");
+  pop.hidden = false;
+  cpPlaceWordPopup(chip); // วัดขนาดหลัง unhide เพื่อวางกล่องให้พ้นขอบจอ
+}
+
+function cpPlaceWordPopup(chip) {
+  const pop = $("cpWordPopup");
+  const r = chip.getBoundingClientRect();
+  const pr = pop.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(r.left + r.width / 2 - pr.width / 2, window.innerWidth - pr.width - pad));
+  let top = r.bottom + 10;
+  if (top + pr.height > window.innerHeight - pad) top = r.top - pr.height - 10;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${Math.max(pad, top)}px`;
+  pop.classList.add("show");
+}
+
+function cpHideWordPopup() {
+  const pop = $("cpWordPopup");
+  if (pop && !pop.hidden) { pop.hidden = true; pop.classList.remove("show"); }
+  if (cpPopupChip) cpPopupChip.classList.remove("active");
+  cpPopupChip = null;
+  cpPopupWord = null;
+}
+
+$("cpWordCloseBtn").addEventListener("click", () => { sfx.click(); cpHideWordPopup(); });
+$("cpWordSpeakBtn").addEventListener("click", () => {
+  sfx.click();
+  if (cpPopupWord) speak(cpPopupWord);
+});
+// ปิดป๊อปอัปเมื่อแตะที่อื่น เลื่อนจอ หรือกลับไปโหมดอื่น (ป๊อปอัปเป็น position:fixed จึงไม่ตามจอ)
+document.addEventListener("pointerdown", (e) => {
+  const pop = $("cpWordPopup");
+  if (!pop || pop.hidden) return;
+  if (pop.contains(e.target) || (e.target.closest && e.target.closest(".cp-zh-tok"))) return;
+  cpHideWordPopup();
+});
+window.addEventListener("scroll", cpHideWordPopup, true);
+// หมุนจอ/เปลี่ยนขนาด → ย้ายกล่องไปเกาะคำเดิมต่อ ถ้าคำนั้นยังอยู่
+window.addEventListener("resize", () => {
+  if ($("cpWordPopup").hidden) return;
+  if (cpPopupChip && cpPopupChip.isConnected) cpPlaceWordPopup(cpPopupChip);
+  else cpHideWordPopup();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cpHideWordPopup(); });
 
 function cpHideStrokes() {
   $("cpStrokes").hidden = true;
@@ -4931,9 +5106,15 @@ function cpWriteFit() {
 
 function cpHideWrite() {
   $("cpWrite").hidden = true;
+  cpWriteNextEnabled(false);
   pencilSound.stop();
   if (cp) cp.seq++; // invalidate any in-flight load/quiz of the old sentence
   if (cpWriteWriter) try { cpWriteWriter.cancelQuiz(); } catch (e) {}
+}
+
+// ปุ่ม "เขียนเสร็จ — ประโยคถัดไป" ในโหมดเขียนในเกม: กดได้เมื่อเขียนครบทุกตัวเท่านั้น
+function cpWriteNextEnabled(on) {
+  $("cpWriteNextBtn").disabled = !on;
 }
 
 function cpWriteSetup() {
@@ -4958,6 +5139,7 @@ function renderCpWriteChips() {
     span.textContent = char;
     wrap.appendChild(span);
   });
+  cpWriteNextEnabled(n > 0 && cp.writeIndex >= n); // เปิดปุ่มเมื่อเขียนครบทุกตัวแล้ว
 }
 
 async function cpWriteChar() {
@@ -5021,7 +5203,7 @@ async function cpWriteChar() {
       },
     });
   } catch (e) {
-    if (cp && cp.seq === seq) status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก แตะ 'ล้างตัวนี้' เพื่อลองใหม่";
+    if (cp && cp.seq === seq) status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก แตะ 'ข้าม' ไปประโยคถัดไป แล้วลองเขียนประโยคนี้ใหม่";
   }
 }
 
@@ -5032,7 +5214,7 @@ function cpWriteCompleteChar() {
   cp.writeIndex++;
   renderCpWriteChips();
   if (cp.writeIndex >= cp.writeChars.length) {
-    $("cpWriteStatus").textContent = "🎉 เขียนครบทุกตัวแล้ว! กด 'เขียนเสร็จ — ประโยคถัดไป' ได้เลย";
+    $("cpWriteStatus").textContent = "🎉 เขียนครบทุกตัวแล้ว! กดปุ่ม 'เขียนเสร็จ — ประโยคถัดไป' ด้านบนได้เลย";
     return;
   }
   cpWriteChar();
@@ -5123,14 +5305,15 @@ $("cpListenBtn").addEventListener("click", () => {
 $("cpSkipBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
 $("cpNextBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
 $("cpMuteBtn").addEventListener("click", toggleMute);
-$("cpWriteResetBtn").addEventListener("click", () => {
+// โหมดเขียนในเกม: เขียนครบทุกตัวแล้วปุ่มนี้จึงกดได้ (ยังไม่ครบ = ปุ่มเทา กดไม่ได้)
+$("cpWriteNextBtn").addEventListener("click", () => {
+  if ($("cpWriteNextBtn").disabled) return;
   sfx.click();
-  if (!cp) return;
-  if (cp.writeIndex >= cp.writeChars.length) cp.writeIndex = 0;
-  cpWriteChar();
+  cpAdvance();
 });
 $("cpQuitBtn").addEventListener("click", () => {
   sfx.click();
+  cpHideWordPopup();
   cpHideWrite();
   cp = null;
   cpHideStrokes();
@@ -5367,7 +5550,7 @@ $("againBtn").addEventListener("click", () => { sfx.click(); if (lastStarter) la
 $("menuBtn").addEventListener("click", () => { sfx.click(); switchScreen(menuEl); updateBestLine(); });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { pauseMatchingGame(); pauseBombGame(); }
+  if (document.hidden) { pauseMatchingGame(); pauseBombGame(); cpHideWordPopup(); }
   if (document.hidden && spk) spkStopAll();
   if (document.hidden && running && !paused) {
     paused = true;
