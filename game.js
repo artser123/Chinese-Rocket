@@ -271,8 +271,14 @@ function playWordAudio(word, parts, onDone) {
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
 function speakWordHit(w) {
   const zh = w[0].split(/[｜|]/)[0].trim();
+  // 了 has two readings in the vocabulary.  The standalone aspect particle is
+  // "le", while the HSK 3 verb is "liǎo".  Its old shared 了.mp3 clip was
+  // generated without context and says liǎo, so do not use it for the particle.
+  const isParticleLe = zh === "了" && (w[1] || "").trim().toLowerCase() === "le";
+  const audioKey = isParticleLe ? "了-le" : zh;
+  const spokenZh = isParticleLe ? "le" : zh;
   const meaning = (w[2] || "").trim();
-  playWordAudio(zh, [[zh, "zh-CN"],
+  playWordAudio(audioKey, [[spokenZh, "zh-CN"],
     ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
 }
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
@@ -3030,9 +3036,7 @@ function completeBombCharacter() {
   if (s.phase !== "writing") return;
   s.pendingComplete = false;
   if (s.charIndex + 1 === s.chars.length) {
-    const meaning = (s.word[2] || "").trim();
-    playWordAudio(s.word[0], [[s.word[0], "zh-CN"],
-      ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
+    speakWordHit(s.word);
   } else {
     speak(s.chars[s.charIndex]);
   }
