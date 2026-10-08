@@ -269,14 +269,19 @@ function playWordAudio(word, parts, onDone) {
   wordAudio.play(items, onDone);
 }
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
+// 了 มีสองเสียงในตารางคำศัพท์ — คำช่วยอ่าน "le" ส่วนคำกริยา (HSK 3) อ่าน "liǎo"
+// ไฟล์ 了.mp3 สร้างแบบไม่มีบริบทจึงอ่าน liǎo ดังนั้นคำช่วยใช้คีย์แยก "了-le"
+// (ไฟล์นี้ตัดพยางค์ "le" จากเสียงเดียวกัน) — ใช้ร่วมทั้งโหมดยิง/ตอบถูกและโหมดฝึกฟัง
+function wordAudioKey(zh, pinyin) {
+  const base = String(zh || "").split(/[｜|]/)[0].trim();
+  return base === "了" && String(pinyin || "").trim().toLowerCase() === "le" ? "了-le" : base;
+}
+
+// เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
 function speakWordHit(w) {
   const zh = w[0].split(/[｜|]/)[0].trim();
-  // 了 has two readings in the vocabulary.  The standalone aspect particle is
-  // "le", while the HSK 3 verb is "liǎo".  Its old shared 了.mp3 clip was
-  // generated without context and says liǎo, so do not use it for the particle.
-  const isParticleLe = zh === "了" && (w[1] || "").trim().toLowerCase() === "le";
-  const audioKey = isParticleLe ? "了-le" : zh;
-  const spokenZh = isParticleLe ? "le" : zh;
+  const audioKey = wordAudioKey(w[0], w[1]);
+  const spokenZh = audioKey === "了-le" ? "le" : zh;
   const meaning = (w[2] || "").trim();
   playWordAudio(audioKey, [[spokenZh, "zh-CN"],
     ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
@@ -296,6 +301,7 @@ const _FIL = { wave: "triangle", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.
 const _ZOM = { wave: "sawtooth", bassWave: "sawtooth", melVol: 0.045, bassVol: 0.11, kickVol: 0.26, mul: 0.5, kickEvery: 2, snare: true, hats: true };
 const _MAT = { wave: "sine", bassWave: "sine", melVol: 0.05, bassVol: 0.06, kickVol: 0.1, mul: 1, kickEvery: 4, snare: false, hats: true };
 const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09, kickVol: 0.24, mul: 1, kickEvery: 2, snare: true, hats: true };
+const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true };
 const MUSIC_THEMES = {
   meteor: [
     { ..._MET, bpm: 122,
@@ -363,12 +369,33 @@ const MUSIC_THEMES = {
                0, null, 5, null, 7, null, 10, null, 7, 5, 3, 2, 0, null, null, null],
       roots: [0, -5, -3, -5, 0, -5, -4, -2] },
   ],
+  trace: [
+    { ..._TRA, bpm: 96,
+      melody: [0, null, 4, null, 7, null, 4, null, 5, null, 7, null, 9, null, 7, null,
+               0, null, 4, null, 7, null, 12, null, 9, null, 7, null, 4, null, null, null],
+      roots: [0, -3, -5, -3, 0, -3, -5, -7] },
+    { ..._TRA, bpm: 90, snare: false,
+      melody: [7, null, null, 9, null, 7, null, 5, null, 4, null, 2, null, 0, null, null,
+               7, null, null, 9, null, 12, null, 9, null, 7, null, 5, null, 4, null, null],
+      roots: [0, -5, -4, -2, 0, -5, -4, -7] },
+    { ..._TRA, bpm: 100, wave: "sine",
+      melody: [0, 2, 4, null, 7, null, 5, 4, 5, 7, 9, null, 12, null, 9, 7,
+               9, 7, 5, null, 4, null, 2, 0, 2, 4, 7, null, 4, null, null, null],
+      roots: [0, -3, 0, -5, -3, -5, -4, -2] },
+    { ..._TRA, bpm: 92, bassWave: "sine",
+      melody: [4, null, 7, null, 11, null, 7, null, 9, null, 7, null, 4, null, 2, null,
+               4, null, 7, null, 11, null, 14, null, 11, null, 9, null, 7, null, 4, null],
+      roots: [0, -4, -2, -5, 0, -4, -2, -7] },
+    { ..._TRA, bpm: 98,
+      melody: [0, 4, 7, 4, 9, 7, 4, 0, 5, 9, 12, 9, 7, 5, 4, 2,
+               0, 4, 7, 4, 9, 7, 12, 9, 7, 5, 4, 2, 0, null, null, null],
+      roots: [0, -3, -5, -3, 0, -5, -4, -2] },
+  ],
   fillblank: [
     { ..._FIL, bpm: 112,
       melody: [7, 7, 10, 7, 12, null, 10, 7, 9, 9, 12, 9, 14, 12, 9, 7,
                7, 7, 10, 7, 12, null, 14, 15, 12, 10, 7, 3, 7, null, null, null],
-      roots: [0, -5, -3, -5, 0, -4, -2, -4] },
-    { ..._FIL, bpm: 118, wave: "square",
+      roots: [0, -5, -3, -5, 0, -4, -2, -4] },    { ..._FIL, bpm: 118, wave: "square",
       melody: [7, 10, 7, 10, 12, 10, 7, 10, 9, 12, 9, 12, 14, 12, 9, 12,
                10, 12, 10, 12, 15, 12, 10, 12, 14, 15, 14, 12, 10, 9, 7, null],
       roots: [0, 0, -4, -4, -5, -5, -2, -2] },
@@ -681,7 +708,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("setup")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("trace"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
   // เลเยอร์ FX ของโหมดระเบิดเป็น fixed เต็มจอ — ซ่อนไว้เสมอถ้าไม่ได้อยู่หน้าเกมระเบิด
   const bombFxEl = $("bombFx");
@@ -2847,6 +2874,7 @@ const bombCharData = new Map();
 function pencilAllowed() {
   if (bombGame && !bombGame.paused && bombGame.phase === "writing") return true;
   if (cpWriteMode === "on" && cp && !$("cpWrite").hidden) return true;
+  if (tc && tc.phase === "write") return true;
   return false;
 }
 const pencilSound = {
@@ -3604,6 +3632,7 @@ MODE_TITLES.dict = "📚 พจนานุกรมจีน";
 MODE_TITLES.speak = "🎤 เกมฝึกพูด";
 MODE_TITLES.listen = "🎧 เกมฝึกฟัง";
 MODE_TITLES.copy = "✍️ เกมเขียนเป็นประโยค";
+MODE_TITLES.trace = "✍️ เกมคัดลายมือ";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
@@ -3618,7 +3647,9 @@ const bestKey = () => gameMode === "bomb"
       ? `cr_best_hsk${selectedLevel}_zombie_${difficulty}_${zDuration}`
       : gameMode === "speak"
         ? `cr_best_hsk${selectedLevel}_speak`
-        : `cr_best_hsk${selectedLevel}_${difficulty}`;
+        : gameMode === "trace"
+          ? `cr_best_hsk${selectedLevel}_trace`
+          : `cr_best_hsk${selectedLevel}_${difficulty}`;
 const startLabel = () => gameMode === "bomb"
   ? `เริ่มเขียนปลดระเบิด HSK ${selectedLevel} (${BOMB_DIFF[difficulty].label})`
   : gameMode === "matching"
@@ -3637,7 +3668,9 @@ const startLabel = () => gameMode === "bomb"
           ? `🎧 เริ่มฝึกฟัง HSK ${selectedLevel} (${lisType === "sent" ? "ประโยค" : "คำศัพท์"}, ห่าง ${lisGap} วิ)`
           : gameMode === "copy"
             ? `✍️ เริ่มฝึกเขียนประโยค HSK ${selectedLevel}`
-            : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
+            : gameMode === "trace"
+              ? `✍️ เริ่มคัดลายมือ HSK ${selectedLevel} (10 ช่อง ไม่ซ้ำจนครบกอง)`
+              : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
 
 function updateStartBtn() {
   if (!gameMode) return;
@@ -5114,7 +5147,8 @@ function lisPlayCurrent() {
   } else {
     const zh = it[0].split(/[｜|]/)[0].trim();
     const m = (it[2] || "").trim();
-    playWordAudio(zh, [[zh, "zh-CN"],
+    const key = wordAudioKey(it[0], it[1]); // 了 (คำช่วย le) ใช้ไฟล์ 了-le.mp3 ที่อ่านถูก
+    playWordAudio(key, [[key === "了-le" ? "le" : zh, "zh-CN"],
       ...(m ? [[m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"]] : [])], done);
   }
 }
@@ -5722,9 +5756,402 @@ $("cpQuitBtn").addEventListener("click", () => {
   switchScreen(menuEl);
   updateBestLine();
 });
+/* ================= Handwriting copy mode (เกมคัดลายมือ) ================= */
+// สุ่ม "คำ" ตามระดับ HSK แล้วให้คัดคำเดิม 10 ช่อง (คำหลายตัว = เขียนหลายตัวเรียงกันในช่องเดียว)
+// ตรวจทีละขีดด้วย HanziWriter.quiz (เหมือนโหมดเขียนในเกมของเกมเขียนเป็นประโยค)
+// แต่ "เลื่อนการโชว์คะแนน" ไปตอนกด ✅ ตรวจ — เขียนครบ 10 ช่องแล้วจึงคิดคะแนน + ไฮไลต์ขีดที่ผิด
+// แล้วสุ่มคำใหม่แบบไม่ซ้ำจนครบกอง (เล่นครบกองแล้วสับใหม่ คำแรกไม่ซ้ำคำเดิม)
+const TC_SLOTS = 10;
+let tc = null;
+let tcOutline = localStorage.getItem("cr_trace_outline") !== "off";
+let tcAllWriters = []; // writer ทุกตัวของคำปัจจุบัน — ใช้ cancelQuiz และ refit ตอนจอเปลี่ยนขนาด
+let tcSeqCounter = 0;  // ตัวนับ seq แบบเพิ่มขึ้นเรื่อยๆ (ไม่รีเซ็ตต่อคำ) กัน chain เก่าจับคู่ seq ชนกับคำใหม่
+
+function tcSyncSetupUI() {
+  const isTrace = gameMode === "trace";
+  $("tcOutlineRow").style.display = isTrace ? "" : "none";
+  if (!isTrace) return;
+  document.querySelectorAll(".tco-btn").forEach((b) => b.classList.toggle("selected", b.dataset.outline === (tcOutline ? "on" : "off")));
+}
+
+// โหลดข้อมูลเส้นขีดผ่าน loader/แคชร่วมของโหมดเขียนอื่น (โหลดครั้งแรกต้องมีอินเทอร์เน็ต)
+function tcLoadCharData(chars) { return cpLoadCharData(chars); }
+
+function stopTrace() {
+  if (!tc) return;
+  tc.seq = ++tcSeqCounter; // ค่าไม่ซ้ำทั้งเซสชัน — ทำ in-flight chain ของคำเดิมเป็นโมฆะเสมอ
+  tcAllWriters.forEach((w) => {
+    try { w.cancelQuiz(); } catch (e) {}
+    if (w._tcResolve) { try { w._tcResolve(); } catch (e) {} }
+  });
+  tcAllWriters = [];
+  pencilSound.stop();
+}
+
+function quitTraceGame() {
+  stopTrace();
+  tc = null;
+  stopSpeech();
+  music.stop();
+  switchScreen(menuEl);
+  updateBestLine();
+}
+
+function startTraceGame(level) {
+  const words = bombVocabulary(level);
+  if (!words.length) return;
+  stopTrace();
+  currentLevel = level;
+  lastStarter = () => startTraceGame(level);
+  tc = { level, words, deck: shuffle(words.slice()), word: null, lastZh: null, chars: [],
+         slots: [], activeSlot: -1, phase: "write", seq: 0, rounds: 0, wrongSlots: [] };
+  music.start("trace");
+  switchScreen($("trace"));
+  $("tcResult").hidden = true;
+  $("tcResult").replaceChildren();
+  $("tcCheckBtn").hidden = false;
+  $("tcRetryBtn").hidden = true;
+  $("tcNextBtn").hidden = true;
+  $("tcMuteBtn").textContent = muted ? "🔇" : "🔊";
+  nextTraceWord();
+}
+
+// สุ่มคำถัดไปจากกองที่สับไว้ — ครบกองแล้วสับใหม่ (คำแรกของรอบใหม่ไม่ซ้ำคำที่เพิ่งเล่น)
+function nextTraceWord() {
+  if (!tc) return;
+  stopTrace(); // ยกเลิก quiz/โหลดของคำเดิม (seq ถูก bump ให้ผลลัพธ์เก่าเป็นโมฆะ)
+  if (!tc.deck.length) {
+    const lastZh = tc.lastZh;
+    tc.deck = shuffle(tc.words.slice());
+    if (tc.deck.length > 1 && tc.deck[tc.deck.length - 1][0] === lastZh) {
+      [tc.deck[0], tc.deck[tc.deck.length - 1]] = [tc.deck[tc.deck.length - 1], tc.deck[0]];
+    }
+  }
+  const word = tc.deck.pop();
+  if (!word) { quitTraceGame(); return; }
+  tc.word = word;
+  tc.lastZh = word[0];
+  tc.chars = [...word[0]].filter((c) => /[㐀-鿿豈-﫿]/.test(c));
+  if (!tc.chars.length) { nextTraceWord(); return; } // กันคำที่ไม่มีตัวจีน (ไม่ควรเกิด)
+  tc.rounds++;
+  tc.phase = "write";
+  tc.activeSlot = -1;
+  tc.wrongSlots = [];
+  $("tcRound").textContent = tc.rounds;
+  $("tcZh").textContent = word[0];
+  $("tcPy").textContent = word[1] || "";
+  $("tcTh").textContent = word[2] || "";
+  $("tcResult").hidden = true;
+  $("tcCheckBtn").hidden = false;
+  $("tcCheckBtn").disabled = true;
+  $("tcRetryBtn").hidden = true;
+  $("tcNextBtn").hidden = true;
+  renderTraceGrid();
+  $("tcStatus").textContent = "กำลังโหลดข้อมูลเส้นขีด…";
+  const seq = tc.seq;
+  tcLoadCharData(tc.chars).then(() => {
+    if (!tc || tc.seq !== seq) return;
+    if (!tc.chars.every((c) => bombCharData.get(c))) {
+      $("tcStatus").textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก กด 'ข้ามคำ' แล้วลองใหม่";
+      return;
+    }
+    speakWordHit(tc.word);
+    tcActivateSlot(0);
+  });
+}
+
+// สร้างตาราง 10 ช่องว่าง (ช่องละชุดช่องเขียนตามจำนวนตัวของคำ) — ยังไม่สร้าง writer จนกว่าจะถึงคิว
+function renderTraceGrid() {
+  const grid = $("tcGrid");
+  grid.replaceChildren();
+  grid.classList.toggle("wide", tc.chars.length >= 3); // คำยาว 3 ตัวขึ้นไปใช้ 1 คอลัมน์ให้เขียนสบาย
+  tc.slots = [];
+  for (let i = 0; i < TC_SLOTS; i++) {
+    const el = document.createElement("div");
+    el.className = "tc-slot locked";
+    const head = document.createElement("div");
+    head.className = "tc-slot-head";
+    const no = document.createElement("span");
+    no.textContent = String(i + 1);
+    const badge = document.createElement("span");
+    badge.className = "tc-badge";
+    head.append(no, badge);
+    const row = document.createElement("div");
+    row.className = "tc-chars";
+    const cells = tc.chars.map(() => {
+      const cell = document.createElement("div");
+      cell.className = "tc-char";
+      row.appendChild(cell);
+      return cell;
+    });
+    el.append(head, row);
+    el.addEventListener("click", () => tcSlotTap(i));
+    grid.appendChild(el);
+    tc.slots.push({ el, badge, cells, chars: [], done: false, acc: 1 });
+  }
+  updateTraceProgress();
+}
+
+function updateTraceProgress() {
+  if (!tc) return;
+  const done = tc.slots.filter((s) => s.done).length;
+  $("tcProg").textContent = progPct(done, TC_SLOTS);
+  $("tcCheckBtn").disabled = done < TC_SLOTS;
+}
+
+// เปิดช่องที่ i ให้เขียนทีละตัว (ตัวที่ 1 → ตัวที่ 2 → …) แล้วปิดช่องเมื่อครบทุกตัว
+async function tcActivateSlot(i) {
+  if (!tc || tc.phase !== "write") return;
+  const slot = tc.slots[i];
+  if (!slot || slot.done) return;
+  const seq = tc.seq;
+  tc.activeSlot = i;
+  tc.slots.forEach((s, j) => s.el.classList.toggle("active", j === i));
+  slot.el.classList.remove("locked");
+  slot.el.classList.add("active");
+  $("tcStatus").textContent = `ช่องที่ ${i + 1} / ${TC_SLOTS} — เขียน "${tc.word[0]}" ให้ครบทุกตัว`;
+  try { slot.el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {}
+  slot.chars = [];
+  const chars = tc.chars;
+  for (let k = 0; k < slot.cells.length; k++) {
+    const char = chars[k];
+    const cell = slot.cells[k];
+    if (!cell || !char) break; // กันกรณี grid ของคำใหม่มีช่องไม่เท่าจำนวนตัว
+    cell.replaceChildren();
+    const data = bombCharData.get(char);
+    if (!data) { $("tcStatus").textContent = "ไม่พบข้อมูลเส้นขีดของตัวนี้ — กด 'ข้ามคำ' เพื่อไปคำถัดไป"; return; }
+    // ตั้งขนาด writer = ความกว้างจริงของช่อง เพื่อให้พิกัดการลากเส้นตรงกับที่แสดง (CSS ยืด SVG เต็มช่อง)
+    const size = Math.max(48, Math.round(cell.clientWidth) || 90);
+    let writer;
+    try {
+      writer = new window.HanziWriter(cell, {
+        width: size, height: size, padding: 8,
+        showCharacter: false, showOutline: tcOutline,
+        strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86", drawingWidth: 64,
+        highlightColor: "#e5484d", highlightOnComplete: false,
+        strokeHighlightSpeed: 0.7, strokeFadeDuration: 120,
+        charDataLoader: (c) => bombCharData.get(c),
+      });
+    } catch (e) {
+      $("tcStatus").textContent = "เปิดช่องเขียนไม่สำเร็จ — ลองใหม่หรือกด 'ข้ามคำ'";
+      return;
+    }
+    tcAllWriters.push(writer);
+    await writer.setCharacter(char);
+    if (!tc || tc.seq !== seq) { try { writer.cancelQuiz(); } catch (e) {} return; }
+    const entry = { writer, char, total: data.strokes.length, wrongStrokes: new Set(), attempts: 0 };
+    slot.chars[k] = entry;
+    await tcQuizChar(slot, entry, seq);
+    if (!tc || tc.seq !== seq) return;
+  }
+  if (slot.chars.length === slot.cells.length) tcCompleteSlot(i);
+}
+
+// รัน quiz ตรวจทีละขีดของตัวอักษรหนึ่งตัว — resolve เมื่อเขียนครบ (หรือถูกยกเลิกกลางทาง)
+function tcQuizChar(slot, entry, seq) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; entry.writer._tcResolve = null; resolve(); } };
+    entry.writer._tcResolve = finish; // ให้ stopTrace/nextTraceWord ปลด promise ที่ค้างได้
+    entry.writer.quiz({
+      leniency: 1.4,
+      markStrokeCorrectAfterMisses: 4,
+      showHintAfterMisses: tcOutline ? 4 : 1,
+      strokeHighlightSpeed: tcOutline ? 0.7 : 0.35,
+      onMistake: (data) => {
+        if (!tc || tc.seq !== seq) return;
+        entry.attempts++;
+        entry.wrongStrokes.add(data.strokeNum);
+        $("tcStatus").textContent = `ช่องที่ ${tc.activeSlot + 1} — ขีดที่ ${data.strokeNum + 1} ยังไม่ถูก ลองใหม่ได้ (ไม่หักคะแนน)`;
+      },
+      onCorrectStroke: () => {},
+      onComplete: () => { finish(); },
+    });
+  });
+}
+
+function tcCompleteSlot(i) {
+  if (!tc) return;
+  const slot = tc.slots[i];
+  slot.done = true;
+  slot.el.classList.remove("active", "locked");
+  slot.el.classList.add("done");
+  if (!slot.badge.textContent) slot.badge.textContent = "⭐";
+  updateTraceProgress();
+  const next = tc.slots.findIndex((s) => !s.done);
+  if (next >= 0) {
+    tcActivateSlot(next);
+  } else {
+    $("tcStatus").textContent = "เขียนครบทั้ง 10 ช่องแล้ว — กด ✅ ตรวจ เพื่อดูคะแนนและจุดที่ผิด";
+    $("tcCheckBtn").disabled = false;
+    sfx.hit();
+  }
+}
+
+// แตะช่องในโหมดผลตรวจ → สาธิตลำดับขีดที่ถูกของช่องนั้น
+function tcSlotTap(i) {
+  if (!tc || tc.phase !== "result") return;
+  const slot = tc.slots[i];
+  if (!slot || !slot.chars.length) return;
+  sfx.click();
+  slot.chars.forEach((c, k) => {
+    if (!c) return;
+    setTimeout(() => { if (tc) { try { c.writer.animateCharacter(); } catch (e) {} } }, k * 800);
+  });
+  $("tcStatus").textContent = `สาธิตลำดับขีดของช่องที่ ${i + 1} — ดูเสร็จแล้วกด 'ลองใหม่ช่องที่ผิด' ได้`;
+}
+
+// กด ✅ ตรวจ: รวมผลทุกช่อง → คะแนน + ไฮไลต์ขีดที่เขียนผิด
+function tcCheck() {
+  if (!tc || tc.phase !== "write") return;
+  tc.phase = "result";
+  tc.wrongSlots = [];
+  let sum = 0;
+  tc.slots.forEach((slot, i) => {
+    tcClearWrongOverlays(slot);
+    let wrong = 0, total = 0;
+    slot.chars.forEach((c) => { if (!c) return; wrong += c.wrongStrokes.size; total += c.total; });
+    slot.acc = total ? (total - wrong) / total : 1;
+    sum += slot.acc;
+    slot.el.classList.remove("active", "locked");
+    if (wrong) {
+      tc.wrongSlots.push(i);
+      slot.el.classList.add("wrong");
+      slot.badge.textContent = `✗ ${wrong}`;
+      // โชว์ตัวจริง + ลากเส้นแดงทับขีดที่เขียนผิดค้างไว้ให้เห็นชัด
+      slot.chars.forEach((c, k) => {
+        if (!c || !c.wrongStrokes.size) return;
+        try { c.writer.showOutline({ duration: 0 }); } catch (e) {}
+        tcMarkWrong(c, slot.cells[k]);
+      });
+    } else {
+      slot.el.classList.add("done");
+      slot.badge.textContent = "⭐";
+    }
+  });
+  const score = Math.round((sum / TC_SLOTS) * 100);
+  saveBest(`cr_best_hsk${tc.level}_trace`, score);
+  const perfect = tc.slots.filter((s) => s.acc >= 1).length;
+  const wrongCount = tc.slots.reduce((n, s) => n + s.chars.reduce((m, c) => m + (c ? c.wrongStrokes.size : 0), 0), 0);
+  const res = $("tcResult");
+  res.replaceChildren();
+  const sc = document.createElement("span");
+  sc.className = "tc-score";
+  sc.textContent = `${score} คะแนน`;
+  res.appendChild(sc);
+  const line = document.createElement("div");
+  line.textContent = wrongCount
+    ? `เขียนครบ 10 ช่อง • สมบูรณ์ ${perfect}/10 ช่อง • ขีดที่ผิดรวม ${wrongCount} จุด (ไฮไลต์สีแดงในช่อง)`
+    : "🎉 สมบูรณ์ทุกช่อง! ไม่มีขีดผิดเลย";
+  res.appendChild(line);
+  const tip = document.createElement("div");
+  tip.textContent = wrongCount
+    ? "แตะช่องไหนก็ได้เพื่อดูสาธิตวิธีเขียนที่ถูก แล้ว 'ลองใหม่ช่องที่ผิด' หรือ 'คำใหม่'"
+    : "กด 'คำใหม่' เพื่อคัดคำถัดไป (สุ่มไม่ซ้ำจนครบกอง)";
+  res.appendChild(tip);
+  res.hidden = false;
+  $("tcCheckBtn").hidden = true;
+  $("tcRetryBtn").hidden = !wrongCount;
+  $("tcNextBtn").hidden = false;
+  $("tcStatus").textContent = wrongCount ? "มีช่องที่เขียนผิด — ดูไฮไลต์สีแดงแล้วแก้ได้เลย" : "เยี่ยม! เขียนถูกทุกช่อง";
+  if (perfect === TC_SLOTS) sfx.hit(); else sfx.click();
+}
+
+// ลองใหม่เฉพาะช่องที่เขียนผิด — รีเซ็ตช่องเหล่านั้นแล้วให้เขียนใหม่ตามลำดับ
+function tcRetryWrong() {
+  if (!tc || tc.phase !== "result") return;
+  const wrongs = tc.wrongSlots.slice();
+  if (!wrongs.length) return;
+  const removed = new Set();
+  wrongs.forEach((i) => tc.slots[i].chars.forEach((c) => { if (c) removed.add(c.writer); }));
+  wrongs.forEach((i) => {
+    const slot = tc.slots[i];
+    slot.done = false;
+    slot.acc = 1;
+    slot.chars.forEach((c) => { if (c) { try { c.writer.cancelQuiz(); } catch (e) {} if (c.writer._tcResolve) c.writer._tcResolve(); } });
+    slot.chars = [];
+    slot.cells.forEach((cell) => cell.replaceChildren());
+    slot.el.classList.remove("done", "wrong", "active");
+    slot.el.classList.add("locked");
+    slot.badge.textContent = "";
+  });
+  tcAllWriters = tcAllWriters.filter((w) => !removed.has(w));
+  tc.wrongSlots = [];
+  tc.phase = "write";
+  $("tcResult").hidden = true;
+  $("tcRetryBtn").hidden = true;
+  $("tcNextBtn").hidden = true;
+  $("tcCheckBtn").hidden = false;
+  updateTraceProgress();
+  tcActivateSlot(wrongs[0]);
+}
+
+// ลากเส้นแดงทับขีดที่เขียนผิด (ค้างไว้ ไม่จางเหมือน highlightStroke ของ HanziWriter)
+// ใช้ median ของตัวอักษรแปลงเป็นพิกัด px ด้วย getScreenCTM() ของกลุ่มเส้นใน SVG
+function tcClearWrongOverlays(slot) {
+  if (!slot) return;
+  slot.cells.forEach((cell) => { const ov = cell.querySelector(".tc-wrong-overlay"); if (ov) ov.remove(); });
+}
+function tcMarkWrong(entry, cell) {
+  if (!entry || !cell || !entry.wrongStrokes.size) return;
+  const svg = cell.querySelector("svg");
+  const group = svg && svg.querySelector("g[transform]");
+  if (!group || !group.getScreenCTM) return;
+  const data = bombCharData.get(entry.char);
+  if (!data || !data.medians) return;
+  const ctm = group.getScreenCTM();
+  const r = cell.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const NS = "http://www.w3.org/2000/svg";
+  let ov = cell.querySelector(".tc-wrong-overlay");
+  if (!ov) { ov = document.createElementNS(NS, "svg"); cell.appendChild(ov); }
+  ov.classList.add("tc-wrong-overlay");
+  ov.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
+  ov.replaceChildren();
+  entry.wrongStrokes.forEach((st) => {
+    const m = data.medians[st];
+    if (!m || !m.length) return;
+    const pts = m.map((p) => `${(ctm.a * p[0] + ctm.c * p[1] + ctm.e - r.left).toFixed(1)},${(ctm.b * p[0] + ctm.d * p[1] + ctm.f - r.top).toFixed(1)}`).join(" ");
+    const line = document.createElementNS(NS, "polyline");
+    line.setAttribute("points", pts);
+    line.setAttribute("class", "tc-wrong-stroke");
+    ov.appendChild(line);
+  });
+}
+
+function tcFitWriters() {
+  if (!tc) return;
+  tc.slots.forEach((slot) => {
+    slot.cells.forEach((cell, k) => {
+      const c = slot.chars[k];
+      if (!c) return;
+      const size = Math.max(48, Math.round(cell.clientWidth) || 90);
+      try { c.writer.updateDimensions({ width: size, height: size, padding: 8 }); } catch (e) {}
+      // วาดเส้นแดงทับขีดที่ผิดใหม่ให้ตรงกับขนาดช่องใหม่
+      if (tc.phase === "result" && c.wrongStrokes.size) {
+        const ov = cell.querySelector(".tc-wrong-overlay");
+        if (ov) ov.remove();
+        tcMarkWrong(c, cell);
+      }
+    });
+  });
+}
+
+$("tcMuteBtn").addEventListener("click", toggleMute);
+$("tcListenBtn").addEventListener("click", () => { sfx.click(); if (tc && tc.word) speakWordHit(tc.word); });
+$("tcSkipBtn").addEventListener("click", () => { sfx.click(); nextTraceWord(); });
+$("tcCheckBtn").addEventListener("click", () => { if ($("tcCheckBtn").disabled) return; sfx.click(); tcCheck(); });
+$("tcRetryBtn").addEventListener("click", () => { sfx.click(); tcRetryWrong(); });
+$("tcNextBtn").addEventListener("click", () => { sfx.click(); nextTraceWord(); });
+$("tcQuitBtn").addEventListener("click", () => { sfx.click(); quitTraceGame(); });
+$("tcGrid").addEventListener("pointerdown", (e) => pencilSound.start(e));
+$("tcGrid").addEventListener("pointermove", (e) => pencilSound.move(e));
+$("tcGrid").addEventListener("pointerleave", stopPencilPointer);
+
 window.addEventListener("resize", () => {
   if (cp && cpWriter && !$("cpStrokes").hidden) cpStrokeFit();
   if (cp && cpWriteWriter && !$("cpWrite").hidden) cpWriteFit();
+  if (tc) tcFitWriters();
 });
 
 $("cards").addEventListener("click", (e) => {
@@ -5756,17 +6183,18 @@ $("cards").addEventListener("click", (e) => {
   $("diffRow").style.display = arcade || isMatching || gameMode === "bomb" ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
-  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" ? "none" : "";
-  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" ? "none" : "";
+  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
+  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
   $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
   cpSyncSetupUI();
+  tcSyncSetupUI();
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
   // ปุ่ม HSK 6/7-9 แสดงเฉพาะโหมดที่ใช้ฐานคำศัพท์ VOCAB (โหมดประโยคมีแค่ HSK 1-5)
-  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb"].includes(gameMode)
+  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb", "trace"].includes(gameMode)
     || (gameMode === "listen" && lisType === "word");
   document.querySelectorAll(".level-btn.vocab-level").forEach((b) => { b.hidden = !usesVocab; });
   // ถ้าระดับที่เลือกค้างไว้ถูกซ่อน (เช่นเลือก 7-9 แล้วมากดโหมดประโยค) ให้ยกเลิกการเลือก
@@ -5889,6 +6317,17 @@ $("cpOutlineSelect").addEventListener("click", (e) => {
   localStorage.setItem("cr_copy_outline", cpOutline ? "on" : "off");
 });
 
+// โหมดคัดลายมือ: เปิด/ปิดเส้นนำการเขียน (ปิด = ใบ้ลำดับขีดถัดไปเมื่อเขียนผิด)
+$("tcOutlineSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".tco-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".tco-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  tcOutline = btn.dataset.outline === "on";
+  localStorage.setItem("cr_trace_outline", tcOutline ? "on" : "off");
+});
+
 $("startBtn").addEventListener("click", () => {
   if (!selectedLevel || !gameMode) return;
   sfx.click();
@@ -5901,6 +6340,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "speak") startSpeakGame(selectedLevel);
   else if (gameMode === "listen") startListenGame(selectedLevel);
   else if (gameMode === "copy") startCopyGame(selectedLevel);
+  else if (gameMode === "trace") startTraceGame(selectedLevel);
   else startGame(selectedLevel);
 });
 
@@ -5943,6 +6383,7 @@ function toggleMute() {
   $("spkMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("lisMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("cpMuteBtn").textContent = muted ? "🔇" : "🔊";
+  $("tcMuteBtn").textContent = muted ? "🔇" : "🔊";
 }
 $("muteBtn").addEventListener("click", toggleMute);
 
