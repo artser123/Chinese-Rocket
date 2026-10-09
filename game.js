@@ -92,7 +92,7 @@ const sfx = {
   groan:   () => beep(110, 0.35, "sawtooth", 0.08, -30),
   boom:    () => { beep(120, 0.3, "sawtooth", 0.16, -80); beep(70, 0.35, "triangle", 0.14, -40); },
   bombBlast: () => { noiseBurst(0.7, 0.45, 70, 3200); beep(110, 0.5, "sawtooth", 0.18, -80); beep(65, 0.8, "triangle", 0.24, -35); },
-  wrong:   () => beep(160, 0.22, "sawtooth", 0.14, -60),
+  wrong:   () => { beep(160, 0.22, "sawtooth", 0.14, -60); music.nudge(-0.12); },
   hit:     () => beep(880, 0.1, "square", 0.1, 300),
   damage:  () => { beep(90, 0.4, "sawtooth", 0.2, -50); beep(55, 0.5, "triangle", 0.18, -30); },
   over:    () => { beep(220, 0.5, "sawtooth", 0.15, -180); setTimeout(() => beep(140, 0.7, "sawtooth", 0.15, -100), 250); },
@@ -111,6 +111,7 @@ const sfx = {
   upgrade: () => { beep(523, 0.1, "square", 0.15); setTimeout(() => beep(659, 0.1, "square", 0.15), 100); setTimeout(() => beep(784, 0.15, "square", 0.15), 200); },
   // แฟนแฟร์ตอบถูก — ปุ่มปิดเสียงมีผลเฉพาะเพลงเบื้องหลัง เสียงเอฟเฟกต์ยังเล่นเสมอ
   correct: () => {
+    music.nudge(0.05); // ตอบถูกติดกัน = เพลงเข้มข้นขึ้น (ค่อยๆ กลับลงเป็นค่าฐานเอง)
     [523, 659, 784].forEach((f, i) => setTimeout(() => {
       beep(f, 0.13, "square", 0.15, 80, true);
       beep(f * 2, 0.09, "triangle", 0.06, 0, true);
@@ -288,20 +289,23 @@ function speakWordHit(w) {
 }
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
 
-/* ================= Background music (WebAudio chiptune) ================= */
+/* ============== Background music (WebAudio synth + FX bus) ============== */
 // แต่ละโหมดมีเพลง 5 เพลงไม่ซ้ำกัน — music.start(mode) สับลำดับแล้วเล่นวนไม่รู้จบ
 // เพลงหนึ่ง = ลูปเมโลดี้ 32 สเต็ป (null = เงียบ) เล่นซ้ำ SONG_LOOPS รอบก่อนเปลี่ยนเพลง
 // ฟิลด์ต่อเพลง: bpm, wave/bassWave, melVol/bassVol/kickVol, mul=คูณระดับเสียง,
 // roots เบสต่อจังหวะ (8 ค่า), kickEvery=จังหวะเตะกลอง, snare/hats เปิดปิด
+// ฟิลด์ใหม่ (ตั้งที่ _XXX ต่อโหมด จะ override รายเพลงก็ได้): swing=ดีเลย์โน้ตประให้มี groove,
+// pad/arp=ระดับเสียง pad/arpeggio (arp เปิดเฉพาะตอนความเข้มข้นสูง), detune=เซนต์ห่างออสซิลเลเตอร์คู่,
+// base=ความเข้มข้นเริ่มต้นของ layer สำหรับ adaptive music (0..1)
 const SONG_LOOPS = 6;
-const _MET = { wave: "triangle", bassWave: "sawtooth", melVol: 0.055, bassVol: 0.09, kickVol: 0.22, mul: 1, kickEvery: 4, snare: true, hats: true };
-const _VOC = { wave: "square", bassWave: "triangle", melVol: 0.045, bassVol: 0.07, kickVol: 0.16, mul: 1, kickEvery: 4, snare: false, hats: true };
-const _SEN = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.08, kickVol: 0.18, mul: 1, kickEvery: 4, snare: true, hats: true };
-const _FIL = { wave: "triangle", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.08, kickVol: 0.2, mul: 1, kickEvery: 4, snare: true, hats: true };
-const _ZOM = { wave: "sawtooth", bassWave: "sawtooth", melVol: 0.045, bassVol: 0.11, kickVol: 0.26, mul: 0.5, kickEvery: 2, snare: true, hats: true };
-const _MAT = { wave: "sine", bassWave: "sine", melVol: 0.05, bassVol: 0.06, kickVol: 0.1, mul: 1, kickEvery: 4, snare: false, hats: true };
-const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09, kickVol: 0.24, mul: 1, kickEvery: 2, snare: true, hats: true };
-const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true };
+const _MET = { wave: "triangle", bassWave: "sawtooth", melVol: 0.055, bassVol: 0.09, kickVol: 0.22, mul: 1, kickEvery: 4, snare: true, hats: true, swing: 0.07, pad: 0.034, arp: 0.032, detune: 6, base: 0.45 };
+const _VOC = { wave: "square", bassWave: "triangle", melVol: 0.045, bassVol: 0.07, kickVol: 0.16, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.05, pad: 0.032, arp: 0.03, detune: 5, base: 0.4 };
+const _SEN = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.08, kickVol: 0.18, mul: 1, kickEvery: 4, snare: true, hats: true, swing: 0.06, pad: 0.034, arp: 0.03, detune: 6, base: 0.4 };
+const _FIL = { wave: "triangle", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.08, kickVol: 0.2, mul: 1, kickEvery: 4, snare: true, hats: true, swing: 0.06, pad: 0.032, arp: 0.032, detune: 6, base: 0.45 };
+const _ZOM = { wave: "sawtooth", bassWave: "sawtooth", melVol: 0.045, bassVol: 0.11, kickVol: 0.26, mul: 0.5, kickEvery: 2, snare: true, hats: true, swing: 0.03, pad: 0.036, arp: 0.034, detune: 9, base: 0.65 };
+const _MAT = { wave: "sine", bassWave: "sine", melVol: 0.05, bassVol: 0.06, kickVol: 0.1, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.05, pad: 0.032, arp: 0.028, detune: 5, base: 0.35 };
+const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09, kickVol: 0.24, mul: 1, kickEvery: 2, snare: true, hats: true, swing: 0.04, pad: 0.032, arp: 0.034, detune: 8, base: 0.5 };
+const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.08, pad: 0.034, arp: 0.026, detune: 4, base: 0.3 };
 const MUSIC_THEMES = {
   meteor: [
     { ..._MET, bpm: 122,
@@ -479,73 +483,267 @@ const MUSIC_THEMES = {
       roots: [0, 0, -2, -2, 0, 0, -4, -5] },
   ],
 };
+// ปริมาณส่ง FX ของแต่ละ layer (โครงสร้างคงที่ — ตั้งครั้งเดียว ไม่ต้องแก้รายเพลง)
+const LAYER_FX = {
+  drums: { rev: 0.06, dly: 0 }, bass: { rev: 0.03, dly: 0 }, pad: { rev: 0.55, dly: 0.05 },
+  arp: { rev: 0.3, dly: 0.45 }, lead: { rev: 0.22, dly: 0.32 }, perc: { rev: 0.16, dly: 0 },
+};
 const music = {
-  playing: false, timer: null, step: 0, nextTime: 0,
+  playing: false, timer: null, step: 0, nextTime: 0, loopCount: 0,
   themeName: "meteor", theme: MUSIC_THEMES.meteor[0],
   songs: MUSIC_THEMES.meteor, order: [0], orderPos: 0, stepsLeft: 0,
   stepDur: 60 / 140 / 4,
+  intensity: 0.5, baseIntensity: 0.5,
+  human: () => (Math.random() - 0.5) * 0.008, // ขยับจังหวะกลองเล็กน้อยให้ไม่แข็งเหมือนเครื่อง
+  // convolver กิน CPU — ปิด reverb ถ้าเครื่องมี 4 คอร์หรือน้อยกว่า
+  revOn: () => !(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4),
+  // impulse response ของ reverb สร้างเองจาก noise (ไม่ใช้ไฟล์) — decay ยิ่งมาก หางยิ่งสั้น
+  makeIR(dur, decay) {
+    const ac = AC, len = Math.ceil(ac.sampleRate * dur);
+    const buf = ac.createBuffer(2, len, ac.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return buf;
+  },
+  // สายสัญญาณ: layer → dry + ส่ง reverb/ดีเลย์ (ping-pong) → master (mute/duck) → limiter → destination
+  buildGraph() {
+    const ac = AC;
+    this.master = ac.createGain();
+    this.master.gain.value = muted ? 0 : 1;
+    this.limiter = ac.createDynamicsCompressor();
+    this.limiter.threshold.value = -12; this.limiter.knee.value = 6; this.limiter.ratio.value = 5;
+    this.limiter.attack.value = 0.004; this.limiter.release.value = 0.22;
+    this.master.connect(this.limiter);
+    this.limiter.connect(ac.destination);
+
+    this.rev = ac.createConvolver();
+    this.rev.buffer = this.makeIR(1.5, 3.4);
+    this.revLP = ac.createBiquadFilter();
+    this.revLP.type = "lowpass"; this.revLP.frequency.value = 3800;
+    this.revOut = ac.createGain();
+    this.revOut.gain.value = this.revOn() ? 0.8 : 0;
+    this.rev.connect(this.revLP); this.revLP.connect(this.revOut); this.revOut.connect(this.master);
+
+    this.dlyL = ac.createDelay(1); this.dlyR = ac.createDelay(1);
+    this.dlyFB = ac.createGain(); this.dlyFB.gain.value = 0.32;
+    this.dlyLP = ac.createBiquadFilter();
+    this.dlyLP.type = "lowpass"; this.dlyLP.frequency.value = 2400;
+    const panL = ac.createStereoPanner(), panR = ac.createStereoPanner();
+    panL.pan.value = -0.7; panR.pan.value = 0.7;
+    this.dlyIn = ac.createGain();
+    this.dlyIn.connect(this.dlyL);
+    this.dlyL.connect(panL); panL.connect(this.master);
+    this.dlyL.connect(this.dlyR); this.dlyR.connect(panR); panR.connect(this.master);
+    this.dlyR.connect(this.dlyLP); this.dlyLP.connect(this.dlyFB); this.dlyFB.connect(this.dlyL);
+
+    this.layers = {};
+    for (const name of Object.keys(LAYER_FX)) {
+      const g = ac.createGain(), fx = LAYER_FX[name];
+      g.connect(this.master);
+      if (fx.rev) { const s = ac.createGain(); s.gain.value = fx.rev; g.connect(s); s.connect(this.rev); }
+      if (fx.dly) { const s = ac.createGain(); s.gain.value = fx.dly; g.connect(s); s.connect(this.dlyIn); }
+      this.layers[name] = g;
+    }
+  },
   getAC() {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
-    if (!this.master) {
-      this.master = AC.createGain();
-      this.master.gain.value = muted ? 0 : 1;
-      this.master.connect(AC.destination);
-    }
+    if (!this.master) this.buildGraph();
     return AC;
   },
-  tone(freq, t, dur, type, vol, slide) {
+  // โน้ตหนึ่งตัว: ออสซิลเลเตอร์คู่ detune (กว้าง/มีมิติ) + filter envelope + ADSR + pan
+  // opts: layer, pan, slide, detune, attack/hold/release, cutoff/q, sub (เสียงซับของเบส)
+  tone(freq, t, dur, type, vol, opts = {}) {
     if (!freq) return;
     const ac = this.getAC();
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = type; o.frequency.value = freq;
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master);
-    o.start(t); o.stop(t + dur);
+    const { layer = "lead", pan = 0, slide = 0, detune = 0, attack = 0.008, hold = 0.6,
+            release = 0.14, cutoff = 2400, q = 0.9, sub = 0 } = opts;
+    const bus = (this.layers && this.layers[layer]) || this.master;
+    const f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = "lowpass"; f.Q.value = q;
+    f.frequency.setValueAtTime(Math.min(12000, cutoff * 2.4), t);
+    f.frequency.exponentialRampToValueAtTime(Math.max(180, cutoff), t + attack + Math.min(dur * 0.3, 0.22));
+    const n = 1 + (detune ? 2 : 0); // ออสซิลเลเตอร์หลักมีกี่ตัว → หารระดับเสียงให้ดังรวมเท่าเดิม
+    const peak = Math.max(0.0006, vol / Math.sqrt(n));
+    const rel = Math.max(0.02, release);
+    g.gain.setValueAtTime(0.0006, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + Math.max(0.004, attack));
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0006, peak * hold), t + attack + Math.min(dur * 0.35, 0.2));
+    g.gain.setTargetAtTime(0.0006, t + dur, rel / 3);
+    f.connect(g);
+    if (pan) { const p = ac.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(bus); }
+    else g.connect(bus);
+    const mk = (mul, wave, cents, level) => {
+      const o = ac.createOscillator();
+      o.type = wave; o.frequency.value = Math.max(20, freq * mul);
+      if (cents) o.detune.value = cents;
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * mul + slide), t + dur);
+      if (level === undefined) o.connect(f);
+      else { const lg = ac.createGain(); lg.gain.value = level; o.connect(lg); lg.connect(f); }
+      o.start(t); o.stop(t + dur + rel * 3 + 0.05);
+    };
+    mk(1, type, 0);
+    if (detune) { mk(1, type, detune + Math.random() * 1.5); mk(1, type, -detune - Math.random() * 1.5); }
+    if (sub) mk(0.5, "sine", 0, sub);
   },
-  noise(t, dur, vol, hp) {
+  // เสียงสาย percussive ทั้งหมดใช้ noise buffer ก้อนเดียวที่แชร์กัน
+  nz(t, dur, vol, opts = {}) {
     const ac = this.getAC();
-    if (!this._nbuf) {
-      this._nbuf = ac.createBuffer(1, ac.sampleRate * 0.2, ac.sampleRate);
+    if (!this._nbuf || this._nbuf.sampleRate !== ac.sampleRate) {
+      this._nbuf = ac.createBuffer(1, Math.ceil(ac.sampleRate), ac.sampleRate);
       const d = this._nbuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     }
-    const src = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
     src.buffer = this._nbuf;
-    f.type = "highpass"; f.frequency.value = hp;
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f); f.connect(g); g.connect(this.master);
-    src.start(t); src.stop(t + dur);
+    f.type = opts.type || "highpass"; f.frequency.value = opts.freq || 6000; f.Q.value = opts.q || 1;
+    g.gain.setValueAtTime(Math.max(0.0008, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    src.connect(f); f.connect(g);
+    const bus = (this.layers && this.layers[opts.layer || "drums"]) || this.master;
+    if (opts.pan) { const p = ac.createStereoPanner(); p.pan.value = opts.pan; g.connect(p); p.connect(bus); }
+    else g.connect(bus);
+    src.start(t); src.stop(t + dur + 0.03);
   },
+  kick(t, vol) {
+    const ac = this.getAC(), bus = (this.layers && this.layers.drums) || this.master;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(155, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.1);
+    g.gain.setValueAtTime(Math.max(0.001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.3);
+    o.connect(g); g.connect(bus);
+    o.start(t); o.stop(t + 0.32);
+    this.nz(t, 0.02, vol * 0.22, { freq: 2200 }); // click บางๆ ให้มี punch
+  },
+  snare(t, vol) {
+    this.nz(t, 0.17, vol * 0.55, { type: "bandpass", freq: 1900, q: 0.8, pan: 0.06 });
+    this.tone(185, t, 0.09, "triangle", vol * 0.16, { layer: "drums", cutoff: 1300, release: 0.05 });
+  },
+  hat(t, vol, open) { this.nz(t, open ? 0.2 : 0.045, vol, { freq: 8200, pan: (Math.random() - 0.5) * 0.6 }); },
+  shaker(t, vol) { this.nz(t, 0.07, vol * 0.7, { type: "bandpass", freq: 5200, q: 1.2, pan: (Math.random() - 0.5) * 0.9 }); },
+  tom(t, vol, mul) { this.tone(200 * mul, t, 0.18, "sine", vol * 0.5, { layer: "drums", slide: -70, cutoff: 900, release: 0.08 }); },
+  bell(t, freq, vol) { // ระฆังแบบ FM บางๆ (ใช้ตอนปิดลูป/แครช)
+    const ac = this.getAC(), bus = (this.layers && this.layers.perc) || this.master;
+    const car = ac.createOscillator(), mod = ac.createOscillator(), mg = ac.createGain(), g = ac.createGain();
+    car.type = "sine"; car.frequency.value = freq;
+    mod.type = "sine"; mod.frequency.value = freq * 2.4;
+    mg.gain.value = freq * 1.6;
+    mod.connect(mg); mg.connect(car.frequency);
+    g.gain.setValueAtTime(Math.max(0.0008, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.6);
+    car.connect(g); g.connect(bus);
+    car.start(t); car.stop(t + 0.62); mod.start(t); mod.stop(t + 0.62);
+  },
+  crash(t, vol) { this.nz(t, 0.7, vol * 0.4, { freq: 3200, pan: -0.25 }); this.bell(t, 1046, vol * 0.16); },
   setMuted(m) {
     if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 1, this.getAC().currentTime, 0.01);
   },
-  scheduleStep(s, t) {
+  // ---- โครงเพลง: คอร์ดของแต่ละครึ่งบาร์ (เดาจากรากเบส + โน้ตเมโลดี้ครึ่งบาร์นั้น) ----
+  // โน้ตที่ห่างจากราก 3 ฮาล์ฟโทน = คอร์ดไมเนอร์, ห่าง 4 = เมเจอร์
+  chordAt(s) {
     const th = this.theme;
-    // melody: 16th-note lead (null = rest)
-    const m = th.melody[s];
-    if (m != null) this.tone(440 * th.mul * Math.pow(2, m / 12), t, this.stepDur * 0.9, th.wave, th.melVol);
-    // bass on each beat (steps 0,4,8,12)
-    if (s % 4 === 0) {
-      const root = th.roots[Math.floor(s / 4)];
-      this.tone(110 * Math.pow(2, root / 12), t, this.stepDur * 3.4, th.bassWave, th.bassVol);
+    const half = s >= 16 ? 1 : 0;
+    const root = th.roots[half * 4] ?? th.roots[0] ?? 0;
+    let third = 4;
+    for (let i = half * 16; i < (half + 1) * 16; i++) {
+      const m = th.melody[i];
+      if (m == null) continue;
+      const iv = ((m - root) % 12 + 12) % 12;
+      if (iv === 3) { third = 3; break; }
+      if (iv === 4) third = 4;
     }
-    // kick
-    if (th.kickEvery && s % th.kickEvery === 0) this.tone(150, t, 0.1, "sine", th.kickVol, 40);
-    // snare on beats 2 & 4
-    if (th.snare && s % 8 === 4) this.noise(t, 0.12, 0.12, 1200);
-    // hats on offbeats
-    if (th.hats && s % 4 === 2) this.noise(t, 0.05, 0.05, 6000);
+    return { root, third };
   },
-  // โหลดเพลงปัจจุบันของเพลย์ลิสต์ (ตั้ง bpm และจำนวนสเต็ปที่จะเล่นก่อนข้ามเพลง)
+  // pad: คอร์ด 3 เสียงกอดไว้ครึ่งบาร์ แผ่ซ้าย-กลาง-ขวา ให้เสียงกว้างมีมิติ
+  pad(s, t) {
+    const th = this.theme, chord = this.chordAt(s);
+    const base = 220 * Math.pow(2, chord.root / 12);
+    [0, chord.third, 7].forEach((iv, i) => {
+      this.tone(base * Math.pow(2, iv / 12), t, this.stepDur * 15, i === 1 ? "sine" : "triangle", th.pad,
+        { layer: "pad", attack: 0.45, hold: 0.85, release: 0.9, cutoff: 1800, detune: 8, pan: [-0.55, 0, 0.55][i] });
+    });
+  },
+  // arp: ไล่เสียงในคอร์ดทุก 8th note — เล่นเฉพาะตอนความเข้มข้นสูง (gate ที่ gain ของ layer)
+  arp(s, t) {
+    const th = this.theme;
+    if (!th.arp || !this.layers || this.layers.arp.gain.value < 0.02) return;
+    const chord = this.chordAt(s), tones = [0, chord.third, 7, 12, 7, chord.third];
+    const iv = tones[((s / 2) | 0) % tones.length];
+    this.tone(220 * Math.pow(2, (chord.root + iv) / 12), t, this.stepDur * 1.5, "sine", th.arp,
+      { layer: "arp", attack: 0.006, hold: 0.45, release: 0.2, cutoff: 3000, pan: ((s / 2) | 0) % 2 ? 0.3 : -0.3 });
+  },
+  // ---- adaptive music: ความเข้มข้น 0..1 เปิด-ปิด layer ให้เพลงโตตามสถานการณ์เกม ----
+  applyIntensity() {
+    if (!this.layers || !AC) return;
+    const i = Math.max(0, Math.min(1, this.intensity)), now = AC.currentTime;
+    const to = (name, v) => this.layers[name].gain.setTargetAtTime(v, now, 0.35);
+    to("perc", Math.max(0, (i - 0.45) / 0.55)); // shaker เข้าเมื่อเริ่มตึง
+    to("arp", Math.max(0, (i - 0.3) / 0.7));    // arpeggio เข้าเมื่อตึงกลางๆ
+    to("pad", 0.75 + 0.25 * i);
+    to("lead", 0.9 + 0.1 * i);
+    to("drums", 0.95 + 0.05 * i);
+    to("bass", 1);
+  },
+  setIntensity(v) {
+    v = Math.max(0, Math.min(1, v));
+    if (Math.abs(v - this.intensity) < 0.02) return; // เปลี่ยนนิดเดียว: ข้าม ไม่ต้องเขียน automation ซ้ำทุกเฟรม
+    this.intensity = v; this.applyIntensity();
+  },
+  nudge(d) { this.setIntensity(this.intensity + d); },
+  scheduleStep(s, t) {
+    const th = this.theme, step = this.stepDur;
+    const swing = (th.swing || 0) * step * (s % 2); // ดีเลย์โน้ตประให้มี groove
+    const ts = t + swing;
+    // ---- lead (melody 16th note) ----
+    const m = th.melody[s];
+    if (m != null) this.tone(440 * th.mul * Math.pow(2, m / 12), ts, step * 0.95, th.wave, th.melVol,
+      { layer: "lead", detune: th.detune || 5, attack: 0.006, hold: 0.55, release: 0.11, cutoff: 3200, pan: (s % 16) < 8 ? -0.12 : 0.12 });
+    // ---- bass ทุกจังหวะ ----
+    if (s % 4 === 0) {
+      const root = th.roots[(s / 4) | 0] ?? 0;
+      this.tone(110 * Math.pow(2, root / 12), t, step * 3.5, th.bassWave, th.bassVol,
+        { layer: "bass", attack: 0.012, hold: 0.8, release: 0.14, cutoff: 900, sub: 0.45 });
+    }
+    // ---- โครงเพลง: pad ต้นครึ่งบาร์ + arp เบาๆ ระหว่างนั้น ----
+    if (s % 16 === 0) this.pad(s, t);
+    else if (s % 2 === 0) this.arp(s, ts + this.human());
+    // ---- กลอง ----
+    if (th.kickEvery && s % th.kickEvery === 0) this.kick(t, th.kickVol);
+    if (th.snare && s % 8 === 4) this.snare(t, th.kickVol * 0.62);
+    if (th.hats && s % 4 === 2) this.hat(ts + this.human(), th.kickVol * 0.16, false);
+    if (th.hats && this.layers && this.layers.perc.gain.value > 0.05 && s % 4 === 0) this.shaker(ts + this.human(), th.kickVol * 0.1);
+    // ---- fill ปิดลูป (ทุกรอบที่ 2) ให้มีจุดพลิกก่อนวนใหม่ ----
+    const last = th.melody.length;
+    if (this.loopCount % 2 === 1) {
+      if (s === last - 2) this.tom(t, th.kickVol, 1);
+      else if (s === last - 1) { this.tom(t, th.kickVol, 0.8); this.tom(t + step * 0.5, th.kickVol * 0.72, 0.62); }
+    } else if (s === 0 && this.loopCount > 0) {
+      this.crash(t, th.kickVol * 0.55);
+    }
+    // ---- ค่อยๆ กลับเข้าความเข้มข้นฐานของโหมด (0.7%/สเต็ป ≈ ครึ่งทางใน ~10 วิ) ----
+    this.intensity += (this.baseIntensity - this.intensity) * 0.007;
+    if (s % 4 === 0) this.applyIntensity();
+  },
+  // โหลดเพลงปัจจุบันของเพลย์ลิสต์ (ตั้ง bpm / ความเข้มข้นฐาน / จำนวนสเต็ปก่อนข้ามเพลง)
   loadSong() {
     this.theme = this.songs[this.order[this.orderPos]];
     this.stepDur = 60 / this.theme.bpm / 4;
     this.step = 0;
+    this.loopCount = 0;
     this.stepsLeft = this.theme.melody.length * SONG_LOOPS;
+    this.baseIntensity = this.theme.base ?? 0.5;
+    this.syncDelay();
+  },
+  // ตั้งเวลาดีเลย์ให้ตรงจังหวะเพลง (โน้ตเขบ็ต 3 ชั้น) — ต้องเรียกอีกครั้งหลังสร้าง graph
+  syncDelay() {
+    if (!this.dlyL || !this.theme) return;
+    const d = (60 / this.theme.bpm) * 0.75;
+    this.dlyL.delayTime.value = d;
+    this.dlyR.delayTime.value = d;
   },
   // ไปเพลงถัดไปในลำดับที่สับไว้ — เล่นครบทุกเพลงแล้วสับใหม่
   // (เพลงแรกของรอบใหม่จะไม่ซ้ำกับเพลงที่เพิ่งจบ)
@@ -567,11 +765,14 @@ const music = {
     this.order = shuffle([...this.songs.keys()]);
     this.orderPos = 0;
     this.loadSong();
-    this.playing = true;
     const ac = this.getAC();
+    this.syncDelay(); // graph เพิ่งถูกสร้างใน getAC() — ตั้งดีเลย์ให้ตรงจังหวะเพลงแรกด้วย
+    this.setIntensity(this.baseIntensity); // เริ่มที่ความเข้มข้นฐานของโหมด (adaptive จะขยับต่อตามเกม)
+    this.playing = true;
     this.nextTime = ac.currentTime + 0.1;
     this.timer = setInterval(() => {
-      while (this.nextTime < ac.currentTime + 0.15) {
+      while (this.nextTime < ac.currentTime + 0.2) {
+        if (this.step === 0) this.loopCount++; // นับรอบลูป (ใช้เลือกจุด fill/แครช)
         this.scheduleStep(this.step, this.nextTime);
         this.nextTime += this.stepDur;
         this.step = (this.step + 1) % this.theme.melody.length;
@@ -1312,6 +1513,7 @@ function hitGround(m, idx) {
   meteors.splice(idx, 1);
   combo = 0;
   lives--;
+  music.setIntensity(1 - lives / 3); // เลือดน้อยลง = ดนตรีเข้มข้นขึ้น
   shakeT = 0.45;
   sfx.damage();
   explosion(m.x, groundY() - 6, "#ff5030", 30);
@@ -3468,6 +3670,7 @@ function renderBombTimer() {
   const frame = $("bombFrameFill");
   frame.style.strokeDashoffset = BOMB_FRAME_PERIMETER * (1 - frac);
   frame.classList.toggle("urgent", urgent);
+  music.setIntensity(1 - frac); // ยิ่งใกล้หมดเวลา ดนตรียิ่งเข้มข้น (adaptive)
 }
 
 function resolveBomb(success, reason = "") {
