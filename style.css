@@ -500,7 +500,9 @@ html, body {
 #quizWord {
   margin-top: 2vh;
   font-size: clamp(60px, 20vw, 120px);
-  font-weight: 800;
+  /* Noto Sans SC โหลด 400/600/700/900 → 800 เดิมถูก snap ไป 900 (เส้นหนาเกิน)
+     ใช้ 600 (SemiBold) ที่เบากว่า 700 และมีไฟล์จริงในลิงก์ฟอนต์ */
+  font-weight: 600;
   line-height: 1.2;
   text-shadow: 0 0 30px rgba(120, 140, 255, .6);
   min-height: 1.2em;
