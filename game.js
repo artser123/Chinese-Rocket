@@ -298,6 +298,8 @@ if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice l
 // pad/arp=ระดับเสียง pad/arpeggio (arp เปิดเฉพาะตอนความเข้มข้นสูง), detune=เซนต์ห่างออสซิลเลเตอร์คู่,
 // base=ความเข้มข้นเริ่มต้นของ layer สำหรับ adaptive music (0..1)
 const SONG_LOOPS = 6;
+// วิ — เวลาตัดหางเสียงตอนเปลี่ยนเพลง (โน้ตอย่าง pad ลากยาว ~1.5 วิ ถ้าไม่ตัดจะล้นไปซ้อนเพลงถัดไป)
+const SONG_FADE = 0.15;
 const _MET = { wave: "triangle", bassWave: "sawtooth", melVol: 0.055, bassVol: 0.09, kickVol: 0.22, mul: 1, kickEvery: 4, snare: true, hats: true, swing: 0.07, pad: 0.034, arp: 0.032, detune: 6, base: 0.45 };
 const _VOC = { wave: "square", bassWave: "triangle", melVol: 0.045, bassVol: 0.07, kickVol: 0.16, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.05, pad: 0.032, arp: 0.03, detune: 5, base: 0.4 };
 const _SEN = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.08, kickVol: 0.18, mul: 1, kickEvery: 4, snare: true, hats: true, swing: 0.06, pad: 0.034, arp: 0.03, detune: 6, base: 0.4 };
@@ -494,6 +496,7 @@ const music = {
   songs: MUSIC_THEMES.meteor, order: [0], orderPos: 0, stepsLeft: 0,
   stepDur: 60 / 140 / 4,
   intensity: 0.5, baseIntensity: 0.5,
+  voices: [], // เสียงที่ยังดังอยู่ (gain + เวลาจบ) สำหรับตัดหางตอนเปลี่ยนเพลง
   human: () => (Math.random() - 0.5) * 0.008, // ขยับจังหวะกลองเล็กน้อยให้ไม่แข็งเหมือนเครื่อง
   // convolver กิน CPU — ปิด reverb ถ้าเครื่องมี 4 คอร์หรือน้อยกว่า
   revOn: () => !(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4),
@@ -572,6 +575,7 @@ const music = {
     g.gain.exponentialRampToValueAtTime(peak, t + Math.max(0.004, attack));
     g.gain.exponentialRampToValueAtTime(Math.max(0.0006, peak * hold), t + attack + Math.min(dur * 0.35, 0.2));
     g.gain.setTargetAtTime(0.0006, t + dur, rel / 3);
+    this.reg(g, t, t + dur + rel * 3 + 0.05); // ลงทะเบียนไว้ตัดหางตอนเปลี่ยนเพลง
     f.connect(g);
     if (pan) { const p = ac.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(bus); }
     else g.connect(bus);
@@ -601,6 +605,7 @@ const music = {
     f.type = opts.type || "highpass"; f.frequency.value = opts.freq || 6000; f.Q.value = opts.q || 1;
     g.gain.setValueAtTime(Math.max(0.0008, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    this.reg(g, t, t + dur + 0.03);
     src.connect(f); f.connect(g);
     const bus = (this.layers && this.layers[opts.layer || "drums"]) || this.master;
     if (opts.pan) { const p = ac.createStereoPanner(); p.pan.value = opts.pan; g.connect(p); p.connect(bus); }
@@ -615,6 +620,7 @@ const music = {
     o.frequency.exponentialRampToValueAtTime(44, t + 0.1);
     g.gain.setValueAtTime(Math.max(0.001, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0008, t + 0.3);
+    this.reg(g, t, t + 0.32);
     o.connect(g); g.connect(bus);
     o.start(t); o.stop(t + 0.32);
     this.nz(t, 0.02, vol * 0.22, { freq: 2200 }); // click บางๆ ให้มี punch
@@ -635,12 +641,35 @@ const music = {
     mod.connect(mg); mg.connect(car.frequency);
     g.gain.setValueAtTime(Math.max(0.0008, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0008, t + 0.6);
+    this.reg(g, t, t + 0.62);
     car.connect(g); g.connect(bus);
     car.start(t); car.stop(t + 0.62); mod.start(t); mod.stop(t + 0.62);
   },
   crash(t, vol) { this.nz(t, 0.7, vol * 0.4, { freq: 3200, pan: -0.25 }); this.bell(t, 1046, vol * 0.16); },
   setMuted(m) {
     if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 1, this.getAC().currentTime, 0.01);
+  },
+  // ---- เปลี่ยนเพลง: ตัดหางเสียงของเพลงเก่า ไม่ให้ล้นไปซ้อนเพลงใหม่ ----
+  // โน้ตอย่าง pad/bass ข้ามสเต็ปได้ (pad ยาว ~15 สเต็ป) ถ้าปล่อยไว้จะดังทับเพลงถัดไป
+  // (คนละคอร์ด คนละจังหวะ) — ทุกเสียงจึงถูกลงทะเบียนไว้เพื่อ "ตัดหาง" ได้ทีหลัง
+  reg(g, start, until) { this.voices.push({ g, start, until }); },
+  // t = เวลาที่เริ่มตัดหาง (null = ตอนนี้) — ไล่ gain ลงถึง 0 ในเวลา fade วิ
+  // ใช้ cancelAndHoldAtTime คงค่า gain ปัจจุบันไว้ก่อนไล่ลง จึงไม่แตก/ไม่คลิก
+  fadeVoices(t, fade = SONG_FADE) {
+    if (!AC) return;
+    const now = AC.currentTime, at = Math.max(t == null ? now : t, now);
+    this.voices = this.voices.filter((v) => v.until > now); // ทิ้งรายการที่เสียงจบไปแล้ว
+    for (const v of this.voices) {
+      const p = v.g.gain;
+      if (v.start >= at) { // เสียงที่ยังไม่เริ่ม (ค้างอยู่ในคิว) — เงียบไว้ตั้งแต่ต้นเลย
+        p.cancelScheduledValues(at);
+        p.setValueAtTime(0.0006, at);
+      } else {
+        if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(at);
+        else { p.cancelScheduledValues(at); p.setValueAtTime(Math.max(0.0006, p.value), at); }
+        p.exponentialRampToValueAtTime(0.0006, at + fade);
+      }
+    }
   },
   // ---- โครงเพลง: คอร์ดของแต่ละครึ่งบาร์ (เดาจากรากเบส + โน้ตเมโลดี้ครึ่งบาร์นั้น) ----
   // โน้ตที่ห่างจากราก 3 ฮาล์ฟโทน = คอร์ดไมเนอร์, ห่าง 4 = เมเจอร์
@@ -748,6 +777,8 @@ const music = {
   // ไปเพลงถัดไปในลำดับที่สับไว้ — เล่นครบทุกเพลงแล้วสับใหม่
   // (เพลงแรกของรอบใหม่จะไม่ซ้ำกับเพลงที่เพิ่งจบ)
   advanceSong() {
+    // ตัดหางเสียงเพลงเดิมที่ "ขอบเพลง" พอดี (nextTime = จังหวะแรกของเพลงใหม่) — กันเพลงซ้อนกัน
+    this.fadeVoices(this.nextTime);
     this.orderPos++;
     if (this.orderPos >= this.order.length) {
       const last = this.order[this.order.length - 1];
@@ -778,12 +809,15 @@ const music = {
         this.step = (this.step + 1) % this.theme.melody.length;
         if (--this.stepsLeft <= 0) this.advanceSong();
       }
+      // เก็บกวาดรายการเสียงที่จบไปแล้ว (ไม่ให้ voice list โตขึ้นเรื่อยๆ)
+      if (this.voices.length) this.voices = this.voices.filter((v) => v.until > ac.currentTime);
     }, 30);
   },
   stop() {
     this.playing = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.fadeVoices(); // เลิกเล่น/สลับโหมด: ตัดหางเสียงที่ค้างอยู่ทันที ไม่ให้ทับเพลงของโหมดถัดไป
   },
 };
 
