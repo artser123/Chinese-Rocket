@@ -1779,6 +1779,9 @@ html, body {
 
 /* ---------- Handwriting copy mode (เกมคัดลายมือ) ---------- */
 #trace {
+  /* ตัวคูณขนาดของ "กล่องเขียน" ทั้งโหมด (1 = ขนาดเดิม, .7 = ย่อลง 30%)
+     ทุกอย่างที่คิดจากตัวแปรนี้ย่อพร้อมกันในสัดส่วนเดียวกันทั้งคำ 1 ตัว / 2 ตัว / 3 ตัว */
+  --tc-scale: .7;
   background: radial-gradient(ellipse at 50% 0%, #16204d 0%, #05081e 65%);
   justify-content: flex-start;
   padding-top: calc(14px + env(safe-area-inset-top));
@@ -1809,17 +1812,21 @@ html, body {
 .tc-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  width: min(680px, 94vw);
+  gap: calc(8px * var(--tc-scale));
+  width: min(calc(680px * var(--tc-scale)), calc(94vw * var(--tc-scale)));
 }
 .tc-grid.wide { grid-template-columns: 1fr; }
+/* คำตัวเดียว — ล็อกช่องเขียนให้กว้างเท่าช่องของคำ 2 ตัว (ครึ่งหนึ่งของพื้นที่ในช่อง) แล้วจัดกึ่งกลาง
+   ที่เดิมช่องเขียนจะขยายเต็มความกว้างช่อง ทำให้กล่องใหญ่เกินไป เขียนด้วยปากกายาก */
+.tc-grid.single .tc-chars { justify-content: center; }
+.tc-grid.single .tc-char { flex: 0 0 calc(50% - 2px * var(--tc-scale)); }
 .tc-slot {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 5px;
-  border: 2px solid #3d4a9e;
-  border-radius: 12px;
+  gap: calc(4px * var(--tc-scale));
+  padding: calc(5px * var(--tc-scale));
+  border: calc(2px * var(--tc-scale)) solid #3d4a9e;
+  border-radius: calc(12px * var(--tc-scale));
   background: rgba(19, 26, 61, .72);
   transition: border-color var(--dur-fast), box-shadow var(--dur-fast), opacity var(--dur-fast);
 }
@@ -1840,7 +1847,7 @@ html, body {
 .tc-slot.active .tc-slot-head { color: #ffd76a; }
 .tc-slot.done .tc-badge { color: #9dffbc; }
 .tc-slot.wrong .tc-badge { color: #ff9d9d; }
-.tc-chars { display: flex; gap: 4px; }
+.tc-chars { display: flex; gap: calc(4px * var(--tc-scale)); }
 .tc-char {
   position: relative;
   flex: 1;

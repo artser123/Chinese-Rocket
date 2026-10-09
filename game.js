@@ -5613,17 +5613,13 @@ async function cpWriteChar() {
     cpWriteWriter.quiz({
       leniency: 1.4,
       markStrokeCorrectAfterMisses: 4,
-      showHintAfterMisses: cpOutline ? 4 : 1,
+      // ต้องน้อยกว่า markStrokeCorrectAfterMisses (4) เสมอ — ครั้งที่ 4 HanziWriter จะเข้า branch ยอมรับขีดให้ผ่าน
+      // แล้วข้ามโค้ดโชว์เส้นสาธิตทันที เดิมใช้ cpOutline ? 4 : 1 จึงไม่มีเส้นสาธิตขึ้นเลยตอนเปิดเส้นนำ (ค่าเริ่มต้น)
+      showHintAfterMisses: 1,
       strokeHighlightSpeed: cpOutline ? 0.7 : 0.35,
       onMistake: (data) => {
         if (!cp || cp.seq !== seq) return;
-        if (!cpOutline) {
-          status.textContent = `เขียนผิด — ดูอนิเมชั่นใบ้ขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตาม • ไม่มีโทษ`;
-          return;
-        }
-        status.textContent = data.mistakesOnStroke >= 4
-          ? `ดูเส้นสีเขียวสาธิตขีดที่ ${data.strokeNum + 1} แล้วลองเขียนตาม • ไม่มีโทษ`
-          : `ขีดที่ ${data.strokeNum + 1} ยังไม่ถูก ลองใหม่ได้`;
+        status.textContent = `ขีดที่ ${data.strokeNum + 1} ยังไม่ถูก — ดูเส้นสีเขียวสาธิตวิธีเขียน แล้วลองใหม่ • ไม่มีโทษ`;
       },
       onCorrectStroke: (data) => {
         if (!cp || cp.seq !== seq) return;
@@ -5865,6 +5861,7 @@ function renderTraceGrid() {
   const grid = $("tcGrid");
   grid.replaceChildren();
   grid.classList.toggle("wide", tc.chars.length >= 3); // คำยาว 3 ตัวขึ้นไปใช้ 1 คอลัมน์ให้เขียนสบาย
+  grid.classList.toggle("single", tc.chars.length === 1); // คำตัวเดียว: ล็อกช่องเขียนให้เท่าคำ 2 ตัว (ดู style.css)
   tc.slots = [];
   for (let i = 0; i < TC_SLOTS; i++) {
     const el = document.createElement("div");
@@ -5956,7 +5953,9 @@ function tcQuizChar(slot, entry, seq) {
     entry.writer.quiz({
       leniency: 1.4,
       markStrokeCorrectAfterMisses: 4,
-      showHintAfterMisses: tcOutline ? 4 : 1,
+      // ต้องน้อยกว่า markStrokeCorrectAfterMisses (4) เสมอ — พอผิดครบครั้งที่ 4 HanziWriter จะเข้า branch
+      // "ยอมรับขีดนี้ให้ผ่าน" แล้วข้ามการโชว์ไฮไลต์ทันที เดิมตั้ง 4 ตอนเปิดเส้นไกด์(ค่าเริ่มต้น) จึงเขียนผิดกี่ครั้งก็ไม่มีเส้นแดงขึ้น
+      showHintAfterMisses: 1,
       strokeHighlightSpeed: tcOutline ? 0.7 : 0.35,
       onMistake: (data) => {
         if (!tc || tc.seq !== seq) return;
