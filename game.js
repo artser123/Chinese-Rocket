@@ -2866,12 +2866,12 @@ function applyMatchLayout() {
 function nextMatchingRound() {
   const s = matching, config = MATCH_DIFF[s.diff];
   s.deck = makeMatchingDeck(s.words, config.cards, s.mode, s.deck);
-  s.open = []; s.waitUntil = 0;
+  s.open = []; s.waitUntil = 0; s.combo = 0;
   const board = $("matchBoard");
   board.replaceChildren();
   s.deck.forEach((card, i) => {
     const button = document.createElement("button");
-    button.className = "match-card";
+    button.className = "match-card " + (card.side === "chinese" ? "chinese" : "answer");
     const text = document.createElement("span");
     text.className = "match-text";
     button.append(text);
@@ -2879,28 +2879,86 @@ function nextMatchingRound() {
     board.appendChild(button);
   });
   applyMatchLayout();
-  $("matchFeedback").textContent = `ชุดที่ ${s.rounds + 1} — แตะคำจีนแล้วแตะคำตอบที่ตรงกัน`;
+  matchFeedbackPulse(null);
+  $("matchFeedback").textContent = "แตะคำจีน แล้วแตะคำตอบที่ตรงกัน";
+  const doneEl = document.createElement("div");
+  doneEl.className = "match-round-done";
+  doneEl.textContent = "ครบชุดแล้ว! กำลังสุ่มชุดใหม่";
+  board.appendChild(doneEl);
+  s.doneEl = doneEl;
+  $("matchFeedback").style.setProperty("--fb-scale", "1");
   renderMatchingCards();
 }
 
 function renderMatchingCards() {
   const s = matching;
-  Array.from($("matchBoard").children).forEach((button, i) => {
+  // อ้างการ์ดจากคลาส ไม่ใช่ children ตรง ๆ — บนกระดานมี element เอฟเฟกต์ (วงแหวน/คะแนนลอย) ปนอยู่ได้
+  Array.from($("matchBoard").querySelectorAll(".match-card")).forEach((button, i) => {
     const card = s.deck[i];
+    if (!card) return;
     const selected = s.open.includes(i);
     const mismatch = s.open.length === 2 && s.deck[s.open[0]].pair !== s.deck[s.open[1]].pair && s.open.includes(i);
-    // การ์ดเปิดเสมอ — แสดงข้อความตลอดเวลา (ไม่มีป้ายภาษา)
+    // การ์ดเปิดเสมอ — แสดงข้อความตลอดเวลา (ไม่มีป้ายภาษา) แต่แยกสีฝั่งจีน/ฝั่งคำตอบ
     button.className = "match-card open" + (card.matched ? " matched" : "") +
       (selected && !card.matched ? " selected" : "") +
-      (mismatch ? " mismatch" : "") + (card.side === "chinese" ? " chinese" : "");
+      (mismatch ? " mismatch" : "") + (card.side === "chinese" ? " chinese" : " answer");
     button.disabled = s.paused || card.matched || s.waitUntil > 0;
     button.setAttribute("aria-pressed", String(card.matched || selected));
     button.children[0].textContent = card.text;
     button.children[0].lang = card.side === "chinese" ? "zh-CN" : card.side === "pinyin" ? "zh-Latn" : "th";
     button.setAttribute("aria-label", `${card.text}${card.matched ? " จับคู่แล้ว" : selected ? " (เลือกอยู่)" : ""}`);
+    button.setAttribute("aria-hidden", String(card.matched)); // การ์ดที่จับคู่แล้วหายไปจากจอ → ซ่อนจาก screen reader ด้วย
   });
   // ปรับขนาดตัวอักษรให้เต็มการ์ด โดยคำนวณจากขนาดการ์ดและความยาวข้อความ
   requestAnimationFrame(() => fitMatchCardText());
+  if (s.doneEl) s.doneEl.classList.toggle("show", s.deck.length > 0 && s.deck.every((c) => c.matched));
+}
+
+// ย่อ/ขยายฟอนต์ในกล่องฟีดแบ็กให้พอดีหนึ่งบรรทัด (สูงคงที่ → การ์ดใบอื่นไม่ขยับ)
+function fitMatchFeedback() {
+  const el = $("matchFeedback");
+  if (!el) return;
+  el.style.setProperty("--fb-scale", "1");
+  let scale = 1;
+  while (el.scrollWidth > el.clientWidth + 1 && scale > 0.5) {
+    scale = Math.round((scale - 0.05) * 100) / 100;
+    el.style.setProperty("--fb-scale", String(scale));
+  }
+}
+
+// เอฟเฟกต์ตอนจับคู่ถูก: วงแหวนขยายจากกลางการ์ด + ข้อความคะแนนลอยขึ้น (ระดับ 2)
+// วางบน "กระดาน" ไม่ใช่บนการ์ด เพราะการ์ดที่จับคู่แล้วจะจางหายไปทั้งใบ (เอฟเฟกต์จะหายไปด้วย)
+function matchFx(cardEls, label) {
+  const board = $("matchBoard");
+  if (!board) return;
+  (cardEls || []).filter(Boolean).forEach((el, i) => {
+    const cx = el.offsetLeft + el.offsetWidth / 2;
+    const cy = el.offsetTop + el.offsetHeight / 2;
+    const ring = document.createElement("span");
+    ring.className = "match-ring";
+    ring.style.left = `${cx}px`;
+    ring.style.top = `${cy}px`;
+    board.appendChild(ring);
+    setTimeout(() => ring.remove(), 800);
+    if (i === 0 && label) {
+      const fl = document.createElement("span");
+      fl.className = "match-float";
+      fl.textContent = label;
+      fl.style.left = `${cx}px`;
+      fl.style.top = `${el.offsetTop + 6}px`;
+      board.appendChild(fl);
+      setTimeout(() => fl.remove(), 1100);
+    }
+  });
+}
+
+// กระตุ้นอนิเมชันของกล่องฟีดแบ็ก (ต้องลบคลาสเดิมก่อน ไม่งั้นแอนิเมชันรอบใหม่ไม่เล่น)
+function matchFeedbackPulse(cls) {
+  const el = $("matchFeedback");
+  if (!el) return;
+  el.classList.remove("fb-pop", "fb-bad");
+  void el.offsetWidth; // บังคับ reflow
+  if (cls) el.classList.add(cls);
 }
 
 function fitMatchCardText() {
@@ -2913,7 +2971,7 @@ function fitMatchCardText() {
     const cw = card.clientWidth - padX, ch = card.clientHeight - padY;
     if (cw <= 0 || ch <= 0) return;
     const isChinese = card.classList.contains("chinese");
-    const maxFont = isChinese ? 60 : 40;
+    const maxFont = isChinese ? 72 : 48; // ขยับช่วงค้นหาให้ได้ฟอนต์ใหญ่ขึ้น (ข้อความตัดบรรทัดได้แล้ว)
     const minFont = 10;
     // binary search หาขนาดตัวอักษรที่ใหญ่ที่สุดที่ไม่ overflow
     let lo = minFont, hi = maxFont, best = minFont;
@@ -2928,13 +2986,30 @@ function fitMatchCardText() {
   });
 }
 
+// ฟอนต์จีน/ไทยโหลดช้า → วัดขนาดตัวอักษรใหม่อีกครั้งหลังฟอนต์พร้อม (กันตัวอักษรล้นหรือเล็กเกินไป)
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { if (matching) requestAnimationFrame(() => fitMatchCardText()); });
+}
+
 function updateMatchingHUD() {
   const s = matching;
   $("matchScore").textContent = `${s.score} คะแนน`;
   const seconds = s.duration ? Math.max(0, Math.ceil(s.duration - s.elapsed)) : Math.floor(s.elapsed);
   $("matchTimer").textContent = `${s.duration ? "เหลือ" : "เล่นไป"} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-  $("matchTimer").classList.toggle("urgent", s.duration > 0 && seconds <= 10);
+  const urgent = s.duration > 0 && seconds <= 10;
+  $("matchTimer").classList.toggle("urgent", urgent);
   $("matchProg").textContent = progPct(s.done.size, s.words.length);
+  // แถบความคืบหน้าของรอบนี้ (จับคู่แล้วกี่คู่จากทั้งหมดในชุด)
+  const track = $("matchProgTrack");
+  if (track) {
+    const totalPairs = Math.max(1, s.deck.length / 2);
+    const donePairs = s.deck.reduce((n, c) => n + (c.matched ? 1 : 0), 0) / 2;
+    const pct = Math.round(donePairs / totalPairs * 100);
+    track.firstElementChild.style.width = `${pct}%`;
+    track.classList.toggle("urgent", urgent);
+    track.setAttribute("aria-valuenow", String(pct));
+    track.setAttribute("aria-valuetext", `จับคู่แล้ว ${donePairs} จาก ${totalPairs} คู่`);
+  }
 }
 
 function advanceMatching(now) {
@@ -2955,6 +3030,7 @@ function advanceMatching(now) {
       s.open = []; s.waitUntil = 0;
       renderMatchingCards();
       $("matchFeedback").textContent = "ยังไม่ใช่คู่กัน ลองใหม่อีกครั้ง";
+      fitMatchFeedback();
     }
   }
   updateMatchingHUD();
@@ -2981,27 +3057,32 @@ function flipMatchingCard(i) {
     const [a, b] = s.open.map((index) => s.deck[index]);
     if (a.pair === b.pair && a.side !== b.side) {
       a.matched = b.matched = true;
-      s.pairs++; s.score += 10;
+      s.pairs++;
+      // คอมโบ: จับคู่ถูกติดกันได้คะแนนเพิ่มขึ้น (10 → 15 → 20 → 25 → 30 สูงสุด)
+      const combo = (s.combo = (s.combo || 0) + 1);
+      const gain = 10 + Math.min(4, combo - 1) * 5;
+      s.score += gain;
       s.done.add(a.word[0]);
       sfx.hit();
+      music.nudge(0.05); // จับคู่ถูก = เพลงเข้มข้นขึ้น (ค่อยๆ กลับลงเอง)
+      matchFx(s.open.map((idx) => $("matchBoard").querySelectorAll(".match-card")[idx]), combo > 1 ? `+${gain} • คอมโบ x${combo}` : `+${gain}`);
+      matchFeedbackPulse("fb-pop");
       setTimeout(() => { if (matching === s) speakWordHit(a.word); }, 150);
+      const done = s.deck.every((c) => c.matched);
       $("matchFeedback").innerHTML =
-        `<span class="fb-zh">${a.word[0]}</span> ` +
-        `<span class="fb-py">${a.word[1]}</span> ` +
+        `<span class="fb-zh">${a.word[0]}</span>` +
+        `<span class="fb-py">${a.word[1]}</span>` +
         `<span class="fb-th">${a.word[2]}</span>`;
+      fitMatchFeedback();
       s.open = [];
-      if (s.deck.every((c) => c.matched)) {
-        s.waitUntil = s.elapsed + 1.2;
-        $("matchFeedback").innerHTML =
-          `<span class="fb-zh">${a.word[0]}</span> ` +
-          `<span class="fb-py">${a.word[1]}</span> ` +
-          `<span class="fb-th">${a.word[2]}</span>` +
-          `<span class="fb-done">— ครบแล้ว! กำลังสุ่มชุดใหม่</span>`;
-      }
+      if (done) s.waitUntil = s.elapsed + 1.2;
     } else {
       s.waitUntil = s.elapsed + 0.6;
+      s.combo = 0;
       sfx.wrong();
+      matchFeedbackPulse("fb-bad");
       $("matchFeedback").textContent = "ยังไม่ใช่คู่กัน ลองใหม่อีกครั้ง";
+      fitMatchFeedback();
     }
   }
   renderMatchingCards();
@@ -3281,47 +3362,6 @@ function bombBlastPoint() {
   const s = bombGame;
   if (s && s.lastBombPos) return s.lastBombPos;
   return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-}
-// ประกายเล็ก ๆ ตอนเขียนขีดถูก — วางที่ปลายขีดจริง
-// ใช้ getScreenCTM() ของกลุ่มเส้นใน SVG ของ HanziWriter เพื่อแปลงพิกัดข้อมูล → px
-// (HanziWriter พลิกแกน Y: scale(s, -s) จึงคำนวณเองตรง ๆ ไม่ได้)
-function bombSparkPoint(char, strokeNum) {
-  const median = bombCharData.get(char)?.medians?.[strokeNum];
-  if (!median || !median.length) return null;
-  const svg = document.querySelector("#bombWriter svg");
-  const group = svg && svg.querySelector("g[transform]");
-  if (!group || !group.getScreenCTM) return null;
-  const ctm = group.getScreenCTM();
-  const p = median[median.length - 1];
-  const frame = $("bombWriterFrame"), writer = $("bombWriter");
-  const fr = frame.getBoundingClientRect(), wr = writer.getBoundingClientRect();
-  const x = ctm.a * p[0] + ctm.c * p[1] + ctm.e - fr.left;
-  const y = ctm.b * p[0] + ctm.d * p[1] + ctm.f - fr.top;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  return {
-    x: Math.max(wr.left - fr.left + 6, Math.min(wr.right - fr.left - 6, x)),
-    y: Math.max(wr.top - fr.top + 6, Math.min(wr.bottom - fr.top - 6, y)),
-  };
-}
-function bombWriterSpark(char, strokeNum) {
-  if (bombQuiet()) return;
-  const at = bombSparkPoint(char, strokeNum);
-  if (!at) return;
-  const frame = $("bombWriterFrame");
-  for (let i = 0; i < 4; i++) {
-    const dot = document.createElement("span");
-    dot.className = "bomb-spark";
-    dot.style.left = `${at.x}px`;
-    dot.style.top = `${at.y}px`;
-    frame.appendChild(dot);
-    if (dot.animate) {
-      dot.animate(
-        [{ opacity: 1, transform: "translate(0, 0) scale(1)" }, { opacity: 0, transform: `translate(${rand(-18, 18)}px, ${rand(-24, 4)}px) scale(.2)` }],
-        { duration: rand(320, 540), easing: "cubic-bezier(.2,.7,.3,1)" }
-      );
-    }
-    setTimeout(() => dot.remove(), 720);
-  }
 }
 // ธีมท้องฟ้า + ป้าย "ระดับใหม่"
 function applyBombSky(tier) {
@@ -3621,7 +3661,6 @@ async function beginBombCharacter() {
       }
     },
     onCorrectStroke: (data) => {
-      bombWriterSpark(s.chars[index], data.strokeNum);
       if (bombGame === s && !s.paused && s.phase === "writing" && s.charIndex === index) {
         $("bombStrokeHint").textContent = data.strokesRemaining
           ? `ถูกต้อง! ต่อไปเขียนขีดที่ ${data.strokeNum + 2} • เหลือ ${data.strokesRemaining} ขีด`
