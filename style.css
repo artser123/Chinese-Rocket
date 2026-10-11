@@ -158,7 +158,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn {
+.level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -172,15 +172,15 @@ html, body {
               border-color var(--dur-fast), background var(--dur-fast);
 }
 .level-btn:active, .diff-btn:active, .ans-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
-.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active { transform: translateY(1px) scale(.985); }
+.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active { transform: translateY(1px) scale(.985); }
 .level-btn.selected {
   background: linear-gradient(180deg, var(--accent-warm-1), var(--accent-warm-2));
   border-color: var(--accent-warm-3);
   color: #fff;
   box-shadow: var(--sh-glow-warm), var(--hi-top);
 }
-.diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected {
+.diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected {
   background: linear-gradient(180deg, var(--accent-green-1), var(--accent-green-2));
   border-color: #8fffb0;
   color: #fff;
@@ -959,7 +959,7 @@ html, body {
   border-radius: 16px;
   padding: 12px 16px;
 }
-#cpWriteWriter { width: min(260px, 68vw); }
+#cpWriteWriter { width: min(130px, 34vw); }
 .cpw-stage { display: flex; justify-content: center; }
 .cpw-status {
   min-height: 1.2em;
@@ -2060,7 +2060,7 @@ html, body {
 #tcPy { font-size: clamp(14px, 4vw, 19px); color: #8fd3ff; }
 #tcTh { font-size: clamp(13px, 3.8vw, 18px); color: #9dff9d; }
 
-/* ตาราง 10 ช่องคัดลายมือ — 2 คอลัมน์ปกติ / 1 คอลัมน์เมื่อคำยาว 3 ตัวขึ้นไป */
+/* ตารางคัดลายมือ (ตั้งจำนวนช่องได้ 4/6/8/10) — 2 คอลัมน์ปกติ / 1 คอลัมน์เมื่อคำยาว 3 ตัวขึ้นไป */
 .tc-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2154,7 +2154,7 @@ html, body {
   #menu::before, #menu::after, #setup::before, #setup::after { animation: none !important; }
   .card { animation: none !important; }
   .screen.active { animation: none !important; }
-  .card, .level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tc-slot {
+  .card, .level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .tc-slot {
     transition: none !important;
   }
 }

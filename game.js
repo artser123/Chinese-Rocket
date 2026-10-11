@@ -3946,7 +3946,7 @@ const startLabel = () => gameMode === "bomb"
           : gameMode === "copy"
             ? `✍️ เริ่มฝึกเขียนประโยค HSK ${selectedLevel}`
             : gameMode === "trace"
-              ? `✍️ เริ่มคัดลายมือ HSK ${selectedLevel} (10 ช่อง ไม่ซ้ำจนครบกอง)`
+              ? `✍️ เริ่มคัดลายมือ HSK ${selectedLevel} (${tcSlots} ช่อง ไม่ซ้ำจนครบกอง)`
               : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
 
 function updateStartBtn() {
@@ -5813,9 +5813,14 @@ async function cpLoadCharData(chars) {
   }));
 }
 
+// ขนาดช่องเขียนของ "เขียนในเกม" — ตั้งเล็กไว้ (~ครึ่งของเดิม) เพราะเขียนด้วยปากกาจริงช่องใหญ่เกินไป
+// ขอบใน (padding) คิดตามสัดส่วนขนาดช่องเสมอ (~6%) ไม่งั้นเงาตัวอักษรจะชิดขอบเมื่อช่องเล็กลง
+const CP_WRITE_MAX = 130;
+function cpWritePad(size) { return Math.max(6, Math.round(size * 0.06)); }
+
 function cpWriteFit() {
-  const size = Math.min(260, Math.max(160, $("cpWriteWriter").clientWidth || 220));
-  if (cpWriteWriter) cpWriteWriter.updateDimensions({ width: size, height: size, padding: 16 });
+  const size = Math.min(CP_WRITE_MAX, Math.max(90, $("cpWriteWriter").clientWidth || 110));
+  if (cpWriteWriter) cpWriteWriter.updateDimensions({ width: size, height: size, padding: cpWritePad(size) });
   return size;
 }
 
@@ -5876,7 +5881,7 @@ async function cpWriteChar() {
     if (!cpWriteWriter) {
       const size = cpWriteFit();
       cpWriteWriter = new window.HanziWriter($("cpWriteWriter"), {
-        width: size, height: size, padding: 16,
+        width: size, height: size, padding: cpWritePad(size),
         showCharacter: false, showOutline: true,
         strokeColor: "#203954", outlineColor: "#cbd2db", drawingColor: "#235a86", drawingWidth: 64,
         highlightColor: "#26a477", highlightOnComplete: false,
@@ -6517,11 +6522,13 @@ $("cpQuitBtn").addEventListener("click", () => {
   updateBestLine();
 });
 /* ================= Handwriting copy mode (เกมคัดลายมือ) ================= */
-// สุ่ม "คำ" ตามระดับ HSK แล้วให้คัดคำเดิม 10 ช่อง (คำหลายตัว = เขียนหลายตัวเรียงกันในช่องเดียว)
+// สุ่ม "คำ" ตามระดับ HSK แล้วให้คัดคำเดิมหลายช่อง (จำนวนช่องเลือกได้ 4/6/8/10 — คำหลายตัว = เขียนหลายตัวเรียงกันในช่องเดียว)
 // ตรวจทีละขีดด้วย HanziWriter.quiz (เหมือนโหมดเขียนในเกมของเกมเขียนเป็นประโยค)
-// แต่ "เลื่อนการโชว์คะแนน" ไปตอนกด ✅ ตรวจ — เขียนครบ 10 ช่องแล้วจึงคิดคะแนน + ไฮไลต์ขีดที่ผิด
+// แต่ "เลื่อนการโชว์คะแนน" ไปตอนกด ✅ ตรวจ — เขียนครบทุกช่องแล้วจึงคิดคะแนน + ไฮไลต์ขีดที่ผิด
 // แล้วสุ่มคำใหม่แบบไม่ซ้ำจนครบกอง (เล่นครบกองแล้วสับใหม่ คำแรกไม่ซ้ำคำเดิม)
-const TC_SLOTS = 10;
+const TC_SLOT_OPTS = [4, 6, 8, 10];
+const tcClampSlots = (n) => (TC_SLOT_OPTS.includes(+n) ? +n : 10);
+let tcSlots = tcClampSlots(localStorage.getItem("cr_trace_slots"));
 let tc = null;
 let tcOutline = localStorage.getItem("cr_trace_outline") !== "off";
 let tcAllWriters = []; // writer ทุกตัวของคำปัจจุบัน — ใช้ cancelQuiz และ refit ตอนจอเปลี่ยนขนาด
@@ -6530,8 +6537,10 @@ let tcSeqCounter = 0;  // ตัวนับ seq แบบเพิ่มขึ�
 function tcSyncSetupUI() {
   const isTrace = gameMode === "trace";
   $("tcOutlineRow").style.display = isTrace ? "" : "none";
+  $("tcSlotsRow").style.display = isTrace ? "" : "none";
   if (!isTrace) return;
-  document.querySelectorAll(".tco-btn").forEach((b) => b.classList.toggle("selected", b.dataset.outline === (tcOutline ? "on" : "off")));
+  document.querySelectorAll("#tcOutlineSelect .tco-btn").forEach((b) => b.classList.toggle("selected", b.dataset.outline === (tcOutline ? "on" : "off")));
+  document.querySelectorAll("#tcSlotsSelect .tcs-btn").forEach((b) => b.classList.toggle("selected", +b.dataset.slots === tcSlots));
 }
 
 // โหลดข้อมูลเส้นขีดผ่าน loader/แคชร่วมของโหมดเขียนอื่น (โหลดครั้งแรกต้องมีอินเทอร์เน็ต)
@@ -6606,6 +6615,7 @@ function nextTraceWord() {
   $("tcCheckBtn").disabled = true;
   $("tcRetryBtn").hidden = true;
   $("tcNextBtn").hidden = true;
+  $("tcLabel").textContent = `คัดคำจีนลงช่องทั้ง ${tcSlots} ช่อง — เขียนให้ครบทุกช่องแล้วกด "ตรวจ"`;
   renderTraceGrid();
   $("tcStatus").textContent = "กำลังโหลดข้อมูลเส้นขีด…";
   const seq = tc.seq;
@@ -6627,7 +6637,7 @@ function renderTraceGrid() {
   grid.classList.toggle("wide", tc.chars.length >= 3); // คำยาว 3 ตัวขึ้นไปใช้ 1 คอลัมน์ให้เขียนสบาย
   grid.classList.toggle("single", tc.chars.length === 1); // คำตัวเดียว: ล็อกช่องเขียนให้เท่าคำ 2 ตัว (ดู style.css)
   tc.slots = [];
-  for (let i = 0; i < TC_SLOTS; i++) {
+  for (let i = 0; i < tcSlots; i++) {
     const el = document.createElement("div");
     el.className = "tc-slot locked";
     const head = document.createElement("div");
@@ -6656,8 +6666,8 @@ function renderTraceGrid() {
 function updateTraceProgress() {
   if (!tc) return;
   const done = tc.slots.filter((s) => s.done).length;
-  $("tcProg").textContent = progPct(done, TC_SLOTS);
-  $("tcCheckBtn").disabled = done < TC_SLOTS;
+  $("tcProg").textContent = progPct(done, tcSlots);
+  $("tcCheckBtn").disabled = done < tcSlots;
 }
 
 // เปิดช่องที่ i ให้เขียนทีละตัว (ตัวที่ 1 → ตัวที่ 2 → …) แล้วปิดช่องเมื่อครบทุกตัว
@@ -6670,7 +6680,7 @@ async function tcActivateSlot(i) {
   tc.slots.forEach((s, j) => s.el.classList.toggle("active", j === i));
   slot.el.classList.remove("locked");
   slot.el.classList.add("active");
-  $("tcStatus").textContent = `ช่องที่ ${i + 1} / ${TC_SLOTS} — เขียน "${tc.word[0]}" ให้ครบทุกตัว`;
+  $("tcStatus").textContent = `ช่องที่ ${i + 1} / ${tcSlots} — เขียน "${tc.word[0]}" ให้ครบทุกตัว`;
   try { slot.el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {}
   slot.chars = [];
   const chars = tc.chars;
@@ -6745,7 +6755,7 @@ function tcCompleteSlot(i) {
   if (next >= 0) {
     tcActivateSlot(next);
   } else {
-    $("tcStatus").textContent = "เขียนครบทั้ง 10 ช่องแล้ว — กด ✅ ตรวจ เพื่อดูคะแนนและจุดที่ผิด";
+    $("tcStatus").textContent = `เขียนครบทั้ง ${tc.slots.length} ช่องแล้ว — กด ✅ ตรวจ เพื่อดูคะแนนและจุดที่ผิด`;
     $("tcCheckBtn").disabled = false;
     sfx.hit();
   }
@@ -6792,7 +6802,7 @@ function tcCheck() {
       slot.badge.textContent = "⭐";
     }
   });
-  const score = Math.round((sum / TC_SLOTS) * 100);
+  const score = Math.round((sum / (tc.slots.length || 1)) * 100);
   saveBest(`cr_best_hsk${tc.level}_trace`, score);
   const perfect = tc.slots.filter((s) => s.acc >= 1).length;
   const wrongCount = tc.slots.reduce((n, s) => n + s.chars.reduce((m, c) => m + (c ? c.wrongStrokes.size : 0), 0), 0);
@@ -6804,7 +6814,7 @@ function tcCheck() {
   res.appendChild(sc);
   const line = document.createElement("div");
   line.textContent = wrongCount
-    ? `เขียนครบ 10 ช่อง • สมบูรณ์ ${perfect}/10 ช่อง • ขีดที่ผิดรวม ${wrongCount} จุด (ไฮไลต์สีแดงในช่อง)`
+    ? `เขียนครบ ${tc.slots.length} ช่อง • สมบูรณ์ ${perfect}/${tc.slots.length} ช่อง • ขีดที่ผิดรวม ${wrongCount} จุด (ไฮไลต์สีแดงในช่อง)`
     : "🎉 สมบูรณ์ทุกช่อง! ไม่มีขีดผิดเลย";
   res.appendChild(line);
   const tip = document.createElement("div");
@@ -6817,7 +6827,7 @@ function tcCheck() {
   $("tcRetryBtn").hidden = !wrongCount;
   $("tcNextBtn").hidden = false;
   $("tcStatus").textContent = wrongCount ? "มีช่องที่เขียนผิด — ดูไฮไลต์สีแดงแล้วแก้ได้เลย" : "เยี่ยม! เขียนถูกทุกช่อง";
-  if (perfect === TC_SLOTS) sfx.hit(); else sfx.click();
+  if (perfect === tcSlots) sfx.hit(); else sfx.click();
 }
 
 // ลองใหม่เฉพาะช่องที่เขียนผิด — รีเซ็ตช่องเหล่านั้นแล้วให้เขียนใหม่ตามลำดับ
@@ -7082,11 +7092,22 @@ $("cpOutlineSelect").addEventListener("click", (e) => {
 });
 
 // โหมดคัดลายมือ: เปิด/ปิดเส้นนำการเขียน (ปิด = ใบ้ลำดับขีดถัดไปเมื่อเขียนผิด)
+// โหมดคัดลายมือ: จำนวนช่องที่ต้องคัด (4/6/8/10 ช่อง) — มีผลกับการเล่นรอบถัดไป
+$("tcSlotsSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".tcs-btn");
+  if (!btn) return;
+  sfx.click();
+  tcSlots = tcClampSlots(btn.dataset.slots);
+  localStorage.setItem("cr_trace_slots", String(tcSlots));
+  tcSyncSetupUI();
+  updateStartBtn(); // ปุ่มเริ่มเกมบอกจำนวนช่องอยู่ → ต้องอัปเดตทันทีที่เปลี่ยน
+});
+
 $("tcOutlineSelect").addEventListener("click", (e) => {
   const btn = e.target.closest(".tco-btn");
   if (!btn) return;
   sfx.click();
-  document.querySelectorAll(".tco-btn").forEach((b) => b.classList.remove("selected"));
+  document.querySelectorAll("#tcOutlineSelect .tco-btn").forEach((b) => b.classList.remove("selected"));
   btn.classList.add("selected");
   tcOutline = btn.dataset.outline === "on";
   localStorage.setItem("cr_trace_outline", tcOutline ? "on" : "off");

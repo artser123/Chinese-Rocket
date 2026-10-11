@@ -89,7 +89,7 @@
     <button class="card" data-mode="trace">
       <div class="card-icon">✍️🔟</div>
       <div class="card-title">เกมคัดลายมือ</div>
-      <div class="card-desc">สุ่มคำจีนตามระดับ HSK มาเขียน 10 ช่อง เขียนครบแล้วกดตรวจได้คะแนน รู้ว่าขีดไหนผิด แล้วแก้ช่องที่พลาด</div>
+      <div class="card-desc">สุ่มคำจีนตามระดับ HSK มาเขียน 4–10 ช่อง (เลือกจำนวนได้) เขียนครบแล้วกดตรวจได้คะแนน รู้ว่าขีดไหนผิด แล้วแก้ช่องที่พลาด</div>
     </button>
   </div>
 
@@ -190,6 +190,16 @@
       <div class="level-select" id="cpOutlineSelect">
         <button class="cpo-btn selected" data-outline="on">👁️ เปิด (มีเส้นนำ)</button>
         <button class="cpo-btn" data-outline="off">🙈 ปิด (ใบ้เมื่อเขียนผิด)</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="tcSlotsRow" style="display:none">
+      <span class="setup-label">จำนวนช่องที่ต้องคัด</span>
+      <div class="level-select" id="tcSlotsSelect">
+        <button class="tcs-btn" data-slots="4">4 ช่อง</button>
+        <button class="tcs-btn" data-slots="6">6 ช่อง</button>
+        <button class="tcs-btn" data-slots="8">8 ช่อง</button>
+        <button class="tcs-btn selected" data-slots="10">10 ช่อง</button>
       </div>
     </div>
 
@@ -598,13 +608,13 @@
     </div>
   </div>
 
-  <div class="sent-label" id="tcLabel">คัดคำจีนลงช่องทั้ง 10 ช่อง — เขียนให้ครบทุกช่องแล้วกด "ตรวจ"</div>
+  <div class="sent-label" id="tcLabel">คัดคำจีนลงช่องที่กำหนด — เขียนให้ครบทุกช่องแล้วกด "ตรวจ"</div>
   <div id="tcCard">
     <div id="tcZh" lang="zh"></div>
     <div id="tcPy"></div>
     <div id="tcTh"></div>
   </div>
-  <div id="tcGrid" class="tc-grid" aria-label="ช่องคัดลายมือ 10 ช่อง"></div>
+  <div id="tcGrid" class="tc-grid" aria-label="ช่องคัดลายมือ"></div>
   <div id="tcStatus" class="tc-status" role="status" aria-live="polite"></div>
   <div id="tcResult" class="tc-result" hidden></div>
   <div class="spk-actions">
