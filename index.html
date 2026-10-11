@@ -181,6 +181,7 @@
       <div class="level-select" id="cpWriteSelect">
         <button class="cpw-btn selected" data-write="off">📝 เขียนนอกเกม</button>
         <button class="cpw-btn" data-write="on">✍️ เขียนในเกม</button>
+        <button class="cpw-btn" data-write="free">🖊️ เขียนแบบอิสระ</button>
       </div>
     </div>
 
@@ -564,6 +565,21 @@
     <div class="cpw-status" id="cpWriteStatus"></div>
     <div class="dict-stroke-chars" id="cpWriteChars"></div>
     <button id="cpWriteNextBtn" class="cpw-next" disabled>✅ เขียนเสร็จ — ประโยคถัดไป</button>
+  </div>
+  <div id="cpFree" class="dict-strokes" hidden>
+    <div class="dict-stroke-head"><span class="dict-stroke-label">เขียนแบบอิสระ: <span id="cpFreeHint"></span></span></div>
+    <div class="cpfree-stage">
+      <div class="cpfree-grid" id="cpFreeGrid"></div>
+      <canvas id="cpFreeCanvas"></canvas>
+    </div>
+    <div class="cpw-status" id="cpFreeStatus"></div>
+    <div class="cpfree-res" id="cpFreeResult" hidden></div>
+    <div class="cpfree-actions">
+      <button id="cpFreeUndoBtn" class="big-btn secondary" disabled>↩️ ลบขีดล่าสุด</button>
+      <button id="cpFreeClearBtn" class="big-btn secondary" disabled>🧽 ล้างทั้งหมด</button>
+      <button id="cpFreeCheckBtn" class="cpfree-check">🔍 ตรวจ</button>
+    </div>
+    <button id="cpFreeNextBtn" class="cpw-next" disabled>✅ ผ่านแล้ว — ประโยคถัดไป</button>
   </div>
   <div class="spk-actions">
     <button id="cpListenBtn" class="big-btn secondary">🔊 ฟังประโยค</button>

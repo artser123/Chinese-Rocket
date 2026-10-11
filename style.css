@@ -38,6 +38,9 @@
   --font-ui: "Noto Sans", "Noto Sans Thai", "Noto Sans SC", -apple-system, "Segoe UI", "Sarabun", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-pinyin: "Noto Sans", "Noto Sans SC", sans-serif;
 
+  /* โหมดเขียนแบบอิสระ (เกมเขียนเป็นประโยค): สีหมึกของเส้นกรอบ/ตัวจางให้ลอก */
+  --cpfree-ink: rgba(160, 186, 232, .38);
+
   /* เงาแบบซ้อนชั้น (depth) */
   --sh-1: 0 1px 2px rgba(0, 0, 0, .35), 0 3px 10px rgba(3, 6, 24, .35);
   --sh-2: 0 2px 5px rgba(0, 0, 0, .32), 0 12px 28px rgba(3, 6, 24, .48);
@@ -986,6 +989,103 @@ html, body {
   cursor: not-allowed;
 }
 .cpw-next:disabled:active { transform: none; }
+/* โหมดเขียนแบบอิสระ (เกมเขียนเป็นประโยค) — แถบเดียวต่อเนื่อง แบ่งช่องด้วยเส้นกรอบจางๆ เหมือนสมุดคัดลายมือ */
+#cpFree {
+  width: min(680px, 94vw);
+  background: rgba(19, 26, 61, .9);
+  border: 2px solid #3d4a9e;
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+.cpfree-stage { position: relative; width: 100%; }
+/* ผังช่อง: ไม่มีช่องว่างระหว่างช่อง (เป็นแถบเดียวกัน) — แต่ละช่องมีเส้นกรอบของตัวเอง
+   ต้องอยู่ "เหนือ" #cpFreeCanvas (z-index 1) เพื่อให้ป้าย % รายตัวไม่ถูกเส้นหมึกที่เขียนทับ
+   แต่ยังต้อง pointer-events: none เพื่อให้การลากเขียนทะลุลงไปถึง canvas ได้ */
+.cpfree-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-content: center;
+  gap: 0;
+  pointer-events: none;
+}
+.cpfree-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--cpfree-ink);
+  border-left-style: none; /* ต่อกันเป็นแถบเดียว ไม่มีเส้นคู่ตรงรอยต่อ */
+  background: none;
+  font-family: "Noto Sans SC", sans-serif;
+  font-weight: 700;
+  color: var(--cpfree-ink); /* ตัวจางให้ลอก */
+  user-select: none;
+  pointer-events: none;
+}
+.cpfree-cell:first-child { border-left-style: dashed; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.cpfree-cell:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+/* ช่องขึ้นบรรทัดใหม่ = เริ่มแถวใหม่ → มีเส้นซ้ายของตัวเอง */
+.cpfree-cell.rowstart { border-left-style: dashed; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.cpfree-cell.rowend { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+/* มุมโค้งด้านนอกของแถวแรก/แถวสุดท้าย (ยังไม่มี selector :nth-last-row จึงปล่อยให้มุมเหลี่ยมได้) */
+.cpfree-grid.no-guide .cpfree-cell { color: transparent; }
+/* ป้าย % รายตัว — ติดมุมบนขวาของช่องโชว์ตลอดหลังตรวจ (พื้นทึบกันเส้นหมึกบัง ขนาดตามช่อง ตั้งจาก JS) */
+.cpfree-cell .cpfree-pct {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  min-width: 2.4em;
+  padding: 0 4px 1px;
+  border: 1px solid rgba(120, 230, 160, .55);
+  border-radius: 0 6px 0 8px;
+  background: #0d1430;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  color: #9dff9d;
+}
+.cpfree-cell.bad .cpfree-pct { color: #ffb4b4; border-color: rgba(255, 121, 121, .6); }
+/* ผลตรวจ: ตัวที่ผ่าน/ไม่ผ่านทำเครื่องหมายที่ "เส้นกรอบ" ของช่อง (จางๆ ไม่ทับตัวอักษรที่เขียน) */
+.cpfree-cell.ok { box-shadow: inset 0 0 0 2px rgba(120, 230, 160, .38); }
+.cpfree-cell.bad { box-shadow: inset 0 0 0 2px rgba(255, 121, 121, .55); }
+#cpFreeCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  border-radius: 12px;
+  cursor: crosshair;
+}
+.cpfree-res { margin-top: 6px; text-align: center; }
+.cpfree-res[hidden] { display: none; }
+.cpfree-res .cpfree-total { font-size: clamp(26px, 7.5vw, 36px); font-weight: 800; color: #ffb4b4; }
+.cpfree-res .cpfree-total.ok { color: #7dffa8; }
+.cpfree-res .cpfree-verdict { font-size: clamp(12px, 3.6vw, 15px); font-weight: 600; color: #cfd8ff; }
+.cpfree-res .cpfree-note { margin-top: 4px; font-size: clamp(11px, 3.2vw, 13px); color: #8b95c9; }
+.cpfree-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cpfree-actions .big-btn { flex: 1; min-width: 110px; padding: 10px 12px; font-size: clamp(13px, 3.6vw, 15px); }
+.cpfree-actions .big-btn:disabled { opacity: .45; cursor: not-allowed; }
+.cpfree-check {
+  flex: 1.2;
+  min-width: 130px;
+  padding: 12px 18px;
+  font-size: clamp(16px, 4.5vw, 22px);
+  font-weight: 800;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #5aa9ff, #2563c9);
+  color: #04182f;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(40, 120, 220, .45);
+  touch-action: manipulation;
+}
+.cpfree-check:active { transform: scale(.96); }
+#cpFreeNextBtn { margin-top: 8px; }
 .cp-next {
   flex: 1.4;
   min-width: 150px;
