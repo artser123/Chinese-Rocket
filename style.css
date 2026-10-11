@@ -38,8 +38,9 @@
   --font-ui: "Noto Sans", "Noto Sans Thai", "Noto Sans SC", -apple-system, "Segoe UI", "Sarabun", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-pinyin: "Noto Sans", "Noto Sans SC", sans-serif;
 
-  /* โหมดเขียนแบบอิสระ (เกมเขียนเป็นประโยค): สีหมึกของเส้นกรอบ/ตัวจางให้ลอก */
+  /* โหมดเขียนแบบอิสระ (เกมเขียนเป็นประโยค): สีหมึกของเส้นกรอบ + สีตัวจางให้ลอก (เงาตัวอักษรชัดกว่าเส้นกรอบ) */
   --cpfree-ink: rgba(160, 186, 232, .38);
+  --cpfree-guide: rgba(186, 208, 245, .5);
 
   /* เงาแบบซ้อนชั้น (depth) */
   --sh-1: 0 1px 2px rgba(0, 0, 0, .35), 0 3px 10px rgba(3, 6, 24, .35);
@@ -1019,7 +1020,7 @@ html, body {
   background: none;
   font-family: "Noto Sans SC", sans-serif;
   font-weight: 700;
-  color: var(--cpfree-ink); /* ตัวจางให้ลอก */
+  color: var(--cpfree-guide); /* ตัวจางให้ลอก */
   user-select: none;
   pointer-events: none;
 }

@@ -5953,6 +5953,12 @@ const CP_FREE_CFG = {
   singleScore: 0.5, // เขียนรวดเดียวทั้งตัว (1 ขีด) → ให้ได้ไม่เกินนี้ จึงไม่ผ่านเกณฑ์เสมอ
   countFloor: 0.6,  // โทษจำนวนขีดที่ไม่ตรง: countFloor + (1-countFloor) × สัดส่วนที่ตรง
 };
+// หมึกเขียน: ระหว่างลากวาดทีละช่วงด้วยสีทึบ (กันรอยต่อซ้อนกันเป็นจุดดำ) แต่ตอนวาดทั้งผืนใหม่ใช้สีโปร่งแสง
+// เพื่อให้ "เงาตัวอักษร" ที่ลอกอยู่ข้างหลังมองเห็นทะลุผ่านเส้นที่เขียนแล้วได้
+const CP_FREE_INK = "#8fd8ff";
+const CP_FREE_INK_SOFT = "rgba(143, 216, 255, .66)";
+// ความหนาปากกา (px) — บางพอไม่ให้บังเงาตัวอักษร แต่ยังลากได้ถนัดทั้งจอเล็ก/จอใหญ่
+const CP_FREE_PEN_W = () => Math.max(2.2, Math.min(4.2, cpFreeCell * 0.045));
 let cpFree = null;
 let cpFreeCanvas = null;
 let cpFreeCtx = null;
@@ -6041,8 +6047,9 @@ function cpFreeSize() {
   cpFreeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   cpFreeCtx.lineCap = "round";
   cpFreeCtx.lineJoin = "round";
-  cpFreeCtx.strokeStyle = "#7fd0ff";
-  cpFreeCtx.lineWidth = Math.max(5, Math.min(9, cpFreeCell * 0.12));
+  cpFreeCtx.strokeStyle = CP_FREE_INK;
+  // เส้นบางๆ พอ — หนาไปจะบังเงาตัวอักษรที่ลอกอยู่ข้างหลัง (ตอนวาดจริงใช้สีทึบ 1 เส้น/ขีด ไม่ทับกันเป็นจุด)
+  cpFreeCtx.lineWidth = CP_FREE_PEN_W();
   // เก็บมุมบนซ้ายของผังช่องไว้เทียบกับ canvas — จุดลายมือเก็บเป็นหน่วยช่อง จึงวาด/วัดได้ตรงเสมอ
   const cr = cpFreeCanvas.getBoundingClientRect();
   const gr = $("cpFreeGrid").getBoundingClientRect();
@@ -6052,11 +6059,13 @@ function cpFreeSize() {
 }
 
 // จุดเก็บเป็น "หน่วยช่อง" (1 = ด้านของช่อง) → เปลี่ยนขนาดจอแล้วรูปทรงยังเทียบได้เหมือนเดิม
+// ขีดที่เขียนเสร็จแล้ววาดด้วยสีโปร่งแสง เพื่อให้เงาตัวอักษรที่ลอกอยู่ข้างหลังยังเห็นทะลุผ่านได้
 function cpFreePaint() {
   if (!cpFreeCtx) return;
   cpFreeCtx.clearRect(0, 0, cpFreeW, cpFreeH);
   if (!cpFree) return;
   const size = cpFreeCell || 1;
+  cpFreeCtx.strokeStyle = CP_FREE_INK_SOFT;
   const draw = (pts) => {
     if (!pts.length) return;
     cpFreeCtx.beginPath();
@@ -6155,6 +6164,7 @@ function cpFreeMove(e) {
   const prev = cpFree.cur[cpFree.cur.length - 1];
   cpFree.cur.push(p);
   const size = cpFreeCell || 1;
+  cpFreeCtx.strokeStyle = CP_FREE_INK; // ทึบเฉพาะช่วงที่กำลังลาก (ทับกันก็ไม่เป็นจุดดำ)
   cpFreeCtx.beginPath();
   cpFreeCtx.moveTo(cpFreeOrigX + prev[0] * size, cpFreeOrigY + prev[1] * size);
   cpFreeCtx.lineTo(cpFreeOrigX + p[0] * size, cpFreeOrigY + p[1] * size);
