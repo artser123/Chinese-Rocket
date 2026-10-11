@@ -5945,8 +5945,11 @@ function cpWriteCompleteChar() {
 // จากแคชข้อมูลเส้นขีด bombCharData เดียวกับโหมดเขียนในเกม/คัดลายมือ
 // คะแนนต่อตัว = ความใกล้ของรูปทรง (Chamfer หลังปรับสเกล/จัดกลาง) × โทษจำนวนขีดที่ไม่ตรง
 // ผ่านที่ CP_FREE_MIN% แล้วค่อยปลดล็อกปุ่มไปประโยคถัดไป (ทำงานออฟไลน์ได้หลังข้อมูลเส้นขีดถูกแคชแล้ว)
-const CP_FREE_MIN = 80;
+const CP_FREE_MIN = 70; // เกณฑ์ผ่าน (%) — ทั้งคะแนนรวมและ "ผ่าน/ไม่ผ่าน" ต่อช่องใช้ค่าเดียวกันนี้
 const CP_FREE_GAP = 0; // 0 = ช่องต่อกันเป็นแถบเดียว แบ่งด้วยเส้นกรอบจางๆ (ต้องตรงกับ gap ของ .cpfree-grid ใน style.css)
+// ช่องเล็กสุดที่ยอมให้เขียน (px) — ประโยคยาวจะขึ้นบรรทัดใหม่แทนการบีบช่องให้เล็กลง
+// (เดิม ~62px เล็กเกินไปสำหรับเขียนด้วยนิ้ว/ปากกา)
+const CP_FREE_MIN_CELL = 84;
 // พารามิเตอร์การให้คะแนน รวมไว้ที่เดียว (หน่วยระยะ = ขนาดตัวอักษรที่เขียน, 1 = เต็มตัว)
 // ค่าชุดนี้ผ่านการทดลองกับลายมือจำลอง: ลอกถูกแต่สั่น/เอียง/ขีดสั้น → 85-89% • ขีดมั่ว/เขียนตัวอื่น/ลากเส้นเดียว → ≤45%
 const CP_FREE_CFG = {
@@ -5985,7 +5988,8 @@ function cpFreeSyncButtons() {
 function cpFreeSetup() {
   if (!cp) return;
   $("cpFree").hidden = false;
-  cpFree = { chars: cp.writeChars.slice(), cells: [], strokes: [], cur: null, drawing: false, result: null, results: null };
+  cpFree = { chars: cp.writeChars.slice(), cells: [], strokes: [], cur: null, drawing: false, result: null, results: null, eraser: false, erasing: false };
+  cpFreeSetEraser(false); // ประโยคใหม่เริ่มที่โหมดเขียนเสมอ (กันเผลอลบโดยไม่ตั้งใจ)
   $("cpFreeHint").textContent = `${cpFree.chars.length} ตัว • ผ่าน ${CP_FREE_MIN}%`;
   cpFreeLayout();
   cpFreeReset(true);
@@ -6000,14 +6004,16 @@ function cpFreeHide() {
   if (panel) panel.hidden = true;
   cpFree = null;
   cpFreeCtx = null;
+  cpFreeSetEraser(false);
   cpFreeSyncButtons();
   cpFreeNextEnabled(false);
 }
 
-// คำนวณจำนวนคอลัมน์/ขนาดช่องจากความกว้างจริงของแถบ (ช่องเล็กสุด ~62px) เพื่อให้ประโยคยาวตกบรรทัดเอง
+// คำนวณจำนวนคอลัมน์/ขนาดช่องจากความกว้างจริงของแถบ — ช่องไม่เล็กกว่า CP_FREE_MIN_CELL
+// (ประโยคยาวจึงตกบรรทัดเองแทนที่จะบีบช่องให้เขียนไม่ถนัด)
 function cpFreeColsFor(width, n) {
   const gap = CP_FREE_GAP;
-  return Math.max(1, Math.min(n, Math.floor((width + gap) / 62)));
+  return Math.max(1, Math.min(n, Math.floor((width + gap) / CP_FREE_MIN_CELL)));
 }
 
 function cpFreeLayout() {
@@ -6094,7 +6100,7 @@ function cpFreeApplyBadges() {
     if (old) old.remove();
     const r = list[i];
     if (!r || r.score === null) return;
-    const ok = r.score >= 0.8;
+    const ok = r.score * 100 >= CP_FREE_MIN; // เกณฑ์เดียวกับคะแนนรวม
     cell.el.classList.toggle("ok", ok);
     cell.el.classList.toggle("bad", !ok);
     const tag = document.createElement("span");
@@ -6153,9 +6159,15 @@ function cpFreePos(e) {
 function cpFreeDown(e) {
   if (!cpFreeEnabled() || !e.isPrimary || e.button !== 0) return;
   e.preventDefault();
+  try { cpFreeCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+  // โหมดยางลบ: แตะ/ลากบนเส้นที่ต้องการลบ (ไม่วาดเส้นใหม่)
+  if (cpFree.eraser) {
+    cpFree.erasing = true;
+    cpFreeEraseAt(cpFreePos(e));
+    return;
+  }
   if (cpFree.cur && cpFree.cur.length) cpFree.strokes.push(cpFree.cur); // เก็บขีดที่ค้างอยู่ก่อนเริ่มขีดใหม่
   cpFreeClearResult(); // เขียนเพิ่มหลังตรวจแล้ว → ผลเดิมใช้ไม่ได้ ต้องตรวจใหม่
-  try { cpFreeCanvas.setPointerCapture(e.pointerId); } catch (err) {}
   cpFree.drawing = true;
   cpFree.cur = [cpFreePos(e)];
   cpFreePaint();
@@ -6164,7 +6176,12 @@ function cpFreeDown(e) {
 }
 
 function cpFreeMove(e) {
-  if (!cpFree || !cpFree.drawing || !cpFree.cur) return;
+  if (!cpFree) return;
+  if (cpFree.eraser) { // ยางลบ: ลากผ่านเส้นไหนก็ลบเส้นนั้น
+    if (cpFree.erasing) cpFreeEraseAt(cpFreePos(e));
+    return;
+  }
+  if (!cpFree.drawing || !cpFree.cur) return;
   const p = cpFreePos(e);
   const prev = cpFree.cur[cpFree.cur.length - 1];
   cpFree.cur.push(p);
@@ -6177,7 +6194,10 @@ function cpFreeMove(e) {
 }
 
 function cpFreeUp(e) {
-  if (!cpFree || !cpFree.drawing) return;
+  if (!cpFree) return;
+  const release = () => { try { if (cpFreeCanvas.hasPointerCapture(e.pointerId)) cpFreeCanvas.releasePointerCapture(e.pointerId); } catch (err) {} };
+  if (cpFree.erasing) { cpFree.erasing = false; release(); return; }
+  if (!cpFree.drawing) return;
   cpFree.drawing = false;
   const pts = cpFree.cur || [];
   cpFree.cur = null;
@@ -6186,7 +6206,69 @@ function cpFreeUp(e) {
   if (pts.length) cpFree.strokes.push(pts);
   cpFreePaint();
   cpFreeSyncButtons();
-  try { if (cpFreeCanvas.hasPointerCapture(e.pointerId)) cpFreeCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+  release();
+}
+
+/* ---------- ยางลบ (กดปุ่มแล้วแตะเส้นที่ไม่ต้องการเพื่อลบ) ---------- */
+// รัศมีจับเส้นของยางลบ (หน่วยช่อง) — ประมาณ 10-13px ไม่ว่าช่องจะใหญ่แค่ไหน
+function cpFreeEraseRadius() { return Math.max(10, cpFreeCell * 0.13) / (cpFreeCell || 1); }
+
+// ระยะจากจุด p ถึงเส้น polylines (ใกล้สุดในทุกช่วงเส้นของขีดนั้น)
+function cpFreeStrokeDist(pts, p) {
+  let best = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    let d;
+    if (!b) {
+      d = Math.hypot(a[0] - p[0], a[1] - p[1]);
+    } else {
+      const vx = b[0] - a[0], vy = b[1] - a[1];
+      const len2 = vx * vx + vy * vy;
+      const t = len2 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2)) : 0;
+      d = Math.hypot(a[0] + vx * t - p[0], a[1] + vy * t - p[1]);
+    }
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// ลบ "เส้นที่ใกล้จุดแตะที่สุด" 1 เส้น ถ้าอยู่ในรัศมี (เส้นอื่นไม่โดน)
+function cpFreeEraseAt(p) {
+  if (!cpFree || !cpFree.strokes.length) return false;
+  let bi = -1, bd = Infinity;
+  cpFree.strokes.forEach((s, i) => {
+    const d = cpFreeStrokeDist(s, p);
+    if (d < bd) { bd = d; bi = i; }
+  });
+  if (bi < 0 || bd > cpFreeEraseRadius()) return false;
+  cpFree.strokes.splice(bi, 1);
+  cpFreeClearResult(); // ลายมือเปลี่ยน → คะแนนเดิมใช้ไม่ได้ ต้องตรวจใหม่
+  cpFreePaint();
+  cpFreeSyncButtons();
+  cpFreeStatus(cpFree.strokes.length
+    ? `ลบไป 1 ขีด (เหลือ ${cpFree.strokes.length} ขีด) — แตะเส้นอื่นที่ต้องการลบต่อได้`
+    : "ลบหมดแล้ว — เขียนใหม่ได้เลย");
+  return true;
+}
+
+// เปิด/ปิดโหมดยางลบ (ปุ่ม 🩹) — เปิดแล้วแตะ = ลบ ไม่ใช่เขียน
+function cpFreeSetEraser(on) {
+  const on2 = !!on;
+  if (cpFree) {
+    cpFree.eraser = on2;
+    cpFree.erasing = false;
+    cpFree.cur = null;
+    cpFree.drawing = false;
+  }
+  const panel = $("cpFree");
+  if (panel) panel.classList.toggle("erasing", on2);
+  const btn = $("cpFreeEraseBtn");
+  if (btn) {
+    btn.classList.toggle("on", on2);
+    btn.setAttribute("aria-pressed", on2 ? "true" : "false");
+  }
+  cpFreePaint();
 }
 
 // ---------- ตรวจคะแนน ----------
@@ -6285,6 +6367,11 @@ function cpFreePairSim(a, b) {
     + CFG.wDir * dirSim;
 }
 
+// ข้อมูล medians ของ hanzi-writer-data เป็นพิกัด "y คว่ำ" (y ชี้ขึ้น) — HanziWriter จึงต้องวาดด้วย scale(…, -…)
+// แต่ลายมือที่ผู้ใช้เขียนเป็นพิกัดจอ (y ชี้ลง) จึงต้องกลับแกน y ของข้อมูลก่อนเทียบเสมอ
+// ถ้าไม่กลับ ผู้เขียนต้องเขียนกลับหัว (พลิกบน-ล่าง) จึงจะได้คะแนนเต็ม ซึ่งเป็นบั๊ก
+const cpFreeFlipY = (strokes) => strokes.map((s) => s.map((p) => [p[0], -p[1]]));
+
 // คะแนนของช่องหนึ่ง: จับคู่ขีดตามลำดับ (ขีดที่ 1 ของผู้ใช้ ↔ ขีดแรกของตัวจริง) แล้วคิดโทษจำนวนขีดที่ไม่ตรง
 function cpFreeCharScore(userStrokes, char) {
   const data = bombCharData.get(char);
@@ -6293,7 +6380,7 @@ function cpFreeCharScore(userStrokes, char) {
   if (!userStrokes || !userStrokes.length) return { score: 0 };
   const CFG = CP_FREE_CFG;
   const u = cpFreeNormStrokes(userStrokes);
-  const t = cpFreeNormStrokes(target);
+  const t = cpFreeNormStrokes(cpFreeFlipY(target)); // กลับแกน y ให้เป็นทิศเดียวกับลายมือผู้ใช้
   if (!u.length || !t.length) return { score: 0 };
   // เขียนรวดเดียวทั้งตัว (1 ขีด แทนที่จะแยกทุกขีด) → ให้ได้ไม่เกิน CFG.singleScore จึงไม่ผ่านเกณฑ์เสมอ
   if (u.length === 1 && t.length > 1) {
@@ -6310,27 +6397,66 @@ function cpFreeCharScore(userStrokes, char) {
   return { score: (sum / u.length) * (CFG.countFloor + (1 - CFG.countFloor) * ratio) };
 }
 
-// แยกขีดทั้งหมดเข้าช่องของตัวเองด้วยจุดศูนย์กลางของขีด (ช่องที่ใกล้ที่สุด)
-// ตำแหน่งช่องคำนวณจากดัชนีในผังตรงๆ (คอลัมน์ × ขนาดช่อง + ช่องว่าง) จึงไม่ต้องวัด DOM
+// ตำแหน่งจุดกลางของช่องที่ i ใน "หน่วยช่อง" (คำนวณจากดัชนีในผังตรงๆ ไม่ต้องวัด DOM)
+// ใช้ทั้งตอนจัดขีดเข้าช่อง (cpFreeGroups) และตอนให้คะแนน
 function cpFreeCellCenter(i) {
   const step = 1 + CP_FREE_GAP / (cpFreeCell || 1);
   return [(i % cpFreeCols) * step + 0.5, Math.floor(i / cpFreeCols) * step + 0.5];
 }
 
+// แยกขีดเข้าช่อง: ปรับพิกัดลายมือทั้งแถวให้ตรงกับผังก่อน แล้วจับขีดเข้าช่องที่ใกล้ที่สุด
+// เหตุผล: ของเดิมจับด้วย "จุดกลางขีด vs จุดกลางช่อง" บนพิกัดดิบ ทำให้เขียนเหลื่อม/ห่าง/ชิดกันนิดหน่อย
+// (หรือเขียนต่อเนื่องแบบสมุด) ขีดที่เลยขอบช่องไปก็ตกไปช่องข้างๆ → ช่องนั้นได้ขีดตัวอื่นปนมา → คะแนนต่ำผิดๆ ทั้งที่เขียนถูก
+// การปรับสเกล/เลื่อนให้ลายมือของแต่ละบรรทัดกินพื้นที่ตรงกับช่องของบรรทัดนั้น ช่วยให้จัดช่องได้ถูกแม้ระยะห่างเพี้ยน
 function cpFreeGroups() {
-  const groups = Array.from({ length: cpFree.chars.length }, () => []);
-  const centers = groups.map((_, i) => cpFreeCellCenter(i));
-  cpFree.strokes.forEach((pts) => {
-    let sx = 0, sy = 0;
-    for (const p of pts) { sx += p[0]; sy += p[1]; }
-    const px = sx / pts.length, py = sy / pts.length;
-    let bi = 0, bd = Infinity;
-    centers.forEach((c, i) => {
-      const d = (px - c[0]) ** 2 + (py - c[1]) ** 2;
-      if (d < bd) { bd = d; bi = i; }
-    });
-    groups[bi].push(pts);
+  const cols = cpFreeCols || 1;
+  const n = cpFree.chars.length;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const groups = Array.from({ length: n }, () => []);
+  if (!cpFree.strokes.length) return groups;
+  const clampK = (k) => Math.min(1.35, Math.max(0.75, k || 1));
+  const items = cpFree.strokes.map((pts, idx) => {
+    let sx = 0, sy = 0, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      sx += p[0]; sy += p[1];
+      if (p[0] < minX) minX = p[0];
+      if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1];
+      if (p[1] > maxY) maxY = p[1];
+    }
+    return { pts: pts, idx: idx, cx: sx / pts.length, cy: sy / pts.length, minX: minX, maxX: maxX, minY: minY, maxY: maxY };
   });
+  // 1) ปรับแนวตั้งทั้งแผงให้ลายมือกินพื้นที่ตรงกับจำนวนบรรทัด แล้วแยกขีดเข้าบรรทัด
+  let y0 = Infinity, y1 = -Infinity;
+  items.forEach((it) => { if (it.minY < y0) y0 = it.minY; if (it.maxY > y1) y1 = it.maxY; });
+  const ky = clampK(rows / Math.max(0.001, y1 - y0));
+  const oy = -y0 * ky;
+  const perRow = Array.from({ length: rows }, () => []);
+  items.forEach((it) => {
+    const cy = it.cy * ky + oy;
+    perRow[Math.min(rows - 1, Math.max(0, Math.floor(cy)))].push(it);
+  });
+  // 2) ปรับแนวนอนแยกทีละบรรทัด (ความกว้างลายมือของบรรทัดนั้น → ความกว้างของช่องในบรรทัดนั้น)
+  for (let r = 0; r < rows; r++) {
+    const list = perRow[r];
+    if (!list.length) continue;
+    const first = r * cols;
+    const count = Math.min(cols, n - first);
+    if (count <= 0) continue;
+    let x0 = Infinity, x1 = -Infinity;
+    list.forEach((it) => { if (it.minX < x0) x0 = it.minX; if (it.maxX > x1) x1 = it.maxX; });
+    const kx = clampK(count / Math.max(0.001, x1 - x0));
+    const ox = -x0 * kx;
+    list.forEach((it) => {
+      const x = it.cx * kx + ox; // ตำแหน่งแนวนอนของขีดหลังปรับให้ตรงผัง
+      let bi = 0, bd = Infinity;
+      for (let c = 0; c < count; c++) {
+        const d = Math.abs(x - cpFreeCellCenter(first + c)[0]);
+        if (d < bd) { bd = d; bi = c; }
+      }
+      groups[first + bi].push(it.pts);
+    });
+  }
   return groups;
 }
 
@@ -6364,7 +6490,7 @@ function cpFreeShowResult(results, pct, skipped) {
   cpFree.result = { pct, pass };
   cpFree.results = results;
   cpFreeApplyBadges();
-  const weak = results.filter((r) => r.score !== null && r.score < 0.8).map((r) => r.char);
+  const weak = results.filter((r) => r.score !== null && r.score * 100 < CP_FREE_MIN).map((r) => r.char);
   const box = $("cpFreeResult");
   box.replaceChildren();
   const total = document.createElement("div");
@@ -6388,8 +6514,9 @@ function cpFreeShowResult(results, pct, skipped) {
   if (pass) sfx.correct(); else sfx.wrong();
 }
 
-$("cpFreeCanvas").addEventListener("pointerdown", (e) => { pencilSound.start(e); cpFreeDown(e); });
-$("cpFreeCanvas").addEventListener("pointermove", (e) => { pencilSound.move(e); cpFreeMove(e); });
+// ยางลบเปิดอยู่ = ไม่มีเสียงดินสอ และไม่วาดเส้นใหม่ (ดู cpFreeDown/Move)
+$("cpFreeCanvas").addEventListener("pointerdown", (e) => { if (!cpFree || !cpFree.eraser) pencilSound.start(e); cpFreeDown(e); });
+$("cpFreeCanvas").addEventListener("pointermove", (e) => { if (!cpFree || !cpFree.eraser) pencilSound.move(e); cpFreeMove(e); });
 $("cpFreeCanvas").addEventListener("pointerup", cpFreeUp);
 $("cpFreeCanvas").addEventListener("pointercancel", cpFreeUp);
 $("cpFreeCanvas").addEventListener("pointerleave", () => pencilSound.stop());
@@ -6401,6 +6528,15 @@ $("cpFreeUndoBtn").addEventListener("click", () => {
   cpFreePaint();
   cpFreeSyncButtons();
   cpFreeStatus("");
+});
+$("cpFreeEraseBtn").addEventListener("click", () => {
+  if (!cpFree) return;
+  sfx.click();
+  const on = !cpFree.eraser; // กดซ้ำ = ปิดยางลบ กลับไปเขียน
+  cpFreeSetEraser(on);
+  cpFreeStatus(on
+    ? "โหมดยางลบเปิดอยู่ — แตะหรือลากบนเส้นที่ต้องการลบ (กดปุ่มยางลบอีกครั้งเพื่อกลับไปเขียน)"
+    : "ปิดยางลบแล้ว — เขียนต่อได้เลย");
 });
 $("cpFreeClearBtn").addEventListener("click", () => {
   if (!cpFree || !cpFree.strokes.length) return;
