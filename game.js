@@ -5456,6 +5456,24 @@ function lisAdvance() {
   $("lisStatus").textContent =
     `สุ่มไม่ซ้ำ กองละ ${lis.deck.length} ${lis.type === "sent" ? "ประโยค" : "คำ"} • ห่าง ${lis.gap} วิ`;
   lisPlayCurrent();
+  fitListenCard(); // วัดทันทีหลังใส่ข้อความ (ไม่รอเฟรมถัดไป จะได้ไม่เห็นตัวใหญ่แล้วหดให้เห็น)
+  requestAnimationFrame(fitListenCard); // ย้ำอีกรอบเผื่อรอบแรกเลย์เอาต์/ฟอนต์ยังไม่นิ่ง
+}
+
+// ย่อข้อความในบัตรฟังให้พอดีจอ — ประโยคยาวๆ (เช่น HSK 5 ที่ยาวสุด 54 ตัวอักษร) จะได้ไม่ต้องเลื่อนจออ่าน
+// ลดตัวคูณ --lis-fit ทีละขั้น (ขั้นต่ำ 0.5 กันตัวจิ๋วเกินไป) จนกว่า #listen จะเลื่อนไม่ได้
+// ทุกครั้งที่เปลี่ยนคำ/ประโยคจะเริ่มจาก 1 ใหม่ ข้อความสั้นจึงกลับมาใหญ่เต็มขนาดเสมอ
+function fitListenCard() {
+  if (!lis) return;
+  const list = $("listen");
+  const card = $("lisCard");
+  if (!list || !card) return;
+  card.style.setProperty("--lis-fit", "1");
+  let scale = 1;
+  while (list.scrollHeight > list.clientHeight + 1 && scale > 0.5) {
+    scale = Math.round((scale - 0.05) * 100) / 100;
+    card.style.setProperty("--lis-fit", String(scale));
+  }
 }
 
 function startListenGame(level) {
@@ -5519,6 +5537,12 @@ $("lisQuitBtn").addEventListener("click", () => {
   lisReleaseWake();
   switchScreen(menuEl);
 });
+
+// จอหมุน/เปลี่ยนขนาด และฟอนต์โหลดเสร็จ → วัดใหม่ (ความสูงบรรทัดของฟอนต์เปลี่ยนได้หลังโหลด)
+window.addEventListener("resize", () => { if (lis) fitListenCard(); });
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { if (lis) requestAnimationFrame(fitListenCard); });
+}
 
 /* ================= Sentence copying mode (เกมเขียนเป็นประโยค) ================= */
 // สุ่มประโยคจาก SENTENCES ให้คัดลงลงสมุดฝึกเขียน — สับกองไม่ซ้ำจนครบแล้วสับใหม่
