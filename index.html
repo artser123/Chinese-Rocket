@@ -614,6 +614,19 @@
     <button id="cpSkipBtn" class="big-btn secondary">⏭ ข้าม</button>
     <button id="cpNextBtn" class="cp-next">✅ เขียนเสร็จ — ประโยคถัดไป</button>
   </div>
+
+  <!-- หน้าต่างแจ้งเตือนยืนยันการล้างข้อความทั้งหมด (โหมดเขียนประโยคแบบอิสระ) -->
+  <div id="cpFreeConfirmModal" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="cpFreeConfirmTitle" hidden>
+    <div class="overlay-box cpfree-confirm-box">
+      <div class="cpfree-confirm-icon">⚠️</div>
+      <h2 id="cpFreeConfirmTitle" class="cpfree-confirm-title">ยืนยันการล้างข้อความทั้งหมด</h2>
+      <p class="cpfree-confirm-desc">ลายมือที่เขียนไว้ทั้งหมดในประโยคนี้จะถูกลบ ต้องการล้างหรือไม่?</p>
+      <div class="cpfree-confirm-actions">
+        <button id="cpFreeConfirmNoBtn" class="big-btn secondary" type="button">ยกเลิก</button>
+        <button id="cpFreeConfirmYesBtn" class="big-btn danger" type="button">🗑️ ล้างทั้งหมด</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- HANDWRITING COPY PRACTICE SCREEN (คัดลายมือ) -->

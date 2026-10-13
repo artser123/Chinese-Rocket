@@ -6014,7 +6014,12 @@ window.addEventListener("resize", () => {
   if (cpPopupChip && cpPopupChip.isConnected) cpPlaceWordPopup(cpPopupChip);
   else cpHideWordPopup();
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") cpHideWordPopup(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    cpHideWordPopup();
+    cpFreeHideConfirm();
+  }
+});
 
 function cpHideStrokes() {
   $("cpStrokes").hidden = true;
@@ -6224,9 +6229,25 @@ function cpFreeSetup() {
   requestAnimationFrame(() => { if (cpFree) cpFreeReflow(); });
 }
 
+function cpFreeShowConfirm() {
+  const modal = $("cpFreeConfirmModal");
+  if (!modal) return;
+  modal.classList.add("show");
+  modal.removeAttribute("hidden");
+  $("cpFreeConfirmNoBtn")?.focus();
+}
+
+function cpFreeHideConfirm() {
+  const modal = $("cpFreeConfirmModal");
+  if (!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("hidden", "");
+}
+
 function cpFreeHide() {
   const panel = $("cpFree");
   if (panel) panel.hidden = true;
+  cpFreeHideConfirm();
   cpFree = null;
   cpFreeCtx = null;
   cpFreeSetEraser(false);
@@ -6766,8 +6787,27 @@ $("cpFreeEraseBtn").addEventListener("click", () => {
 $("cpFreeClearBtn").addEventListener("click", () => {
   if (!cpFree || !cpFree.strokes.length) return;
   sfx.click();
+  cpFreeShowConfirm();
+});
+$("cpFreeConfirmNoBtn").addEventListener("click", () => {
+  sfx.click();
+  cpFreeHideConfirm();
+});
+$("cpFreeConfirmYesBtn").addEventListener("click", () => {
+  if (!cpFree) {
+    cpFreeHideConfirm();
+    return;
+  }
+  sfx.click();
+  cpFreeHideConfirm();
   cpFreeReset(true);
   cpFreeStatus("ล้างลายมือแล้ว — เริ่มเขียนใหม่ได้เลย");
+});
+$("cpFreeConfirmModal").addEventListener("click", (e) => {
+  if (e.target === $("cpFreeConfirmModal")) {
+    sfx.click();
+    cpFreeHideConfirm();
+  }
 });
 $("cpFreeCheckBtn").addEventListener("click", () => {
   if ($("cpFreeCheckBtn").disabled) return;

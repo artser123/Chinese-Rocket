@@ -412,6 +412,19 @@ html, body {
 .big-btn:disabled { filter: grayscale(1) brightness(.6); box-shadow: none; }
 .big-btn.secondary { background: #232c5e; color: #cdd5ff; box-shadow: none; }
 .big-btn.locked { background: #2a2f45; color: #777; box-shadow: none; }
+.big-btn.danger {
+  background: linear-gradient(180deg, #ff4d4d, #c51616);
+  color: #fff;
+  border: 1px solid #ff7a7a;
+  box-shadow: 0 4px 14px rgba(220, 30, 30, .45);
+}
+.big-btn.danger:hover {
+  background: linear-gradient(180deg, #ff5e5e, #d32020);
+}
+.big-btn.danger:active {
+  transform: translateY(2px) scale(.98);
+  box-shadow: 0 1px 4px rgba(220, 30, 30, .4);
+}
 
 .best { color: #8fd3ff; font-size: clamp(14px, 3.8vw, 17px); }
 .howto { color: #7d88b8; font-size: clamp(13px, 3.6vw, 16px); line-height: 1.7; margin-top: 6px; }
@@ -1221,6 +1234,74 @@ html, body {
   touch-action: manipulation;
 }
 .cp-next:active { transform: scale(.96); }
+
+/* หน้าต่างแจ้งเตือนยืนยันการล้างข้อความทั้งหมด (โหมดเขียนประโยคแบบอิสระ) */
+#cpFreeConfirmModal {
+  position: fixed;
+  inset: 0;
+  padding: 16px;
+  z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 7, 24, .78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+#cpFreeConfirmModal.show {
+  display: flex;
+}
+#cpFreeConfirmModal[hidden] {
+  display: none !important;
+}
+
+.cpfree-confirm-box {
+  width: min(400px, 92vw);
+  padding: 24px 20px;
+  gap: 12px;
+  border: 1px solid rgba(255, 110, 110, .45);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .7), 0 0 28px rgba(255, 80, 80, .25);
+  animation: cpConfirmPop var(--dur-med) var(--ease-spring);
+}
+@keyframes cpConfirmPop {
+  from { opacity: 0; transform: scale(.92); }
+  to { opacity: 1; transform: none; }
+}
+
+.cpfree-confirm-icon {
+  font-size: 38px;
+  line-height: 1;
+}
+
+.cpfree-confirm-title {
+  font-size: clamp(18px, 4.8vw, 22px);
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.cpfree-confirm-desc {
+  font-size: clamp(13px, 3.6vw, 15px);
+  color: #c4d2ee;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.cpfree-confirm-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.cpfree-confirm-actions .big-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: clamp(14px, 3.8vw, 16px);
+  border-radius: var(--r-md);
+}
 
 /* แตะคำในประโยคเพื่อดูคำแปลไทย — คำแตกเป็นชิ้นตาม s[4] และมีเส้นใต้บางๆ บอกขอบเขตคำ */
 #cpZh .cp-zh-tok {
