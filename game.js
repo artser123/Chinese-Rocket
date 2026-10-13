@@ -45,6 +45,161 @@ if (SENT_OK && typeof SENTENCES_EXTRA !== "undefined") {
     SENTENCES[lvl] = (SENTENCES[lvl] || []).concat(SENTENCES_EXTRA[lvl]);
   }
 }
+
+/* ================= Vocabulary Categories ================= */
+let currentCategory = localStorage.getItem("cr_vocab_category") || "hsk";
+
+const IT_SUB_MAP = {
+  hardware: "硬件设备",
+  system: "系统与安装",
+  trouble: "故障与问题",
+  repair: "维修与工具",
+  network: "网络与运维"
+};
+
+const CATEGORIES = {
+  hsk: {
+    id: "hsk",
+    name: "HSK (มาตรฐาน HSK 1–9)",
+    icon: "🇨🇳",
+    badge: "HSK 1–9",
+    levelLabel: "ระดับ HSK",
+    levels: [
+      { id: "1", label: "HSK 1" },
+      { id: "2", label: "HSK 2" },
+      { id: "3", label: "HSK 3" },
+      { id: "4", label: "HSK 4" },
+      { id: "5", label: "HSK 5" },
+      { id: "6", label: "HSK 6", vocabOnly: true },
+      { id: "7-9", label: "HSK 7-9", vocabOnly: true }
+    ],
+    defaultLevel: "1",
+    getVocabPool: (level) => {
+      const lvlStr = String(level || "1");
+      return (typeof VOCAB !== "undefined" && VOCAB[lvlStr]) ? VOCAB[lvlStr] : (typeof VOCAB !== "undefined" ? VOCAB["1"] : []);
+    },
+    getSentencePool: (level) => {
+      const lvlStr = String(level || "1");
+      return (SENT_OK && SENTENCES[lvlStr]) ? SENTENCES[lvlStr] : [];
+    }
+  },
+  it: {
+    id: "it",
+    name: "คอมพิวเตอร์และงานไอที (IT & Computer)",
+    icon: "💻",
+    badge: "💻 IT & Computer",
+    levelLabel: "หมวดย่อยไอที",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (268 คำ)" },
+      { id: "hardware", label: "🖥️ ฮาร์ดแวร์ (66 คำ)" },
+      { id: "system", label: "💿 ลง Windows (59 คำ)" },
+      { id: "trouble", label: "⚠️ อาการเสีย (47 คำ)" },
+      { id: "repair", label: "🔧 ซ่อม & เครื่องมือ (47 คำ)" },
+      { id: "network", label: "🌐 เครือข่าย (49 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_IT === "undefined") return [];
+      if (!level || level === "all") return VOCAB_IT;
+      const cat = IT_SUB_MAP[level];
+      if (!cat) return VOCAB_IT;
+      const filtered = VOCAB_IT.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_IT;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_IT === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_IT;
+      const cat = IT_SUB_MAP[level];
+      if (!cat) return SENTENCES_IT;
+      const words = typeof VOCAB_IT !== "undefined" ? VOCAB_IT.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_IT.filter((s) => words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_IT;
+    }
+  }
+};
+
+function getVocabPool(level) {
+  const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+  return cat.getVocabPool(level || selectedLevel || currentLevel);
+}
+
+function getSentencePool(level) {
+  const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+  return cat.getSentencePool(level || selectedLevel || currentLevel);
+}
+
+function levelDisplayName(level) {
+  if (!level) return "";
+  const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+  const found = cat.levels.find((l) => String(l.id) === String(level));
+  if (found) {
+    return currentCategory === "hsk" ? `HSK ${found.id}` : found.label.replace(/\s*\(.*\)/, "");
+  }
+  return `ระดับ ${level}`;
+}
+
+const catPrefix = () => (currentCategory === "hsk" ? "hsk" : `${currentCategory}_`);
+
+function setCategory(catId) {
+  if (!CATEGORIES[catId]) return;
+  currentCategory = catId;
+  localStorage.setItem("cr_vocab_category", currentCategory);
+  const cat = CATEGORIES[currentCategory];
+  selectedLevel = cat.defaultLevel;
+  renderLevelSelect();
+  updateCategoryDropdownUI();
+}
+
+function updateCategoryDropdownUI() {
+  const sel = $("categorySelect");
+  if (sel && sel.value !== currentCategory) sel.value = currentCategory;
+  const tag = $("setupCategoryTag");
+  if (tag) {
+    const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+    tag.textContent = `หมวดหมู่: ${cat.icon} ${cat.name}`;
+  }
+}
+
+function renderLevelSelect() {
+  const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+  const container = $("levelSelect");
+  if (!container) return;
+
+  const labelEl = $("setupLevelLabel");
+  if (labelEl) labelEl.textContent = cat.levelLabel;
+
+  const tagEl = $("setupCategoryTag");
+  if (tagEl) tagEl.textContent = `หมวดหมู่: ${cat.icon} ${cat.name}`;
+
+  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb", "trace"].includes(gameMode)
+    || (gameMode === "listen" && lisType === "word");
+
+  container.innerHTML = "";
+  cat.levels.forEach((lvl) => {
+    if (lvl.vocabOnly && !usesVocab) return;
+    const btn = document.createElement("button");
+    btn.className = "level-btn" + (lvl.vocabOnly ? " vocab-level" : "");
+    btn.dataset.level = lvl.id;
+    btn.textContent = lvl.label;
+    if (String(selectedLevel) === String(lvl.id)) {
+      btn.classList.add("selected");
+    }
+    container.appendChild(btn);
+  });
+
+  const validLevels = cat.levels.filter((l) => !l.vocabOnly || usesVocab);
+  const isValid = validLevels.some((l) => String(l.id) === String(selectedLevel));
+  if (!isValid) {
+    if (validLevels.length) {
+      selectedLevel = validLevels[0].id;
+      const b = container.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
+      if (b) b.classList.add("selected");
+    } else {
+      selectedLevel = null;
+    }
+  }
+  updateStartBtn();
+}
 const DIFF = {
   easy:   { label: "ง่าย",     base: 7,  cap: 30, ramp: 0.45, spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
   medium: { label: "ปานกลาง", base: 19, cap: 48, ramp: 1.1,  spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
@@ -922,7 +1077,8 @@ const maxOnScreen = () => Math.min(3 + Math.floor(destroyed / 12), 6);
 /* ================= Game flow ================= */
 function startGame(level) {
   currentLevel = level;
-  pool = VOCAB[String(level)] || VOCAB["1"];
+  pool = getVocabPool(level);
+  if (!pool.length) pool = getVocabPool("1");
   lastStarter = () => startGame(level);
   meteors = []; missiles = []; particles = []; rings = []; floaters = [];
   shakeT = 0;
@@ -956,8 +1112,8 @@ function endGame() {
   stopSpeech();
   sfx.over();
   showGameOver("💥 เกมจบ!", score,
-    `ทำลายอุกกาบาต ${destroyed} ลูก • HSK ${currentLevel} • ${DIFF[difficulty].label}`,
-    `cr_best_hsk${currentLevel}_${difficulty}`);
+    `ทำลายอุกกาบาต ${destroyed} ลูก • ${levelDisplayName(currentLevel)} • ${DIFF[difficulty].label}`,
+    `cr_best_${catPrefix()}${currentLevel}_${difficulty}`);
 }
 
 function saveBest(bestKeyStr, scoreVal) {
@@ -981,7 +1137,8 @@ const qoptBtns = Array.from(document.querySelectorAll(".qopt"));
 
 function startQuizGame(level) {
   currentLevel = level;
-  pool = VOCAB[String(level)] || VOCAB["1"];
+  pool = getVocabPool(level);
+  if (!pool.length) pool = getVocabPool("1");
   lastStarter = () => startQuizGame(level);
   quiz = { lives: 3, score: 0, answered: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false,
@@ -1093,17 +1250,17 @@ function quizGameOver() {
   sfx.over();
   const modeLabel = quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย";
   showGameOver("📖 จบเกม!", finalScore,
-    `HSK ${currentLevel} • ${modeLabel}`,
-    `cr_best_hsk${currentLevel}_quiz_${quizMode}`);
+    `${levelDisplayName(currentLevel)} • ${modeLabel}`,
+    `cr_best_${catPrefix()}${currentLevel}_quiz_${quizMode}`);
 }
 
 qoptBtns.forEach((b, i) => b.addEventListener("pointerdown", (e) => { e.preventDefault(); answerQuiz(i); }));
 
 /* ================= Sentence ordering mode (เกมเรียงประโยค) ================= */
 function startSentGame(level) {
-  if (!SENT_OK || !SENTENCES[String(level)]) return;
+  const list = getSentencePool(level);
+  if (!list || !list.length) return;
   currentLevel = level;
-  const list = SENTENCES[String(level)];
   lastStarter = () => startSentGame(level);
   sent = { lives: 3, score: 0, solved: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, wrongThisQ: 0, isReview: false,
@@ -1318,8 +1475,8 @@ function sentGameOver() {
   stopSpeech();
   sfx.over();
   showGameOver("🧩 จบเกม!", finalScore,
-    `HSK ${currentLevel} • เกมเรียงประโยค`,
-    `cr_best_hsk${currentLevel}_sent`);
+    `${levelDisplayName(currentLevel)} • เกมเรียงประโยค`,
+    `cr_best_${catPrefix()}${currentLevel}_sent`);
 }
 
 $("sentNextBtn").addEventListener("click", () => {
@@ -1333,7 +1490,7 @@ $("sentGiveUpBtn").addEventListener("click", sentGiveUp);
 $("sentMuteBtn").addEventListener("click", toggleMute);
 $("sentQuitBtn").addEventListener("click", () => {
   sfx.click();
-  saveBest(`cr_best_hsk${currentLevel}_sent`, sent ? sent.score : 0);
+  saveBest(`cr_best_${catPrefix()}${currentLevel}_sent`, sent ? sent.score : 0);
   sent = null;
   music.stop();
   stopSpeech();
@@ -1343,9 +1500,10 @@ $("sentQuitBtn").addEventListener("click", () => {
 
 /* ================= Fill-in-the-blank mode (เกมเติมคำในประโยค) ================= */
 function startFillGame(level) {
-  if (!SENT_OK || !SENTENCES[String(level)]) return;
+  const sPool = getSentencePool(level);
+  if (!sPool || !sPool.length) return;
   currentLevel = level;
-  pool = SENTENCES[String(level)];
+  pool = sPool;
   lastStarter = () => startFillGame(level);
   fill = { lives: 3, score: 0, solved: false, nextTimer: null,
            reviewQueue: [], sinceReview: 0, isReview: false,
@@ -1396,7 +1554,7 @@ function nextFillQuestion() {
     const cand = pick(pick(pool)[4]);
     if (/[一-鿿]/.test(cand) && !used.has(cand)) { used.add(cand); opts.push(cand); }
   }
-  const vpool = VOCAB[String(currentLevel)] || [];
+  const vpool = getVocabPool(currentLevel) || [];
   guard = 0;
   while (opts.length < 3 && vpool.length && guard++ < 600) {
     const cand = (pick(vpool)[0] || "").split(/[｜|]/)[0].trim();
@@ -1485,8 +1643,8 @@ function fillGameOver() {
   stopSpeech();
   sfx.over();
   showGameOver("✏️ จบเกม!", finalScore,
-    `HSK ${currentLevel} • เกมเติมคำในประโยค`,
-    `cr_best_hsk${currentLevel}_fill`);
+    `${levelDisplayName(currentLevel)} • เกมเติมคำในประโยค`,
+    `cr_best_${catPrefix()}${currentLevel}_fill`);
 }
 
 $("fillNextBtn").addEventListener("click", () => {
@@ -1499,7 +1657,7 @@ $("fillNextBtn").addEventListener("click", () => {
 $("fillMuteBtn").addEventListener("click", toggleMute);
 $("fillQuitBtn").addEventListener("click", () => {
   sfx.click();
-  saveBest(`cr_best_hsk${currentLevel}_fill`, fill ? fill.score : 0);
+  saveBest(`cr_best_${catPrefix()}${currentLevel}_fill`, fill ? fill.score : 0);
   clearTimeout(fill && fill.nextTimer);
   fill = null;
   music.stop();
@@ -1516,7 +1674,7 @@ $("quizNextBtn").addEventListener("click", () => {
 });
 $("quizQuitBtn").addEventListener("click", () => {
   sfx.click();
-  saveBest(`cr_best_hsk${currentLevel}_quiz_${quizMode}`, quiz ? quiz.score : 0);
+  saveBest(`cr_best_${catPrefix()}${currentLevel}_quiz_${quizMode}`, quiz ? quiz.score : 0);
   quiz = null;
   music.stop();
   stopSpeech();
@@ -2086,7 +2244,7 @@ window.addEventListener("resize", () => { if (matching) applyMatchLayout(); });
 window.addEventListener("orientationchange", () => { if (matching) setTimeout(applyMatchLayout, 200); });
 zresize();
 
-const zombieBestKey = () => `cr_best_hsk${currentLevel}_zombie_${difficulty}_${zDuration}`;
+const zombieBestKey = () => `cr_best_${catPrefix()}${currentLevel}_zombie_${difficulty}_${zDuration}`;
 function zSpeed() {
   const d = ZDIFF[difficulty];
   return Math.min(d.base + zb.elapsed * d.ramp, d.cap) * Math.max(0.7, ZW / 800);
@@ -2100,7 +2258,8 @@ const zFirst = (s) => s.split(/[｜|]/)[0].trim();
 
 function startZombieGame(level) {
   currentLevel = level;
-  pool = VOCAB[String(level)] || VOCAB["1"];
+  pool = getVocabPool(level);
+  if (!pool.length) pool = getVocabPool("1");
   lastStarter = () => startZombieGame(level);
   zresize();
   zb = {
@@ -2786,7 +2945,7 @@ function zombieGameOver(win) {
   $("zWrongFlash").classList.remove("show");
   if (win) sfx.hit(); else sfx.over();
   showGameOver(win ? "🏆 รอดแล้ว! หมดเวลา" : "🧟 ซอมบี้ถึงตัวแล้ว!", s.score,
-    `ยิงซอมบี้ ${s.kills} ตัว • HSK ${currentLevel} • ${DIFF[difficulty].label} • ${zDurLabel()}`,
+    `ยิงซอมบี้ ${s.kills} ตัว • ${levelDisplayName(currentLevel)} • ${DIFF[difficulty].label} • ${zDurLabel()}`,
     zombieBestKey());
 }
 
@@ -2824,7 +2983,7 @@ const MATCH_DIFF = {
   hard: { cards: 10, columns: 5, label: "ยาก · 10 ใบ" },
 };
 const originalDiffLabels = Array.from(document.querySelectorAll(".diff-btn"), (b) => b.textContent);
-const matchingBestKey = (level, diff, mode, duration) => `cr_best_hsk${level}_matching_${diff}_${mode}_${duration}`;
+const matchingBestKey = (level, diff, mode, duration) => `cr_best_${catPrefix()}${level}_matching_${diff}_${mode}_${duration}`;
 const matchTimeLabel = (duration) => duration ? `${duration} วินาที` : "ไม่จำกัดเวลา";
 const matchModeLabel = (mode) => mode === "pinyin" ? "พินอิน" : "ภาษาไทย";
 const matchTextKey = (text) => text.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -2853,7 +3012,7 @@ function startMatchingGame(level, mode = quizMode, diff = difficulty, duration =
   currentLevel = level;
   lastStarter = () => startMatchingGame(level, mode, diff, duration);
   matching = {
-    level, mode, diff, duration, words: VOCAB[String(level)] || VOCAB["1"],
+    level, mode, diff, duration, words: getVocabPool(level),
     score: 0, pairs: 0, attempts: 0, rounds: 0, elapsed: 0, done: new Set(),
     deck: [], open: [], waitUntil: 0, paused: false,
     lastTime: performance.now(), frame: null,
@@ -2861,7 +3020,7 @@ function startMatchingGame(level, mode = quizMode, diff = difficulty, duration =
   $("matching").classList.remove("match-paused");
   $("matchPauseOverlay").classList.remove("show");
   const mark = $("matchProg");
-  if (mark) mark.textContent = `HSK ${level} • ${MATCH_DIFF[diff].label} • จีน–${matchModeLabel(mode)} • ${matchTimeLabel(duration)}`;
+  if (mark) mark.textContent = `${levelDisplayName(level)} • ${MATCH_DIFF[diff].label} • จีน–${matchModeLabel(mode)} • ${matchTimeLabel(duration)}`;
   $("matchMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("matchMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("matching"));
@@ -3144,7 +3303,7 @@ function endMatchingGame(expired = false) {
   const rounds = s.rounds + Number(s.deck.every((c) => c.matched));
   const accuracy = s.attempts ? Math.round(s.pairs / s.attempts * 100) : 0;
   showGameOver(expired ? "หมดเวลา!" : "จบเกมจับคู่", s.score,
-    `HSK ${s.level} • ${MATCH_DIFF[s.diff].label} • ${matchModeLabel(s.mode)} • ${matchTimeLabel(s.duration)} • ` +
+    `${levelDisplayName(s.level)} • ${MATCH_DIFF[s.diff].label} • ${matchModeLabel(s.mode)} • ${matchTimeLabel(s.duration)} • ` +
     `จับคู่ ${s.pairs} คู่ • ครบ ${rounds} ชุด • แม่นยำ ${accuracy}% • เล่น ${Math.floor(s.elapsed)} วินาที`,
     matchingBestKey(s.level, s.diff, s.mode, s.duration));
 }
@@ -3255,7 +3414,7 @@ const BOMB_DIFF = {
   medium: { label: "ปานกลาง", fallMul: 1.0, writeMul: 1.0,  tierMul: 1.0 },
   hard:   { label: "ยากมาก",  fallMul: 0.7, writeMul: 0.7,  tierMul: 1.3 },
 };
-const bombBestKey = (level, diff) => `cr_best_hsk${level}_bomb_${diff}`;
+const bombBestKey = (level, diff) => `cr_best_${catPrefix()}${level}_bomb_${diff}`;
 const bombPinyinKey = (text) => text.normalize("NFC").replace(/\s+/g, "").toLowerCase();
 const bombTier = (s) => Math.floor((Math.floor(s.elapsed / 45) + Math.floor(s.defused / 4)) * (BOMB_DIFF[s.difficulty]?.tierMul ?? 1));
 const bombFallSeconds = (s) => Math.max(3, (12 - bombTier(s) * 0.65) * (BOMB_DIFF[s.difficulty]?.fallMul ?? 1));
@@ -3429,7 +3588,7 @@ function showBombTierBanner(tier) {
 
 function bombVocabulary(level) {
   const unique = new Map();
-  for (const entry of VOCAB[String(level)] || []) {
+  for (const entry of getVocabPool(level) || []) {
     const chinese = entry[0].split(/[｜|]/)[0].replace(/[^\p{Script=Han}]/gu, "");
     const pinyin = entry[1].split(/[｜|]/)[0].replace(/[()（）…]/g, "").replace(/\s+/g, " ").trim();
     if (chinese && pinyin && !unique.has(chinese)) unique.set(chinese, [chinese, pinyin, entry[2]]);
@@ -3510,7 +3669,7 @@ function startBombGame(level, diff = difficulty) {
   bombFxClear();
   $("bombFlash").classList.remove("show");
   $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
-  $("bombLevel").textContent = `HSK ${level} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
+  $("bombLevel").textContent = `${levelDisplayName(level)} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("bomb"));
@@ -3814,7 +3973,7 @@ function continueBombGame() {
   stopBombGame();
   sfx.over();
   showGameOver("จบเกมเขียนปลดระเบิด", s.score,
-    `HSK ${s.level} • ปลดระเบิด ${s.defused} ลูก • โบนัสพินอิน ${s.bonuses} ครั้ง`, bombBestKey(s.level, s.difficulty));
+    `${levelDisplayName(s.level)} • ปลดระเบิด ${s.defused} ลูก • โบนัสพินอิน ${s.bonuses} ครั้ง`, bombBestKey(s.level, s.difficulty));
 }
 
 function pauseBombGame() {
@@ -3915,47 +4074,42 @@ const bestKey = () => gameMode === "bomb"
   : gameMode === "matching"
   ? matchingBestKey(selectedLevel, difficulty, quizMode, zDuration)
   : gameMode === "vocab"
-  ? `cr_best_hsk${selectedLevel}_quiz_${quizMode}`
+  ? `cr_best_${catPrefix()}${selectedLevel}_quiz_${quizMode}`
   : gameMode === "sentence"
-    ? `cr_best_hsk${selectedLevel}_sent`
+    ? `cr_best_${catPrefix()}${selectedLevel}_sent`
     : gameMode === "fillblank"
-      ? `cr_best_hsk${selectedLevel}_fill`
+      ? `cr_best_${catPrefix()}${selectedLevel}_fill`
       : gameMode === "zombie"
-      ? `cr_best_hsk${selectedLevel}_zombie_${difficulty}_${zDuration}`
+      ? `cr_best_${catPrefix()}${selectedLevel}_zombie_${difficulty}_${zDuration}`
       : gameMode === "speak"
-        ? `cr_best_hsk${selectedLevel}_speak`
+        ? `cr_best_${catPrefix()}${selectedLevel}_speak`
         : gameMode === "trace"
-          ? `cr_best_hsk${selectedLevel}_trace`
-          : `cr_best_hsk${selectedLevel}_${difficulty}`;
-const startLabel = () => gameMode === "bomb"
-  ? `เริ่มเขียนปลดระเบิด HSK ${selectedLevel} (${BOMB_DIFF[difficulty].label})`
-  : gameMode === "matching"
-  ? `เริ่ม HSK ${selectedLevel} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`
-  : gameMode === "vocab"
-  ? `🚀 เริ่ม HSK ${selectedLevel} (${quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย"}, Endless)`
-  : gameMode === "sentence"
-    ? `🚀 เริ่ม HSK ${selectedLevel} (เกมเรียงประโยค, Endless)`
-    : gameMode === "fillblank"
-      ? `🚀 เริ่ม HSK ${selectedLevel} (เกมเติมคำในประโยค, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`
-      : gameMode === "zombie"
-      ? `🔫 เริ่ม HSK ${selectedLevel} (${DIFF[difficulty].label}, ${zDurLabel()})`
-      : gameMode === "speak"
-        ? `🎤 เริ่มฝึกพูด HSK ${selectedLevel} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`
-        : gameMode === "listen"
-          ? `🎧 เริ่มฝึกฟัง HSK ${selectedLevel} (${lisType === "sent" ? "ประโยค" : "คำศัพท์"}, ห่าง ${lisGap} วิ)`
-          : gameMode === "copy"
-            ? `✍️ เริ่มฝึกเขียนประโยค HSK ${selectedLevel}`
-            : gameMode === "trace"
-              ? `✍️ เริ่มคัดลายมือ HSK ${selectedLevel} (${tcSlots} ช่อง ไม่ซ้ำจนครบกอง)`
-              : `🚀 เริ่มเกม HSK ${selectedLevel} (${DIFF[difficulty].label})`;
+          ? `cr_best_${catPrefix()}${selectedLevel}_trace`
+          : `cr_best_${catPrefix()}${selectedLevel}_${difficulty}`;
+
+const startLabel = () => {
+  const lvl = levelDisplayName(selectedLevel);
+  if (gameMode === "bomb") return `เริ่มเขียนปลดระเบิด ${lvl} (${BOMB_DIFF[difficulty].label})`;
+  if (gameMode === "matching") return `เริ่ม ${lvl} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`;
+  if (gameMode === "vocab") return `🚀 เริ่ม ${lvl} (${quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย"}, Endless)`;
+  if (gameMode === "sentence") return `🚀 เริ่ม ${lvl} (เกมเรียงประโยค, Endless)`;
+  if (gameMode === "fillblank") return `🚀 เริ่ม ${lvl} (เกมเติมคำในประโยค, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
+  if (gameMode === "zombie") return `🔫 เริ่ม ${lvl} (${DIFF[difficulty].label}, ${zDurLabel()})`;
+  if (gameMode === "speak") return `🎤 เริ่มฝึกพูด ${lvl} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
+  if (gameMode === "listen") return `🎧 เริ่มฝึกฟัง ${lvl} (${lisType === "sent" ? "ประโยค" : "คำศัพท์"}, ห่าง ${lisGap} วิ)`;
+  if (gameMode === "copy") return `✍️ เริ่มฝึกเขียนประโยค ${lvl}`;
+  if (gameMode === "trace") return `✍️ เริ่มคัดลายมือ ${lvl} (${tcSlots} ช่อง ไม่ซ้ำจนครบกอง)`;
+  return `🚀 เริ่มเกม ${lvl} (${DIFF[difficulty].label})`;
+};
 
 function updateStartBtn() {
   if (!gameMode) return;
-  const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent")) && !SENT_OK;
+  const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak")
+    && (currentCategory === "hsk" ? !SENT_OK : (typeof SENTENCES_IT === "undefined" || !SENTENCES_IT.length));
   $("startBtn").disabled = !selectedLevel || noSent;
   $("startBtn").textContent = noSent
-    ? "⚠️ รัน python tools\\extract_sentences.py ก่อน"
-    : selectedLevel ? startLabel() : "เลือกระดับ HSK เพื่อเริ่ม";
+    ? "⚠️ ยังไม่มีข้อมูลประโยค"
+    : selectedLevel ? startLabel() : (currentCategory === "it" ? "เลือกหมวดย่อยเพื่อเริ่ม" : "เลือกระดับ HSK เพื่อเริ่ม");
   updateBestLine();
 }
 function updateBestLine() {
@@ -3964,7 +4118,7 @@ function updateBestLine() {
   if (gameMode === "copy") { $("bestScoreLine").textContent = "✍️ คัดลงประโยคลงสมุด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
   if (!selectedLevel) { $("bestScoreLine").textContent = ""; return; }
   const best = +localStorage.getItem(bestKey()) || 0;
-  $("bestScoreLine").textContent = best ? `สถิติ HSK ${selectedLevel}: ${best} คะแนน` : "";
+  $("bestScoreLine").textContent = best ? `สถิติ ${levelDisplayName(selectedLevel)}: ${best} คะแนน` : "";
 }
 
 /* ================= Dictionary mode ================= */
@@ -4046,9 +4200,19 @@ function dictSearch(query) {
   // For pinyin search: split query into syllables by space, normalize each
   // e.g. "ni hao" -> ["ni","hao"] ; "nihao" -> ["nihao"]
   const qSyls = isChinese || isThai ? [] : normPinyin(q).split(/\s+/).filter(Boolean);
+  const vocabSources = [];
+  if (currentCategory === "it" && typeof VOCAB_IT !== "undefined") {
+    vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
+  }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
-    const words = VOCAB[lvl] || [];
-    for (const w of words) {
+    vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
+  }
+  if (currentCategory !== "it" && typeof VOCAB_IT !== "undefined") {
+    vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
+  }
+
+  for (const src of vocabSources) {
+    for (const w of src.words) {
       const zh = w[0], py = w[1], th = w[2];
       let match = false;
       if (isChinese) {
@@ -4077,20 +4241,24 @@ function dictSearch(query) {
         // also search Thai meaning as fallback
         if (!match && th && th.toLowerCase().includes(qLower)) match = true;
       }
-      if (match) results.push({ zh, py, th, lvl });
+      if (match) results.push({ zh, py, th, lvl: src.lvl, badge: src.badge });
     }
   }
-  // sort: shorter chinese first, then lower HSK level
-  results.sort((a, b) => a.zh.length - b.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
+  // sort: exact match first, then shorter chinese, then category preference
+  const scoreLvl = (lvl) => {
+    if (lvl === "IT") return currentCategory === "it" ? 0 : 99;
+    return Number(lvl === "7-9" ? 9 : lvl);
+  };
+  results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
   // spoken-phrase fallback: a long Chinese query (e.g. a dictated sentence)
   // with no direct hit -> list vocab words contained inside it, longest first
   if (isChinese && !results.length && q.length >= 2) {
-    for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
-      for (const w of VOCAB[lvl] || []) {
-        if (w[0] && q.includes(w[0])) results.push({ zh: w[0], py: w[1], th: w[2], lvl });
+    for (const src of vocabSources) {
+      for (const w of src.words) {
+        if (w[0] && q.includes(w[0])) results.push({ zh: w[0], py: w[1], th: w[2], lvl: src.lvl, badge: src.badge });
       }
     }
-    results.sort((a, b) => b.zh.length - a.zh.length || Number(a.lvl === "7-9" ? 9 : a.lvl) - Number(b.lvl === "7-9" ? 9 : b.lvl));
+    results.sort((a, b) => b.zh.length - a.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
   }
   dictRenderResults(results.slice(0, 20), q);
   // multi-char Chinese query (word/sentence): also translate the whole thing
@@ -4133,6 +4301,17 @@ function dictPinyinIndex() {
   const charPy = new Map(); // char -> first seen syllable
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     for (const w of VOCAB[lvl] || []) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_IT !== "undefined") {
+    for (const w of VOCAB_IT) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -4280,7 +4459,7 @@ function dictRenderResults(results, query) {
       <div class="dict-entry-zh" lang="zh">${r.zh}</div>
       <div class="dict-entry-pinyin">${pyText}</div>
       ${posText}
-      <span class="dict-entry-hsk" data-hsk="${r.lvl}">HSK ${r.lvl}</span>
+      <span class="dict-entry-hsk" data-hsk="${r.lvl}">${r.badge || `HSK ${r.lvl}`}</span>
     </div>
     <div class="dict-entry-th ${thClass}">${thText}</div>
     ${altHtml}
@@ -4454,6 +4633,16 @@ function dictFindExamples(zh, lvl) {
           examples.push(s);
           if (examples.length >= 3) return examples;
         }
+      }
+    }
+  }
+  // 1.5) SENTENCES_IT (IT category sentences)
+  if (typeof SENTENCES_IT !== "undefined") {
+    for (const s of SENTENCES_IT) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
       }
     }
   }
@@ -5004,9 +5193,10 @@ function spkStopAll() {
 }
 
 function startSpeakGame(level) {
-  if (!SENT_OK || !SENTENCES[String(level)]) return;
+  const sPool = getSentencePool(level);
+  if (!sPool || !sPool.length) return;
   currentLevel = level;
-  pool = SENTENCES[String(level)];
+  pool = sPool;
   lastStarter = () => startSpeakGame(level);
   spk = { lives: 3, score: 0, nextTimer: null, repeat: false, current: null, targetPy: [], done: new Set() };
   stopSpeech();
@@ -5159,8 +5349,8 @@ function spkGameOver() {
   stopSpeech();
   sfx.over();
   showGameOver("🎤 จบเกม!", finalScore,
-    `HSK ${currentLevel} • เกมฝึกพูด`,
-    `cr_best_hsk${currentLevel}_speak`);
+    `${levelDisplayName(currentLevel)} • เกมฝึกพูด`,
+    `cr_best_${catPrefix()}${currentLevel}_speak`);
 }
 
 function spkStartMic() {
@@ -5376,7 +5566,7 @@ $("spkNextBtn").addEventListener("click", () => {
 $("spkMuteBtn").addEventListener("click", toggleMute);
 $("spkQuitBtn").addEventListener("click", () => {
   sfx.click();
-  saveBest(`cr_best_hsk${currentLevel}_speak`, spk ? spk.score : 0);
+  saveBest(`cr_best_${catPrefix()}${currentLevel}_speak`, spk ? spk.score : 0);
   spkStopAll();
   clearTimeout(spk && spk.nextTimer);
   spk = null;
@@ -5389,9 +5579,7 @@ $("spkQuitBtn").addEventListener("click", () => {
 // เล่นเสียง จีน→ไทย ของคำหรือประโยควนไปเรื่อยๆ สุ่มไม่ซ้ำจนครบกอง — ไม่มีเพลงพื้นหลัง
 // ช่วงห่าง (lisGap) นับจากเสียงจบจนคำถัดไปเริ่ม เหมาะสำหรับฟังตอนเดินทาง
 function lisSource() {
-  return lis.type === "sent"
-    ? (SENT_OK ? SENTENCES[String(lis.level)] || [] : [])
-    : (VOCAB[String(lis.level)] || []);
+  return lis.type === "sent" ? getSentencePool(lis.level) : getVocabPool(lis.level);
 }
 
 // ขอ Screen Wake Lock กันจอดับระหว่างฟัง (ปล่อยคืนตอนออกจากโหมด)
@@ -5477,7 +5665,8 @@ function fitListenCard() {
 }
 
 function startListenGame(level) {
-  if (lisType === "sent" && (!SENT_OK || !SENTENCES[String(level)])) return;
+  const words = lisType === "sent" ? getSentencePool(level) : getVocabPool(level);
+  if (!words || !words.length) return;
   currentLevel = level;
   lastStarter = () => startListenGame(level);
   lis = { level, type: lisType, gap: lisGap, deck: [], pos: 0,
@@ -5565,10 +5754,11 @@ function cpSyncSetupUI() {
 }
 
 function startCopyGame(level) {
-  if (!SENT_OK || !SENTENCES[String(level)]) return;
+  const sPool = getSentencePool(level);
+  if (!sPool || !sPool.length) return;
   currentLevel = level;
   lastStarter = () => startCopyGame(level);
-  cp = { level, deck: shuffle(SENTENCES[String(level)].slice()), pos: 0,
+  cp = { level, deck: shuffle(sPool.slice()), pos: 0,
          current: null, seen: 0, chars: [], charIndex: 0, seq: 0,
          done: new Set(), writeChars: [], writeIndex: 0 };
   stopSpeech();
@@ -5586,7 +5776,7 @@ function cpAdvance() {
   if (!cp) return;
   if (cp.pos >= cp.deck.length) {
     const lastZh = cp.current && cp.current[0];
-    cp.deck = shuffle(SENTENCES[String(cp.level)].slice());
+    cp.deck = shuffle(getSentencePool(cp.level).slice());
     if (cp.deck.length > 1 && cp.deck[0][0] === lastZh) {
       const i = cp.deck.findIndex((x) => x[0] !== lastZh);
       if (i > 0) [cp.deck[0], cp.deck[i]] = [cp.deck[i], cp.deck[0]];
@@ -5692,6 +5882,17 @@ function cpWordIndex() {
   cpWordIdx = new Map();
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     for (const w of VOCAB[lvl] || []) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_IT !== "undefined") {
+    for (const w of VOCAB_IT) {
       const variants = w[0].split(/[｜|]/).map((v) => v.trim());
       const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
       const th = (w[2] || "").trim();
@@ -6963,7 +7164,7 @@ function tcCheck() {
     }
   });
   const score = Math.round((sum / (tc.slots.length || 1)) * 100);
-  saveBest(`cr_best_hsk${tc.level}_trace`, score);
+  saveBest(`cr_best_${catPrefix()}${tc.level}_trace`, score);
   const perfect = tc.slots.filter((s) => s.acc >= 1).length;
   const wrongCount = tc.slots.reduce((n, s) => n + s.chars.reduce((m, c) => m + (c ? c.wrongStrokes.size : 0), 0), 0);
   const res = $("tcResult");
@@ -7104,11 +7305,12 @@ $("cards").addEventListener("click", (e) => {
     startDict();
     return;
   }
-  if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !SENT_OK) {
+  const hasSentenceData = currentCategory === "hsk" ? SENT_OK : (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0);
+  if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
     $("startBtn").disabled = true;
-    $("startBtn").textContent = "⚠️ รัน python tools\\extract_sentences.py ก่อน";
+    $("startBtn").textContent = "⚠️ ข้อมูลประโยคไม่พร้อมใช้งาน";
     return;
   }
   const isMatching = gameMode === "matching";
@@ -7127,13 +7329,7 @@ $("cards").addEventListener("click", (e) => {
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
-  // ปุ่ม HSK 6/7-9 แสดงเฉพาะโหมดที่ใช้ฐานคำศัพท์ VOCAB (โหมดประโยคมีแค่ HSK 1-5)
-  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb", "trace"].includes(gameMode)
-    || (gameMode === "listen" && lisType === "word");
-  document.querySelectorAll(".level-btn.vocab-level").forEach((b) => { b.hidden = !usesVocab; });
-  // ถ้าระดับที่เลือกค้างไว้ถูกซ่อน (เช่นเลือก 7-9 แล้วมากดโหมดประโยค) ให้ยกเลิกการเลือก
-  const selBtn = document.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
-  if (selBtn && selBtn.hidden) { selBtn.classList.remove("selected"); selectedLevel = null; }
+  renderLevelSelect();
   switchScreen($("setup"));
   updateStartBtn();
 });
@@ -7210,10 +7406,7 @@ $("lisTypeSelect").addEventListener("click", (e) => {
   btn.classList.add("selected");
   lisType = btn.dataset.lis;
   if (gameMode === "listen") {
-    const showVocab = lisType === "word";
-    document.querySelectorAll(".level-btn.vocab-level").forEach((b) => { b.hidden = !showVocab; });
-    const selBtn = document.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
-    if (selBtn && selBtn.hidden) { selBtn.classList.remove("selected"); selectedLevel = null; }
+    renderLevelSelect();
   }
   updateStartBtn();
 });
@@ -7303,7 +7496,7 @@ $("resumeBtn").addEventListener("click", () => {
 });
 $("quitBtn").addEventListener("click", () => {
   sfx.click();
-  saveBest(`cr_best_hsk${currentLevel}_${difficulty}`, score);
+  saveBest(`cr_best_${catPrefix()}${currentLevel}_${difficulty}`, score);
   running = false;
   paused = false;
   music.stop();
@@ -7356,3 +7549,14 @@ document.addEventListener("visibilitychange", () => {
 
 // prevent double-tap zoom on iOS
 document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+
+/* ================= Category Selector Initialization ================= */
+const catSelectEl = $("categorySelect");
+if (catSelectEl) {
+  catSelectEl.value = currentCategory in CATEGORIES ? currentCategory : "hsk";
+  catSelectEl.addEventListener("change", (e) => {
+    sfx.click();
+    setCategory(e.target.value);
+  });
+}
+updateCategoryDropdownUI();
