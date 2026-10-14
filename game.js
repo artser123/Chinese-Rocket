@@ -196,12 +196,12 @@ const CATEGORIES = {
     badge: "🏭 Factory",
     levelLabel: "หมวดย่อยโรงงาน",
     levels: [
-      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
-      { id: "production", label: "🏭 แผนกผลิต & สายพาน (39 คำ)" },
-      { id: "safety", label: "🦺 ความปลอดภัย & PPE (36 คำ)" },
-      { id: "operation", label: "⚙️ เครื่องจักร & การทำงาน (40 คำ)" },
-      { id: "quality", label: "🔍 คุณภาพ & ตรวจสอบ (35 คำ)" },
-      { id: "warehouse", label: "📦 คลังสินค้า & วัตถุดิบ (35 คำ)" }
+      { id: "all", label: "🌐 ทั้งหมด (265 คำ)" },
+      { id: "production", label: "🏭 แผนกผลิต & สายพาน (55 คำ)" },
+      { id: "safety", label: "🦺 ความปลอดภัย & PPE (52 คำ)" },
+      { id: "operation", label: "⚙️ เครื่องจักร & การทำงาน (56 คำ)" },
+      { id: "quality", label: "🔍 คุณภาพ & ตรวจสอบ (51 คำ)" },
+      { id: "warehouse", label: "📦 คลังสินค้า & วัตถุดิบ (51 คำ)" }
     ],
     defaultLevel: "all",
     getVocabPool: (level) => {
@@ -218,7 +218,6 @@ const CATEGORIES = {
       const cat = FACTORY_SUB_MAP[level];
       if (!cat) return SENTENCES_FACTORY;
       const words = typeof VOCAB_FACTORY !== "undefined" ? VOCAB_FACTORY.filter((w) => w[3] === cat).map((w) => w[0]) : [];
-      const filtered = SENTENCES_FACTORY.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_FACTORY;
     }
   },
@@ -229,12 +228,12 @@ const CATEGORIES = {
     badge: "🚢 Trade",
     levelLabel: "หมวดย่อยการค้า",
     levels: [
-      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
-      { id: "customs", label: "🛃 พิธีการศุลกากร & ภาษี (38 คำ)" },
-      { id: "shipping", label: "🚢 โลจิสติกส์ & ขนส่ง (40 คำ)" },
-      { id: "payment", label: "💰 ชำระเงิน & แลกเปลี่ยน (37 คำ)" },
-      { id: "contract", label: "🤝 สัญญาการค้า & เจรจา (35 คำ)" },
-      { id: "documents", label: "📄 เอกสาร & หีบห่อ (35 คำ)" }
+      { id: "all", label: "🌐 ทั้งหมด (265 คำ)" },
+      { id: "customs", label: "🛃 พิธีการศุลกากร & ภาษี (54 คำ)" },
+      { id: "shipping", label: "🚢 โลจิสติกส์ & ขนส่ง (56 คำ)" },
+      { id: "payment", label: "💰 ชำระเงิน & แลกเปลี่ยน (53 คำ)" },
+      { id: "contract", label: "🤝 สัญญาการค้า & เจรจา (51 คำ)" },
+      { id: "documents", label: "📄 เอกสาร & หีบห่อ (51 คำ)" }
     ],
     defaultLevel: "all",
     getVocabPool: (level) => {
@@ -262,12 +261,12 @@ const CATEGORIES = {
     badge: "🏢 Office",
     levelLabel: "หมวดย่อยสำนักงาน",
     levels: [
-      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
-      { id: "stationery", label: "✏️ เครื่องเขียน & กระดาษ (38 คำ)" },
-      { id: "equipment", label: "🖨️ อุปกรณ์ & เฟอร์นิเจอร์ (38 คำ)" },
-      { id: "workflow", label: "📋 งานประจำวัน & เอกสาร (38 คำ)" },
-      { id: "meeting", label: "🤝 ประชุม & การสื่อสาร (35 คำ)" },
-      { id: "admin", label: "💼 บุคคล ธุรการ & สวัสดิการ (36 คำ)" }
+      { id: "all", label: "🌐 ทั้งหมด (265 คำ)" },
+      { id: "stationery", label: "✏️ เครื่องเขียน & กระดาษ (54 คำ)" },
+      { id: "equipment", label: "🖨️ อุปกรณ์ & เฟอร์นิเจอร์ (54 คำ)" },
+      { id: "workflow", label: "📋 งานประจำวัน & เอกสาร (54 คำ)" },
+      { id: "meeting", label: "🤝 ประชุม & การสื่อสาร (51 คำ)" },
+      { id: "admin", label: "💼 บุคคล ธุรการ & สวัสดิการ (52 คำ)" }
     ],
     defaultLevel: "all",
     getVocabPool: (level) => {
@@ -295,12 +294,12 @@ const CATEGORIES = {
     badge: "🥢 Food",
     levelLabel: "หมวดย่อยอาหารและวัตถุดิบ",
     levels: [
-      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
-      { id: "dishes", label: "🍲 เมนูเด็ด & จานหลัก (38 คำ)" },
-      { id: "vegetables", label: "🥬 ผักสด & เห็ด (38 คำ)" },
-      { id: "seasonings", label: "🧂 เครื่องปรุง & เครื่องเทศ (38 คำ)" },
-      { id: "cooking", label: "🍳 วิธีปรุง & รสชาติ (35 คำ)" },
-      { id: "dining", label: "🥢 สั่งอาหาร & วัฒนธรรม (36 คำ)" }
+      { id: "all", label: "🌐 ทั้งหมด (265 คำ)" },
+      { id: "dishes", label: "🍲 เมนูเด็ด & จานหลัก (54 คำ)" },
+      { id: "vegetables", label: "🥬 ผักสด & เห็ด (54 คำ)" },
+      { id: "seasonings", label: "🧂 เครื่องปรุง & เครื่องเทศ (54 คำ)" },
+      { id: "cooking", label: "🍳 วิธีปรุง & รสชาติ (51 คำ)" },
+      { id: "dining", label: "🥢 สั่งอาหาร & วัฒนธรรม (52 คำ)" }
     ],
     defaultLevel: "all",
     getVocabPool: (level) => {
