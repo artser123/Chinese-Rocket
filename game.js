@@ -1747,6 +1747,7 @@ $("sentQuitBtn").addEventListener("click", () => {
 function startFillGame(level) {
   const sPool = getSentencePool(level);
   if (!sPool || !sPool.length) return;
+  cpHideWordPopup();
   currentLevel = level;
   pool = sPool;
   lastStarter = () => startFillGame(level);
@@ -1770,6 +1771,7 @@ function updateFillHUD() {
 }
 
 function nextFillQuestion() {
+  cpHideWordPopup();
   fill.solved = false;
   fill.picked = null;
   $("fillNextBtn").classList.remove("show");
@@ -1810,20 +1812,60 @@ function nextFillQuestion() {
   renderFill();
 }
 
+function pauseFillAutoNext() {
+  if (fill && fill.nextTimer) {
+    clearTimeout(fill.nextTimer);
+    fill.nextTimer = null;
+    $("fillNextBtn").textContent = quizLivesOn && fill.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
+    $("fillNextBtn").classList.add("show");
+  }
+}
+
 function renderFill() {
   const correct = fill.picked === fill.answer;
   const box = $("fillSentence");
   box.className = fill.solved ? (correct ? "correct-full" : "wrong-full") : "";
-  box.innerHTML = "";
+  box.replaceChildren();
   fill.current[4].forEach((t, i) => {
-    if (i !== fill.blankIdx) { box.appendChild(document.createTextNode(t)); return; }
-    const b = document.createElement("span");
-    b.className = "fill-blank" + (fill.solved ? (correct ? " ok" : " bad") : "");
-    b.textContent = fill.solved ? t : "＿＿";
-    box.appendChild(b);
+    if (i !== fill.blankIdx) {
+      if (/[㐀-鿿豈-﫿]/.test(t)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "cp-zh-tok";
+        b.lang = "zh";
+        b.textContent = t;
+        b.addEventListener("click", () => {
+          sfx.click();
+          pauseFillAutoNext();
+          cpShowWordPopup(t, b);
+        });
+        box.appendChild(b);
+      } else {
+        box.appendChild(document.createTextNode(t));
+      }
+      return;
+    }
+    if (!fill.solved) {
+      const b = document.createElement("span");
+      b.className = "fill-blank";
+      b.textContent = "＿＿";
+      box.appendChild(b);
+    } else {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "fill-blank cp-zh-tok" + (correct ? " ok" : " bad");
+      b.lang = "zh";
+      b.textContent = t;
+      b.addEventListener("click", () => {
+        sfx.click();
+        pauseFillAutoNext();
+        cpShowWordPopup(t, b);
+      });
+      box.appendChild(b);
+    }
   });
   const poolEl = $("fillOptions");
-  poolEl.innerHTML = "";
+  poolEl.replaceChildren();
   fill.options.forEach((t) => {
     const b = document.createElement("button");
     b.className = "chip";
@@ -1842,13 +1884,31 @@ function showFillReveal(wrong) {
   const rv = $("fillReveal");
   rv.classList.remove("correct", "wrong");
   rv.classList.add(wrong ? "wrong" : "correct");
-  rv.innerHTML = `<div class="r-zh">${fill.current[0]}</div><div class="r-py">${fill.current[1]}</div>` +
-    (fill.current[3] ? `<div class="r-focus">📐 จุดไวยากรณ์: ${fill.current[3]}</div>` : "");
+  rv.replaceChildren();
+
+  const zhBox = document.createElement("div");
+  zhBox.className = "r-zh";
+  zhBox.lang = "zh";
+  renderZhTokens(zhBox, fill.current, () => pauseFillAutoNext());
+  rv.appendChild(zhBox);
+
+  const pyBox = document.createElement("div");
+  pyBox.className = "r-py";
+  pyBox.textContent = fill.current[1] || "";
+  rv.appendChild(pyBox);
+
+  if (fill.current[3]) {
+    const focusBox = document.createElement("div");
+    focusBox.className = "r-focus";
+    focusBox.textContent = `📐 จุดไวยากรณ์: ${fill.current[3]}`;
+    rv.appendChild(focusBox);
+  }
   rv.classList.add("show");
 }
 
 function fillPick(t) {
   if (!fill || fill.solved) return;
+  cpHideWordPopup();
   fill.solved = true;
   fill.picked = t;
   const correct = t === fill.answer;
@@ -1881,6 +1941,7 @@ function fillPick(t) {
 }
 
 function fillGameOver() {
+  cpHideWordPopup();
   clearTimeout(fill && fill.nextTimer);
   const finalScore = fill ? fill.score : 0;
   fill = null;
@@ -1894,6 +1955,7 @@ function fillGameOver() {
 
 $("fillNextBtn").addEventListener("click", () => {
   sfx.click();
+  cpHideWordPopup();
   $("fillNextBtn").classList.remove("show");
   if (!fill) return;
   if (quizLivesOn && fill.lives <= 0) fillGameOver();
@@ -1902,6 +1964,7 @@ $("fillNextBtn").addEventListener("click", () => {
 $("fillMuteBtn").addEventListener("click", toggleMute);
 $("fillQuitBtn").addEventListener("click", () => {
   sfx.click();
+  cpHideWordPopup();
   saveBest(`cr_best_${catPrefix()}${currentLevel}_fill`, fill ? fill.score : 0);
   clearTimeout(fill && fill.nextTimer);
   fill = null;
@@ -3231,7 +3294,22 @@ const originalDiffLabels = Array.from(document.querySelectorAll(".diff-btn"), (b
 const matchingBestKey = (level, diff, mode, duration) => `cr_best_${catPrefix()}${level}_matching_${diff}_${mode}_${duration}`;
 const matchTimeLabel = (duration) => duration ? `${duration} วินาที` : "ไม่จำกัดเวลา";
 const matchModeLabel = (mode) => mode === "pinyin" ? "พินอิน" : "ภาษาไทย";
-const matchTextKey = (text) => text.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+const matchTextKey = (text) => text.split(/[｜|]/)[0].normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+
+function formatPinyinForCard(py) {
+  if (!py) return "";
+  let clean = py.split(/[｜|]/)[0].trim().replace(/\s+/g, " ");
+  clean = clean.replace(/'/g, "'\u200B").replace(/([)）])/g, "$1\u200B");
+  const re = /([aāáǎàeēéěèiīíǐìoōóǒòuūúǔùüǖǘǚǜv](?:ng|n|r)?)(zh|ch|sh|[bpmfdtnlgkhjqxrzcsyw])([aāáǎàeēéěèiīíǐìoōóǒòuūúǔùüǖǘǚǜv])/gi;
+  let prev;
+  while (prev !== clean) {
+    prev = clean;
+    clean = clean.replace(re, function(match, p1, p2, p3) {
+      return p1 + "\u200B" + p2 + p3;
+    });
+  }
+  return clean;
+}
 
 function makeMatchingDeck(words, count, mode, previous = []) {
   const attr = mode === "pinyin" ? 1 : 2;
@@ -3247,8 +3325,8 @@ function makeMatchingDeck(words, count, mode, previous = []) {
     if (chosen.length === count / 2) break;
   }
   return shuffle(chosen.flatMap((word, pair) => [
-    { pair, word, side: "chinese", text: word[0], matched: false },
-    { pair, word, side: mode, text: word[attr], matched: false },
+    { pair, word, side: "chinese", text: word[0].split(/[｜|]/)[0].trim(), matched: false },
+    { pair, word, side: mode, text: word[attr].split(/[｜|]/)[0].trim(), matched: false },
   ]));
 }
 
@@ -3342,8 +3420,9 @@ function renderMatchingCards() {
       (mismatch ? " mismatch" : "") + (card.side === "chinese" ? " chinese" : " answer");
     button.disabled = s.paused || card.matched || s.waitUntil > 0;
     button.setAttribute("aria-pressed", String(card.matched || selected));
-    button.children[0].textContent = card.text;
-    button.children[0].lang = card.side === "chinese" ? "zh-CN" : card.side === "pinyin" ? "zh-Latn" : "th";
+    const isPinyin = card.side === "pinyin";
+    button.children[0].textContent = isPinyin ? formatPinyinForCard(card.text) : card.text;
+    button.children[0].lang = card.side === "chinese" ? "zh-CN" : isPinyin ? "zh-Latn" : "th";
     button.setAttribute("aria-label", `${card.text}${card.matched ? " จับคู่แล้ว" : selected ? " (เลือกอยู่)" : ""}`);
     button.setAttribute("aria-hidden", String(card.matched)); // การ์ดที่จับคู่แล้วหายไปจากจอ → ซ่อนจาก screen reader ด้วย
   });
@@ -3409,7 +3488,8 @@ function fitMatchCardText() {
     const cw = card.clientWidth - padX, ch = card.clientHeight - padY;
     if (cw <= 0 || ch <= 0) return;
     const isChinese = card.classList.contains("chinese");
-    const maxFont = isChinese ? 72 : 48; // ขยับช่วงค้นหาให้ได้ฟอนต์ใหญ่ขึ้น (ข้อความตัดบรรทัดได้แล้ว)
+    const isPinyin = text.getAttribute("lang") === "zh-Latn";
+    const maxFont = isChinese ? 72 : isPinyin ? 28 : 40; // พินอินจำกัด 28px ให้อ่านง่ายไม่ล้นการ์ด / ไทย 40px / จีน 72px
     const minFont = 10;
     // binary search หาขนาดตัวอักษรที่ใหญ่ที่สุดที่ไม่ overflow
     let lo = minFont, hi = maxFont, best = minFont;
@@ -6269,8 +6349,7 @@ const CP_POS_TH = {
   MODAL: "คำกริยาช่วย",
 };
 
-function cpRenderSentence(s) {
-  const el = $("cpZh");
+function renderZhTokens(el, s, onWordClick) {
   el.replaceChildren();
   const zh = s[0] || "";
   let pos = 0;
@@ -6286,7 +6365,11 @@ function cpRenderSentence(s) {
       b.className = "cp-zh-tok";
       b.lang = "zh";
       b.textContent = tok;
-      b.addEventListener("click", () => { sfx.click(); cpShowWordPopup(tok, b); });
+      b.addEventListener("click", () => {
+        sfx.click();
+        if (typeof onWordClick === "function") onWordClick(tok, b);
+        cpShowWordPopup(tok, b);
+      });
       el.appendChild(b);
     } else {
       text(tok);
@@ -6294,6 +6377,10 @@ function cpRenderSentence(s) {
     pos = at + tok.length;
   }
   text(zh.slice(pos));
+}
+
+function cpRenderSentence(s) {
+  renderZhTokens($("cpZh"), s);
 }
 
 // ดัชนีคำศัพท์ (สร้างครั้งเดียว): คำย่อ -> { py, th }

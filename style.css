@@ -764,8 +764,17 @@ html, body {
   display: inline-block;
   min-width: 2em;
   padding: 0 6px;
+  margin: 0;
+  font: inherit;
+  background: none;
+  border: none;
   border-bottom: 3px solid #ffd76a;
   color: #ffd76a;
+  cursor: default;
+}
+button.fill-blank {
+  cursor: pointer;
+  touch-action: manipulation;
 }
 .fill-blank.ok { color: #58ff88; border-color: #58ff88; }
 .fill-blank.bad { color: #ff6b6b; border-color: #ff3b3b; }
@@ -1304,7 +1313,7 @@ html, body {
 }
 
 /* แตะคำในประโยคเพื่อดูคำแปลไทย — คำแตกเป็นชิ้นตาม s[4] และมีเส้นใต้บางๆ บอกขอบเขตคำ */
-#cpZh .cp-zh-tok {
+.cp-zh-tok {
   font: inherit;
   color: inherit;
   background: none;
@@ -1317,8 +1326,8 @@ html, body {
   touch-action: manipulation;
   transition: background .15s, color .15s, border-color .15s;
 }
-#cpZh .cp-zh-tok:active,
-#cpZh .cp-zh-tok.active {
+.cp-zh-tok:active,
+.cp-zh-tok.active {
   background: rgba(255, 196, 107, .22);
   color: #ffe0a1;
   border-bottom-color: #ffc46b;
@@ -1565,17 +1574,31 @@ html, body {
   font-size: 20px;
   /* 600 = Noto Sans Thai Semibold (มีจริงในชุดที่โหลด) — ไม่หนาจนอ่านยากเหมือน 700/800 */
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.2;
   text-align: center;
   max-width: 100%;
-  overflow-wrap: anywhere;   /* คำยาวขึ้นบรรทัดใหม่ได้ → fitMatchCardText เลือกฟอนต์ใหญ่ขึ้นได้ */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 /* ตัวจีน: Noto Sans SC โหลดมาแค่ 400/700/900 → 800 เดิมถูก snap ไป 900 (หนาเกิน) ใช้ 700 แทน */
-.match-card.chinese .match-text { font-family: "Noto Sans SC", sans-serif; font-weight: 700; }
+.match-card.chinese .match-text {
+  font-family: "Noto Sans SC", sans-serif;
+  font-weight: 700;
+  word-break: break-all;
+}
 .match-card.answer .match-text { letter-spacing: .2px; }
 /* พินอินใช้ฟอนต์ละติน (Noto Sans) — Noto Sans Thai วรรณยุกต์ลอยสูง/เยื้อง อ่านยาก
-   lang="zh-Latn" ถูกตั้งโดย renderMatchingCards เฉพาะการ์ดพินอิน (การ์ดคำตอบโหมดไทยเป็น lang="th") */
-.match-text[lang="zh-Latn"] { font-family: var(--font-pinyin); }
+   lang="zh-Latn" ถูกตั้งโดย renderMatchingCards เฉพาะการ์ดพินอิน (การ์ดคำตอบโหมดไทยเป็น lang="th")
+   ห้ามตัดกลางพยางค์: ตัดเฉพาะช่องว่าง ขีดเชื่อม หรือจุดแบ่งพยางค์ (Zero-Width Space) */
+.match-text[lang="zh-Latn"] {
+  font-family: var(--font-pinyin);
+  font-weight: 600;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  white-space: normal;
+  line-height: 1.22;
+  letter-spacing: .2px;
+}
 #matchFeedback {
   /* ความสูงคงที่ — กันไม่ให้กล่องนี้ดัน/บีบความสูงกระดานจนการ์ดใบอื่นขยับ */
   min-height: calc(clamp(28px, 7vw, 44px) * 1.6 + 28px);
