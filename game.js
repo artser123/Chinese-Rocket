@@ -73,6 +73,22 @@ const FACTORY_SUB_MAP = {
   warehouse: "物料与仓储"
 };
 
+const TRADE_SUB_MAP = {
+  customs: "报关与海关",
+  shipping: "国际物流与运输",
+  payment: "结算与外汇",
+  contract: "贸易合同与商务",
+  documents: "单证与包装"
+};
+
+const OFFICE_SUB_MAP = {
+  stationery: "文具与纸张",
+  equipment: "办公设备与家具",
+  workflow: "日常办公与流程",
+  meeting: "会议与商务沟通",
+  admin: "人事行政与福利"
+};
+
 const CATEGORIES = {
   hsk: {
     id: "hsk",
@@ -196,6 +212,72 @@ const CATEGORIES = {
       const words = typeof VOCAB_FACTORY !== "undefined" ? VOCAB_FACTORY.filter((w) => w[3] === cat).map((w) => w[0]) : [];
       const filtered = SENTENCES_FACTORY.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_FACTORY;
+    }
+  },
+  trade: {
+    id: "trade",
+    name: "การนำเข้าและส่งออก (Import & Export)",
+    icon: "🚢",
+    badge: "🚢 Trade",
+    levelLabel: "หมวดย่อยการค้า",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
+      { id: "customs", label: "🛃 พิธีการศุลกากร & ภาษี (38 คำ)" },
+      { id: "shipping", label: "🚢 โลจิสติกส์ & ขนส่ง (40 คำ)" },
+      { id: "payment", label: "💰 ชำระเงิน & แลกเปลี่ยน (37 คำ)" },
+      { id: "contract", label: "🤝 สัญญาการค้า & เจรจา (35 คำ)" },
+      { id: "documents", label: "📄 เอกสาร & หีบห่อ (35 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_TRADE === "undefined") return [];
+      if (!level || level === "all") return VOCAB_TRADE;
+      const cat = TRADE_SUB_MAP[level];
+      if (!cat) return VOCAB_TRADE;
+      const filtered = VOCAB_TRADE.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_TRADE;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_TRADE === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_TRADE;
+      const cat = TRADE_SUB_MAP[level];
+      if (!cat) return SENTENCES_TRADE;
+      const words = typeof VOCAB_TRADE !== "undefined" ? VOCAB_TRADE.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_TRADE.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_TRADE;
+    }
+  },
+  office: {
+    id: "office",
+    name: "อุปกรณ์สำนักงานและการทำงาน (Office & Workplace)",
+    icon: "🏢",
+    badge: "🏢 Office",
+    levelLabel: "หมวดย่อยสำนักงาน",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
+      { id: "stationery", label: "✏️ เครื่องเขียน & กระดาษ (38 คำ)" },
+      { id: "equipment", label: "🖨️ อุปกรณ์ & เฟอร์นิเจอร์ (38 คำ)" },
+      { id: "workflow", label: "📋 งานประจำวัน & เอกสาร (38 คำ)" },
+      { id: "meeting", label: "🤝 ประชุม & การสื่อสาร (35 คำ)" },
+      { id: "admin", label: "💼 บุคคล ธุรการ & สวัสดิการ (36 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_OFFICE === "undefined") return [];
+      if (!level || level === "all") return VOCAB_OFFICE;
+      const cat = OFFICE_SUB_MAP[level];
+      if (!cat) return VOCAB_OFFICE;
+      const filtered = VOCAB_OFFICE.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_OFFICE;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_OFFICE === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_OFFICE;
+      const cat = OFFICE_SUB_MAP[level];
+      if (!cat) return SENTENCES_OFFICE;
+      const words = typeof VOCAB_OFFICE !== "undefined" ? VOCAB_OFFICE.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_OFFICE.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_OFFICE;
     }
   }
 };
@@ -4192,7 +4274,11 @@ function updateStartBtn() {
     ? (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0)
     : currentCategory === "hotel"
     ? (typeof SENTENCES_HOTEL !== "undefined" && SENTENCES_HOTEL.length > 0)
-    : (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0);
+    : currentCategory === "factory"
+    ? (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0)
+    : currentCategory === "trade"
+    ? (typeof SENTENCES_TRADE !== "undefined" && SENTENCES_TRADE.length > 0)
+    : (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0);
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;
@@ -4296,6 +4382,10 @@ function dictSearch(query) {
     vocabSources.push({ lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
   } else if (currentCategory === "factory" && typeof VOCAB_FACTORY !== "undefined") {
     vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
+  } else if (currentCategory === "trade" && typeof VOCAB_TRADE !== "undefined") {
+    vocabSources.push({ lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
+  } else if (currentCategory === "office" && typeof VOCAB_OFFICE !== "undefined") {
+    vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
   }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
@@ -4308,6 +4398,12 @@ function dictSearch(query) {
   }
   if (currentCategory !== "factory" && typeof VOCAB_FACTORY !== "undefined") {
     vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
+  }
+  if (currentCategory !== "trade" && typeof VOCAB_TRADE !== "undefined") {
+    vocabSources.push({ lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
+  }
+  if (currentCategory !== "office" && typeof VOCAB_OFFICE !== "undefined") {
+    vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
   }
 
   for (const src of vocabSources) {
@@ -4348,6 +4444,8 @@ function dictSearch(query) {
     if (lvl === "IT") return currentCategory === "it" ? 0 : 99;
     if (lvl === "HOTEL") return currentCategory === "hotel" ? 0 : 99;
     if (lvl === "FACTORY") return currentCategory === "factory" ? 0 : 99;
+    if (lvl === "TRADE") return currentCategory === "trade" ? 0 : 99;
+    if (lvl === "OFFICE") return currentCategory === "office" ? 0 : 99;
     return Number(lvl === "7-9" ? 9 : lvl);
   };
   results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
@@ -4435,6 +4533,28 @@ function dictPinyinIndex() {
   }
   if (typeof VOCAB_FACTORY !== "undefined") {
     for (const w of VOCAB_FACTORY) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_TRADE !== "undefined") {
+    for (const w of VOCAB_TRADE) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_OFFICE !== "undefined") {
+    for (const w of VOCAB_OFFICE) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -4782,6 +4902,26 @@ function dictFindExamples(zh, lvl) {
   // 1.7) SENTENCES_FACTORY (Factory category sentences)
   if (typeof SENTENCES_FACTORY !== "undefined") {
     for (const s of SENTENCES_FACTORY) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.8) SENTENCES_TRADE (Trade category sentences)
+  if (typeof SENTENCES_TRADE !== "undefined") {
+    for (const s of SENTENCES_TRADE) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.9) SENTENCES_OFFICE (Office category sentences)
+  if (typeof SENTENCES_OFFICE !== "undefined") {
+    for (const s of SENTENCES_OFFICE) {
       const tokens = s[4] || [];
       if (tokens.includes(zh) || s[0].includes(zh)) {
         examples.push(s);
@@ -6058,6 +6198,28 @@ function cpWordIndex() {
   }
   if (typeof VOCAB_FACTORY !== "undefined") {
     for (const w of VOCAB_FACTORY) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_TRADE !== "undefined") {
+    for (const w of VOCAB_TRADE) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_OFFICE !== "undefined") {
+    for (const w of VOCAB_OFFICE) {
       const variants = w[0].split(/[｜|]/).map((v) => v.trim());
       const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
       const th = (w[2] || "").trim();
@@ -7516,7 +7678,11 @@ $("cards").addEventListener("click", (e) => {
     ? (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0)
     : currentCategory === "hotel"
     ? (typeof SENTENCES_HOTEL !== "undefined" && SENTENCES_HOTEL.length > 0)
-    : (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0);
+    : currentCategory === "factory"
+    ? (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0)
+    : currentCategory === "trade"
+    ? (typeof SENTENCES_TRADE !== "undefined" && SENTENCES_TRADE.length > 0)
+    : (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0);
   if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
