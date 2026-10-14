@@ -89,6 +89,14 @@ const OFFICE_SUB_MAP = {
   admin: "人事行政与福利"
 };
 
+const FOOD_SUB_MAP = {
+  dishes: "经典名菜与主食",
+  vegetables: "新鲜蔬菜与菌类",
+  seasonings: "调料与香辛料",
+  cooking: "烹饪方式与口感",
+  dining: "餐厅点餐与习俗"
+};
+
 const CATEGORIES = {
   hsk: {
     id: "hsk",
@@ -278,6 +286,39 @@ const CATEGORIES = {
       const words = typeof VOCAB_OFFICE !== "undefined" ? VOCAB_OFFICE.filter((w) => w[3] === cat).map((w) => w[0]) : [];
       const filtered = SENTENCES_OFFICE.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_OFFICE;
+    }
+  },
+  food: {
+    id: "food",
+    name: "อาหารจีน เครื่องปรุง และผัก (Chinese Food & Veggies)",
+    icon: "🥢",
+    badge: "🥢 Food",
+    levelLabel: "หมวดย่อยอาหารและวัตถุดิบ",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
+      { id: "dishes", label: "🍲 เมนูเด็ด & จานหลัก (38 คำ)" },
+      { id: "vegetables", label: "🥬 ผักสด & เห็ด (38 คำ)" },
+      { id: "seasonings", label: "🧂 เครื่องปรุง & เครื่องเทศ (38 คำ)" },
+      { id: "cooking", label: "🍳 วิธีปรุง & รสชาติ (35 คำ)" },
+      { id: "dining", label: "🥢 สั่งอาหาร & วัฒนธรรม (36 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_FOOD === "undefined") return [];
+      if (!level || level === "all") return VOCAB_FOOD;
+      const cat = FOOD_SUB_MAP[level];
+      if (!cat) return VOCAB_FOOD;
+      const filtered = VOCAB_FOOD.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_FOOD;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_FOOD === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_FOOD;
+      const cat = FOOD_SUB_MAP[level];
+      if (!cat) return SENTENCES_FOOD;
+      const words = typeof VOCAB_FOOD !== "undefined" ? VOCAB_FOOD.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_FOOD.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_FOOD;
     }
   }
 };
@@ -4278,7 +4319,9 @@ function updateStartBtn() {
     ? (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0)
     : currentCategory === "trade"
     ? (typeof SENTENCES_TRADE !== "undefined" && SENTENCES_TRADE.length > 0)
-    : (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0);
+    : currentCategory === "office"
+    ? (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0)
+    : (typeof SENTENCES_FOOD !== "undefined" && SENTENCES_FOOD.length > 0);
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;
@@ -4386,6 +4429,8 @@ function dictSearch(query) {
     vocabSources.push({ lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
   } else if (currentCategory === "office" && typeof VOCAB_OFFICE !== "undefined") {
     vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
+  } else if (currentCategory === "food" && typeof VOCAB_FOOD !== "undefined") {
+    vocabSources.push({ lvl: "FOOD", badge: "🥢 Food", words: VOCAB_FOOD });
   }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
@@ -4404,6 +4449,9 @@ function dictSearch(query) {
   }
   if (currentCategory !== "office" && typeof VOCAB_OFFICE !== "undefined") {
     vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
+  }
+  if (currentCategory !== "food" && typeof VOCAB_FOOD !== "undefined") {
+    vocabSources.push({ lvl: "FOOD", badge: "🥢 Food", words: VOCAB_FOOD });
   }
 
   for (const src of vocabSources) {
@@ -4446,6 +4494,7 @@ function dictSearch(query) {
     if (lvl === "FACTORY") return currentCategory === "factory" ? 0 : 99;
     if (lvl === "TRADE") return currentCategory === "trade" ? 0 : 99;
     if (lvl === "OFFICE") return currentCategory === "office" ? 0 : 99;
+    if (lvl === "FOOD") return currentCategory === "food" ? 0 : 99;
     return Number(lvl === "7-9" ? 9 : lvl);
   };
   results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
@@ -4555,6 +4604,17 @@ function dictPinyinIndex() {
   }
   if (typeof VOCAB_OFFICE !== "undefined") {
     for (const w of VOCAB_OFFICE) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_FOOD !== "undefined") {
+    for (const w of VOCAB_FOOD) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -4922,6 +4982,16 @@ function dictFindExamples(zh, lvl) {
   // 1.9) SENTENCES_OFFICE (Office category sentences)
   if (typeof SENTENCES_OFFICE !== "undefined") {
     for (const s of SENTENCES_OFFICE) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.10) SENTENCES_FOOD (Food category sentences)
+  if (typeof SENTENCES_FOOD !== "undefined") {
+    for (const s of SENTENCES_FOOD) {
       const tokens = s[4] || [];
       if (tokens.includes(zh) || s[0].includes(zh)) {
         examples.push(s);
@@ -6220,6 +6290,17 @@ function cpWordIndex() {
   }
   if (typeof VOCAB_OFFICE !== "undefined") {
     for (const w of VOCAB_OFFICE) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_FOOD !== "undefined") {
+    for (const w of VOCAB_FOOD) {
       const variants = w[0].split(/[｜|]/).map((v) => v.trim());
       const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
       const th = (w[2] || "").trim();
@@ -7682,7 +7763,9 @@ $("cards").addEventListener("click", (e) => {
     ? (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0)
     : currentCategory === "trade"
     ? (typeof SENTENCES_TRADE !== "undefined" && SENTENCES_TRADE.length > 0)
-    : (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0);
+    : currentCategory === "office"
+    ? (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0)
+    : (typeof SENTENCES_FOOD !== "undefined" && SENTENCES_FOOD.length > 0);
   if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
