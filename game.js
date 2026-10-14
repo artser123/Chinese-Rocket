@@ -57,6 +57,22 @@ const IT_SUB_MAP = {
   network: "网络与运维"
 };
 
+const HOTEL_SUB_MAP = {
+  checkin: "入住与退房",
+  room: "房型与设施",
+  service: "酒店服务与设施",
+  requests: "客房需求与问题",
+  travel: "交通出行与结账"
+};
+
+const FACTORY_SUB_MAP = {
+  production: "车间与生产",
+  safety: "安全与劳保",
+  operation: "设备与操作",
+  quality: "质量与检验",
+  warehouse: "物料与仓储"
+};
+
 const CATEGORIES = {
   hsk: {
     id: "hsk",
@@ -114,6 +130,72 @@ const CATEGORIES = {
       const words = typeof VOCAB_IT !== "undefined" ? VOCAB_IT.filter((w) => w[3] === cat).map((w) => w[0]) : [];
       const filtered = SENTENCES_IT.filter((s) => words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_IT;
+    }
+  },
+  hotel: {
+    id: "hotel",
+    name: "การโรงแรมและที่พัก (Hotel & Hospitality)",
+    icon: "🏨",
+    badge: "🏨 Hotel",
+    levelLabel: "หมวดย่อยโรงแรม",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (195 คำ)" },
+      { id: "checkin", label: "🛎️ เช็คอิน & เช็คเอาท์ (38 คำ)" },
+      { id: "room", label: "🛏️ ประเภทห้อง & อุปกรณ์ (60 คำ)" },
+      { id: "service", label: "🍽️ บริการ & สิ่งอำนวยความสะดวก (33 คำ)" },
+      { id: "requests", label: "🧹 คำขอ & แจ้งปัญหา (39 คำ)" },
+      { id: "travel", label: "🚕 การเดินทาง & ชำระเงิน (25 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_HOTEL === "undefined") return [];
+      if (!level || level === "all") return VOCAB_HOTEL;
+      const cat = HOTEL_SUB_MAP[level];
+      if (!cat) return VOCAB_HOTEL;
+      const filtered = VOCAB_HOTEL.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_HOTEL;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_HOTEL === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_HOTEL;
+      const cat = HOTEL_SUB_MAP[level];
+      if (!cat) return SENTENCES_HOTEL;
+      const words = typeof VOCAB_HOTEL !== "undefined" ? VOCAB_HOTEL.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_HOTEL.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_HOTEL;
+    }
+  },
+  factory: {
+    id: "factory",
+    name: "การทำงานในโรงงาน (Factory & Manufacturing)",
+    icon: "🏭",
+    badge: "🏭 Factory",
+    levelLabel: "หมวดย่อยโรงงาน",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (185 คำ)" },
+      { id: "production", label: "🏭 แผนกผลิต & สายพาน (39 คำ)" },
+      { id: "safety", label: "🦺 ความปลอดภัย & PPE (36 คำ)" },
+      { id: "operation", label: "⚙️ เครื่องจักร & การทำงาน (40 คำ)" },
+      { id: "quality", label: "🔍 คุณภาพ & ตรวจสอบ (35 คำ)" },
+      { id: "warehouse", label: "📦 คลังสินค้า & วัตถุดิบ (35 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_FACTORY === "undefined") return [];
+      if (!level || level === "all") return VOCAB_FACTORY;
+      const cat = FACTORY_SUB_MAP[level];
+      if (!cat) return VOCAB_FACTORY;
+      const filtered = VOCAB_FACTORY.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_FACTORY;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_FACTORY === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_FACTORY;
+      const cat = FACTORY_SUB_MAP[level];
+      if (!cat) return SENTENCES_FACTORY;
+      const words = typeof VOCAB_FACTORY !== "undefined" ? VOCAB_FACTORY.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_FACTORY.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_FACTORY;
     }
   }
 };
@@ -4104,12 +4186,19 @@ const startLabel = () => {
 
 function updateStartBtn() {
   if (!gameMode) return;
+  const hasSentenceData = currentCategory === "hsk"
+    ? SENT_OK
+    : currentCategory === "it"
+    ? (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0)
+    : currentCategory === "hotel"
+    ? (typeof SENTENCES_HOTEL !== "undefined" && SENTENCES_HOTEL.length > 0)
+    : (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0);
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak")
-    && (currentCategory === "hsk" ? !SENT_OK : (typeof SENTENCES_IT === "undefined" || !SENTENCES_IT.length));
+    && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;
   $("startBtn").textContent = noSent
     ? "⚠️ ยังไม่มีข้อมูลประโยค"
-    : selectedLevel ? startLabel() : (currentCategory === "it" ? "เลือกหมวดย่อยเพื่อเริ่ม" : "เลือกระดับ HSK เพื่อเริ่ม");
+    : selectedLevel ? startLabel() : (currentCategory === "hsk" ? "เลือกระดับ HSK เพื่อเริ่ม" : "เลือกหมวดย่อยเพื่อเริ่ม");
   updateBestLine();
 }
 function updateBestLine() {
@@ -4203,12 +4292,22 @@ function dictSearch(query) {
   const vocabSources = [];
   if (currentCategory === "it" && typeof VOCAB_IT !== "undefined") {
     vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
+  } else if (currentCategory === "hotel" && typeof VOCAB_HOTEL !== "undefined") {
+    vocabSources.push({ lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
+  } else if (currentCategory === "factory" && typeof VOCAB_FACTORY !== "undefined") {
+    vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
   }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
   }
   if (currentCategory !== "it" && typeof VOCAB_IT !== "undefined") {
     vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
+  }
+  if (currentCategory !== "hotel" && typeof VOCAB_HOTEL !== "undefined") {
+    vocabSources.push({ lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
+  }
+  if (currentCategory !== "factory" && typeof VOCAB_FACTORY !== "undefined") {
+    vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
   }
 
   for (const src of vocabSources) {
@@ -4247,6 +4346,8 @@ function dictSearch(query) {
   // sort: exact match first, then shorter chinese, then category preference
   const scoreLvl = (lvl) => {
     if (lvl === "IT") return currentCategory === "it" ? 0 : 99;
+    if (lvl === "HOTEL") return currentCategory === "hotel" ? 0 : 99;
+    if (lvl === "FACTORY") return currentCategory === "factory" ? 0 : 99;
     return Number(lvl === "7-9" ? 9 : lvl);
   };
   results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
@@ -4312,6 +4413,28 @@ function dictPinyinIndex() {
   }
   if (typeof VOCAB_IT !== "undefined") {
     for (const w of VOCAB_IT) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_HOTEL !== "undefined") {
+    for (const w of VOCAB_HOTEL) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_FACTORY !== "undefined") {
+    for (const w of VOCAB_FACTORY) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -4639,6 +4762,26 @@ function dictFindExamples(zh, lvl) {
   // 1.5) SENTENCES_IT (IT category sentences)
   if (typeof SENTENCES_IT !== "undefined") {
     for (const s of SENTENCES_IT) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.6) SENTENCES_HOTEL (Hotel category sentences)
+  if (typeof SENTENCES_HOTEL !== "undefined") {
+    for (const s of SENTENCES_HOTEL) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.7) SENTENCES_FACTORY (Factory category sentences)
+  if (typeof SENTENCES_FACTORY !== "undefined") {
+    for (const s of SENTENCES_FACTORY) {
       const tokens = s[4] || [];
       if (tokens.includes(zh) || s[0].includes(zh)) {
         examples.push(s);
@@ -5893,6 +6036,28 @@ function cpWordIndex() {
   }
   if (typeof VOCAB_IT !== "undefined") {
     for (const w of VOCAB_IT) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_HOTEL !== "undefined") {
+    for (const w of VOCAB_HOTEL) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_FACTORY !== "undefined") {
+    for (const w of VOCAB_FACTORY) {
       const variants = w[0].split(/[｜|]/).map((v) => v.trim());
       const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
       const th = (w[2] || "").trim();
@@ -7345,7 +7510,13 @@ $("cards").addEventListener("click", (e) => {
     startDict();
     return;
   }
-  const hasSentenceData = currentCategory === "hsk" ? SENT_OK : (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0);
+  const hasSentenceData = currentCategory === "hsk"
+    ? SENT_OK
+    : currentCategory === "it"
+    ? (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0)
+    : currentCategory === "hotel"
+    ? (typeof SENTENCES_HOTEL !== "undefined" && SENTENCES_HOTEL.length > 0)
+    : (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0);
   if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
