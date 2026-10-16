@@ -45,6 +45,13 @@ if (SENT_OK && typeof SENTENCES_EXTRA !== "undefined") {
     SENTENCES[lvl] = (SENTENCES[lvl] || []).concat(SENTENCES_EXTRA[lvl]);
   }
 }
+// merge ประโยคไวยากรณ์ HSK 6 + 7-9 (จาก 考试大纲 3.0) — สร้างระดับ 6/7-9 ให้โหมดประโยค
+// ให้มีข้อมูลเหมือนกับโหมดคำศัพท์ ดู tools/build_grammar69.py สำหรับแหล่งที่มา
+if (SENT_OK && typeof SENTENCES_HSK69 !== "undefined") {
+  for (const lvl in SENTENCES_HSK69) {
+    SENTENCES[lvl] = (SENTENCES[lvl] || []).concat(SENTENCES_HSK69[lvl]);
+  }
+}
 
 /* ================= Vocabulary Categories ================= */
 let currentCategory = localStorage.getItem("cr_vocab_category") || "hsk";
@@ -118,8 +125,8 @@ const CATEGORIES = {
       { id: "3", label: "HSK 3" },
       { id: "4", label: "HSK 4" },
       { id: "5", label: "HSK 5" },
-      { id: "6", label: "HSK 6", vocabOnly: true },
-      { id: "7-9", label: "HSK 7-9", vocabOnly: true }
+      { id: "6", label: "HSK 6" },
+      { id: "7-9", label: "HSK 7-9" }
     ],
     defaultLevel: "1",
     getVocabPool: (level) => {
@@ -5065,9 +5072,9 @@ async function dictStrokePlay(entry, index = null) {
 
 function dictFindExamples(zh, lvl) {
   const examples = [];
-  // 1) SENTENCES data (HSK 1-5): [zh, pinyin, th, grammar, tokens]
+  // 1) SENTENCES data (HSK 1-9): [zh, pinyin, th, grammar, tokens]
   if (SENT_OK) {
-    for (const sl of ["1", "2", "3", "4", "5"]) {
+    for (const sl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
       const sents = SENTENCES[sl] || [];
       for (const s of sents) {
         const tokens = s[4] || [];
