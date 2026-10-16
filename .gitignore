@@ -15,6 +15,9 @@ review/
 # Windows artifact
 nul
 
+# Local TTS AB-test lab (separate folder, kept out of the repo)
+tts_lab/
+
 # OS / Editor
 .DS_Store
 Thumbs.db
