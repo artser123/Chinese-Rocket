@@ -56,3 +56,4 @@ dist/
 .opencode/
 offline-android/
 
+tools/.openai_key

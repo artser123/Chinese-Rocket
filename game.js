@@ -654,18 +654,22 @@ function pickVoice(lang) {
   return voices[0];
 }
 
-function duckMusic(on) {
+function duckMusic(on, safetyMs = 6000) {
   if (!music.master || !AC) return;
   music.master.gain.setTargetAtTime(on && !muted ? 0.2 : muted ? 0 : 1, AC.currentTime, 0.05);
   clearTimeout(speechDuckTimer);
-  speechDuckTimer = on ? setTimeout(() => duckMusic(false), 6000) : null;
+  speechDuckTimer = on && safetyMs > 0 ? setTimeout(() => duckMusic(false), safetyMs) : null;
 }
 
 // ตัวนับรอบเสียงพูด — ทุกครั้งที่ stopSpeech() ถูกเรียก ค่าจะเพิ่มขึ้น
 // ทำให้ onDone ของ utterance ที่ถูก cancel ไม่ทำงานต่อ (เช่นตอนกดข้าม/ออก)
 let speechSeqId = 0;
-function speakSeq(parts, onDone) {
-  if (!("speechSynthesis" in window) || !parts.length) { if (onDone) setTimeout(onDone, 0); return; }
+function speakSeq(parts, onDone, duckAll = false) {
+  if (!("speechSynthesis" in window) || !parts.length) {
+    if (duckAll) duckMusic(false);
+    if (onDone) setTimeout(onDone, 0);
+    return;
+  }
   try {
     stopSpeech();
     const sid = speechSeqId;
@@ -682,17 +686,26 @@ function speakSeq(parts, onDone) {
       const v = pickVoice(lang);
       if (v) u.voice = v;
       const last = i === parts.length - 1;
-      if (lang.startsWith("th")) {
-        u.volume = 1;
-        if (!v || MALE_TH_VOICE.test(v.name)) u.pitch = 1.35;
-        u.onstart = () => duckMusic(true);
-        u.onend = u.onerror = () => { duckMusic(false); if (last) finish(); };
+      const shouldDuck = duckAll || lang.startsWith("th");
+      if (shouldDuck) {
+        if (lang.startsWith("th")) {
+          u.volume = 1;
+          if (!v || MALE_TH_VOICE.test(v.name)) u.pitch = 1.35;
+        }
+        u.onstart = () => duckMusic(true, duckAll ? 120000 : 6000);
+        u.onend = u.onerror = () => {
+          if (!duckAll || last) duckMusic(false);
+          if (last) finish();
+        };
       } else if (last) {
         u.onend = u.onerror = finish;
       }
       speechSynthesis.speak(u);
     });
-  } catch (e) { if (onDone) setTimeout(onDone, 0); }
+  } catch (e) {
+    if (duckAll) duckMusic(false);
+    if (onDone) setTimeout(onDone, 0);
+  }
 }
 
 /* Pre-generated audio files (gen_audio.py -> audio/zh|th/<word>.mp3) with TTS fallback */
@@ -747,14 +760,19 @@ const wordAudio = {
         t += dur + 0.03;
       }
       const after = (delay, fn) => this.timers.push(setTimeout(() => { if (this.seq === token) fn(); }, delay));
-      if (duckAt < Infinity) {
-        after(Math.max(0, (duckAt - ac.currentTime) * 1000), () => duckMusic(true));
-        after(Math.max(0, (unduckAt - ac.currentTime) * 1000), () => duckMusic(false));
-      }
       const rest = items.slice(clips.length);
-      if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () => speakSeq(rest.map((x) => x.tts), onDone));
+      const duckTts = rest.length > 0 && rest.every((x) => x.duck);
+      if (duckAt < Infinity) {
+        const duckSafetyMs = Math.max(6000, (unduckAt - duckAt) * 1000 + 1000);
+        after(Math.max(0, (duckAt - ac.currentTime) * 1000), () => duckMusic(true, duckSafetyMs));
+        if (!duckTts) after(Math.max(0, (unduckAt - ac.currentTime) * 1000), () => duckMusic(false));
+      }
+      if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () =>
+        speakSeq(rest.map((x) => x.tts), onDone, duckTts));
       else if (onDone) after(Math.max(0, (t - ac.currentTime) * 1000), onDone);
-    })().catch(() => { if (this.seq === token) speakSeq(items.map((x) => x.tts), onDone); });
+    })().catch(() => {
+      if (this.seq === token) speakSeq(items.map((x) => x.tts), onDone, items.length > 0 && items.every((x) => x.duck));
+    });
   },
 };
 
@@ -1672,6 +1690,7 @@ function updateSentenceQuizHUD() {
 function nextSentenceQuizQuestion() {
   if (!sentQuiz) return;
   clearTimeout(sentQuiz.nextTimer);
+  cpHideWordPopup();
   sentQuiz.answered = false;
   $("sentQuizNextBtn").classList.remove("show");
   if (!sentQuiz.deck.length) {
@@ -1698,7 +1717,7 @@ function nextSentenceQuizQuestion() {
   if (direction === "zh") {
     const main = document.createElement("span");
     main.className = "sq-prompt-main";
-    main.textContent = sentQuiz.current[0].split(/[｜|]/)[0];
+    renderZhTokens(main, sentQuiz.current);
     prompt.appendChild(main);
     if (sentQuiz.showPinyin && sentQuiz.current[1]) {
       const pinyin = document.createElement("span");
@@ -1710,7 +1729,9 @@ function nextSentenceQuizQuestion() {
   } else {
     prompt.textContent = sentQuiz.current[2];
   }
-  $("sentQuizHint").textContent = direction === "zh" ? "อ่านข้อความจีน แล้วเลือกคำแปลภาษาไทย" : "อ่านข้อความไทย แล้วเลือกประโยคภาษาจีน";
+  $("sentQuizHint").textContent = direction === "zh"
+    ? "อ่านข้อความจีน แล้วเลือกคำแปลภาษาไทย • แตะคำเพื่อดูพินอินและความหมาย"
+    : "อ่านข้อความไทย แล้วเลือกประโยคภาษาจีน";
   sentQuizBtns.forEach((btn, i) => {
     btn.className = "sqopt";
     btn.disabled = false;
@@ -1791,6 +1812,11 @@ function sentenceQuizGameOver() {
 }
 
 sentQuizBtns.forEach((btn, i) => btn.addEventListener("pointerdown", (e) => { e.preventDefault(); answerSentenceQuiz(i); }));
+$("sentQuizSpeakBtn").addEventListener("click", () => {
+  if (!sentQuiz || !sentQuiz.current) return;
+  sfx.click();
+  speakSentence(sentQuiz.current);
+});
 $("sentQuizNextBtn").addEventListener("click", () => {
   sfx.click();
   if (!sentQuiz) return;
@@ -1914,10 +1940,16 @@ function sentAdd(id) {
   chip.used = true;
   sent.placed.push(chip);
   const complete = sent.placed.length === sent.current[4].length;
-  // ชิปสุดท้ายไม่ต้องพูดคำเดี่ยว — checkSentAnswer จะเล่นเสียงทั้งประโยคต่อทันที เสียงจะทับกัน
-  if (!complete) speak(chip.t);
+  const question = sent.current;
+  const audioKey = wordAudioKey(chip.t, chip.t === "了" ? "le" : "");
+  const spokenChip = audioKey === "了-le" ? "le" : chip.t;
+  // เล่นเสียงชิปที่เลือกก่อนเสมอ; ถ้าเป็นชิปสุดท้ายค่อยตรวจและเล่นเสียงทั้งประโยคต่อ
+  playWordAudio(audioKey, [[spokenChip, "zh-CN"]], complete ? () => {
+    if (sent && sent.current === question && !sent.solved && sent.placed.length === question[4].length) {
+      checkSentAnswer();
+    }
+  } : undefined);
   renderSent();
-  if (complete && !sent.solved) checkSentAnswer();
 }
 
 function sentRemove(i) {
@@ -1933,7 +1965,10 @@ function sentRemove(i) {
 function speakSentence(s, withTh = false, onDone) {
   const zh = s[0].trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
-  playWordAudio(zh, [[zh, "zh-CN"], ...(withTh && th ? [[th, "th-TH"]] : [])], onDone);
+  wordAudio.play([
+    { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], duck: withTh },
+    ...(withTh && th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }] : []),
+  ], onDone);
 }
 
 function speakSentencePrompt(s, language) {
@@ -2072,6 +2107,7 @@ function startFillGame(level) {
   pool = sPool;
   lastStarter = () => startFillGame(level);
   fill = { lives: 3, score: 0, solved: false, nextTimer: null,
+           autoNextPaused: false,
            reviewQueue: [], sinceReview: 0, isReview: false,
            current: null, blankIdx: 0, answer: "", picked: null, options: [],
            done: new Set() };
@@ -2091,8 +2127,11 @@ function updateFillHUD() {
 }
 
 function nextFillQuestion() {
+  clearTimeout(fill.nextTimer);
+  fill.nextTimer = null;
   cpHideWordPopup();
   fill.solved = false;
+  fill.autoNextPaused = false;
   fill.picked = null;
   $("fillNextBtn").classList.remove("show");
   $("fillReveal").classList.remove("show", "correct", "wrong");
@@ -2133,7 +2172,9 @@ function nextFillQuestion() {
 }
 
 function pauseFillAutoNext() {
-  if (fill && fill.nextTimer) {
+  if (!fill || !fill.solved) return;
+  fill.autoNextPaused = true;
+  if (fill.nextTimer) {
     clearTimeout(fill.nextTimer);
     fill.nextTimer = null;
     $("fillNextBtn").textContent = quizLivesOn && fill.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
@@ -2230,7 +2271,11 @@ function fillPick(t) {
   if (!fill || fill.solved) return;
   cpHideWordPopup();
   fill.solved = true;
+  fill.autoNextPaused = false;
   fill.picked = t;
+  const answeredFill = fill;
+  const answeredSentence = fill.current;
+  const answeredAt = performance.now();
   const correct = t === fill.answer;
   if (correct) {
     fill.score++;
@@ -2244,20 +2289,26 @@ function fillPick(t) {
     if (quizLivesOn) fill.lives--;
   }
   // พูดประโยคภาษาจีนตามด้วยคำแปลไทย ทั้งตอนตอบถูกและตอบผิด (ไฟล์ mp3 ถ้ามี, ไม่งั้น TTS)
-  speakSentence(fill.current, true);
+  speakSentence(fill.current, true, () => {
+    if (fill !== answeredFill || !fill.solved || fill.current !== answeredSentence) return;
+    if (autoNext && !fill.autoNextPaused) {
+      // Keep the original 4-second review window, but never advance before both
+      // the window and the Chinese+Thai sentence playback have finished.
+      const delay = Math.max(0, 4000 - (performance.now() - answeredAt));
+      fill.nextTimer = setTimeout(() => {
+        if (fill !== answeredFill || !fill.solved || fill.current !== answeredSentence) return;
+        fill.nextTimer = null;
+        if (quizLivesOn && fill.lives <= 0) fillGameOver();
+        else nextFillQuestion();
+      }, delay);
+    } else {
+      $("fillNextBtn").textContent = quizLivesOn && fill.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
+      $("fillNextBtn").classList.add("show");
+    }
+  });
   renderFill();
   showFillReveal(!correct);
   updateFillHUD();
-  if (autoNext) {
-    fill.nextTimer = setTimeout(() => {
-      if (!fill) return;
-      if (quizLivesOn && fill.lives <= 0) fillGameOver();
-      else nextFillQuestion();
-    }, 4000);
-  } else {
-    $("fillNextBtn").textContent = quizLivesOn && fill.lives <= 0 ? "ดูผลคะแนน ▶" : "ประโยคถัดไป ▶";
-    $("fillNextBtn").classList.add("show");
-  }
 }
 
 function fillGameOver() {
@@ -7129,7 +7180,11 @@ function cpHideWordPopup() {
 $("cpWordCloseBtn").addEventListener("click", () => { sfx.click(); cpHideWordPopup(); });
 $("cpWordSpeakBtn").addEventListener("click", () => {
   sfx.click();
-  if (cpPopupWord) speak(cpPopupWord);
+  if (cpPopupWord) {
+    const audioKey = wordAudioKey(cpPopupWord, cpPopupWord === "了" ? "le" : "");
+    const spoken = audioKey === "了-le" ? "le" : cpPopupWord;
+    playWordAudio(audioKey, [[spoken, "zh-CN"]]);
+  }
 });
 // ปิดป๊อปอัปเมื่อแตะที่อื่น เลื่อนจอ หรือกลับไปโหมดอื่น (ป๊อปอัปเป็น position:fixed จึงไม่ตามจอ)
 document.addEventListener("pointerdown", (e) => {
