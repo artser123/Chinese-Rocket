@@ -15,9 +15,6 @@ review/
 # Windows artifact
 nul
 
-# Empty temporary audio test file
-test_反向充电.mp3
-
 # Local TTS AB-test lab + audio backups (kept out of the repo)
 tts_lab/
 audio/th/Backup/
@@ -57,3 +54,5 @@ dist/
 offline-android/
 
 tools/.openai_key
+
+audio/zh/Backup/

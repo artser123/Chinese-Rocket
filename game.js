@@ -34,7 +34,15 @@ let zb = null;              // zombie shooter game state
 let lis = null;             // listening practice state
 const lisMediaAudio = new Audio(); // Native media playback can continue while the screen is locked
 lisMediaAudio.preload = "none";
+lisMediaAudio.setAttribute("playsinline", "");
+lisMediaAudio.setAttribute("aria-hidden", "true");
+lisMediaAudio.tabIndex = -1;
+// Keep the native player attached to the document. Some browsers report play()
+// as successful for a detached Audio object but never advance currentTime/fire ended.
+lisMediaAudio.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1";
+document.body.appendChild(lisMediaAudio);
 let lisMediaSeq = 0;
+let lisMediaWatchTimer = null;
 // Native playback is used in listen mode so it survives screen lock. Skip the
 // padding silence that WebAudio's audioBounds() already trims in other modes.
 const LIS_EDGE_TTS_TRIM = { trimStart: 0.18, trimEnd: 0.62 };
@@ -664,7 +672,7 @@ function duckMusic(on, safetyMs = 6000) {
 // ตัวนับรอบเสียงพูด — ทุกครั้งที่ stopSpeech() ถูกเรียก ค่าจะเพิ่มขึ้น
 // ทำให้ onDone ของ utterance ที่ถูก cancel ไม่ทำงานต่อ (เช่นตอนกดข้าม/ออก)
 let speechSeqId = 0;
-function speakSeq(parts, onDone, duckAll = false) {
+function speakSeq(parts, onDone, duckAll = false, onProgress) {
   if (!("speechSynthesis" in window) || !parts.length) {
     if (duckAll) duckMusic(false);
     if (onDone) setTimeout(onDone, 0);
@@ -686,6 +694,13 @@ function speakSeq(parts, onDone, duckAll = false) {
       const v = pickVoice(lang);
       if (v) u.voice = v;
       const last = i === parts.length - 1;
+      if (onProgress && lang.startsWith("zh")) {
+        u.onboundary = (event) => {
+          if (sid !== speechSeqId) return;
+          const length = String(text || "").length;
+          if (length) onProgress(Math.min(1, Math.max(0, event.charIndex / length)));
+        };
+      }
       const shouldDuck = duckAll || lang.startsWith("th");
       if (shouldDuck) {
         if (lang.startsWith("th")) {
@@ -720,16 +735,18 @@ function audioBounds(buf, thr = 0.015) {
            end: Math.min(buf.duration, hi / buf.sampleRate + 0.04) };
 }
 const wordAudio = {
-  seq: 0, srcs: [], timers: [],
+  seq: 0, srcs: [], timers: [], progressFrame: 0,
   stop() {
     this.seq++;
+    if (this.progressFrame) cancelAnimationFrame(this.progressFrame);
+    this.progressFrame = 0;
     this.srcs.forEach((s) => { try { s.stop(); } catch (e) {} });
     this.srcs = [];
     this.timers.forEach(clearTimeout);
     this.timers = [];
     duckMusic(false);
   },
-  play(items, onDone) {
+  play(items, onDone, onProgress) {
     this.stop();
     stopSpeech();
     const token = this.seq;
@@ -747,6 +764,7 @@ const wordAudio = {
       }
       if (this.seq !== token) return;
       let t = ac.currentTime + 0.03;
+      let progressStart = 0, progressEnd = 0;
       let duckAt = Infinity, unduckAt = 0;
       for (const { it, buf } of clips) {
         const { start, end } = audioBounds(buf);
@@ -756,6 +774,10 @@ const wordAudio = {
         src.connect(ac.destination);
         src.start(t, start, dur);
         this.srcs.push(src);
+        if (onProgress && it.tts && String(it.tts[1] || "").startsWith("zh")) {
+          progressStart = t;
+          progressEnd = t + dur;
+        }
         if (it.duck) { duckAt = Math.min(duckAt, t); unduckAt = t + dur; }
         t += dur + 0.03;
       }
@@ -767,11 +789,22 @@ const wordAudio = {
         after(Math.max(0, (duckAt - ac.currentTime) * 1000), () => duckMusic(true, duckSafetyMs));
         if (!duckTts) after(Math.max(0, (unduckAt - ac.currentTime) * 1000), () => duckMusic(false));
       }
+      if (onProgress && progressEnd > progressStart) {
+        onProgress(0);
+        const tick = () => {
+          if (this.seq !== token) return;
+          const fraction = Math.min(1, Math.max(0, (ac.currentTime - progressStart) / (progressEnd - progressStart)));
+          onProgress(fraction);
+          if (fraction < 1) this.progressFrame = requestAnimationFrame(tick);
+          else this.progressFrame = 0;
+        };
+        this.progressFrame = requestAnimationFrame(tick);
+      }
       if (rest.length) after(Math.max(0, (t - ac.currentTime) * 1000), () =>
-        speakSeq(rest.map((x) => x.tts), onDone, duckTts));
+        speakSeq(rest.map((x) => x.tts), onDone, duckTts, onProgress));
       else if (onDone) after(Math.max(0, (t - ac.currentTime) * 1000), onDone);
     })().catch(() => {
-      if (this.seq === token) speakSeq(items.map((x) => x.tts), onDone, items.length > 0 && items.every((x) => x.duck));
+      if (this.seq === token) speakSeq(items.map((x) => x.tts), onDone, items.length > 0 && items.every((x) => x.duck), onProgress);
     });
   },
 };
@@ -1653,6 +1686,51 @@ function sentenceQuizAnswerText(s, direction = sentQuizDirection) {
   return direction === "zh" ? (s[2] || "").trim() : (s[0] || "").trim().split(/[｜|]/)[0];
 }
 
+function applySentenceKaraoke(root, progress) {
+  const tokens = Array.from(root.querySelectorAll(".cp-zh-tok"));
+  if (!tokens.length) return;
+  const weights = tokens.map((token) => Math.max(1, Array.from(token.textContent).length));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let position = Math.min(total - Number.EPSILON, Math.max(0, progress) * total);
+  let activeIndex = 0;
+  for (; activeIndex < weights.length - 1 && position >= weights[activeIndex]; activeIndex++) {
+    position -= weights[activeIndex];
+  }
+  tokens.forEach((token, i) => {
+    const active = i === activeIndex;
+    token.classList.toggle("sq-karaoke-active", active);
+    if (active) token.setAttribute("aria-current", "true");
+    else token.removeAttribute("aria-current");
+  });
+}
+
+function clearSentenceKaraoke(root) {
+  root.querySelectorAll(".sq-karaoke-active").forEach((token) => {
+    token.classList.remove("sq-karaoke-active");
+    token.removeAttribute("aria-current");
+  });
+}
+
+function updateSentenceQuizKaraoke(s, progress) {
+  if (!sentQuiz || sentQuiz.current !== s || sentQuiz.direction !== "zh") return;
+  applySentenceKaraoke($("sentQuizPrompt"), progress);
+}
+
+function clearSentenceQuizKaraoke(s) {
+  if (!sentQuiz || sentQuiz.current !== s) return;
+  clearSentenceKaraoke($("sentQuizPrompt"));
+}
+
+function updateCopyKaraoke(s, progress) {
+  if (!cp || cp.current !== s) return;
+  applySentenceKaraoke($("cpZh"), progress);
+}
+
+function clearCopyKaraoke(s) {
+  if (!cp || cp.current !== s) return;
+  clearSentenceKaraoke($("cpZh"));
+}
+
 function allCategorySentences() {
   if (currentCategory === "hsk") return SENT_OK ? Object.values(SENTENCES).flat() : [];
   return getSentencePool("all");
@@ -1749,7 +1827,10 @@ function nextSentenceQuizQuestion() {
       btn.appendChild(pinyin);
     }
   });
-  speakSentencePrompt(sentQuiz.current, direction === "th" ? "th" : "zh");
+  const question = sentQuiz.current;
+  speakSentencePrompt(question, direction === "th" ? "th" : "zh",
+    (progress) => updateSentenceQuizKaraoke(question, progress),
+    () => clearSentenceQuizKaraoke(question));
 }
 
 function answerSentenceQuiz(i) {
@@ -1778,12 +1859,16 @@ function answerSentenceQuiz(i) {
     updateSentenceQuizHUD();
     if (autoNext) {
       const answeredQuiz = sentQuiz;
-      speakSentence(sentQuiz.current, false, () => {
+      const answeredSentence = sentQuiz.current;
+      speakSentence(answeredSentence, false, () => {
+        clearSentenceQuizKaraoke(answeredSentence);
         if (sentQuiz !== answeredQuiz || !sentQuiz.answered) return;
         sentQuiz.nextTimer = setTimeout(nextSentenceQuizQuestion, 400);
-      });
+      }, (progress) => updateSentenceQuizKaraoke(answeredSentence, progress));
     } else {
-      speakSentence(sentQuiz.current);
+      const answeredSentence = sentQuiz.current;
+      speakSentence(answeredSentence, false, () => clearSentenceQuizKaraoke(answeredSentence),
+        (progress) => updateSentenceQuizKaraoke(answeredSentence, progress));
       $("sentQuizNextBtn").classList.add("show");
     }
   } else {
@@ -1815,7 +1900,9 @@ sentQuizBtns.forEach((btn, i) => btn.addEventListener("pointerdown", (e) => { e.
 $("sentQuizSpeakBtn").addEventListener("click", () => {
   if (!sentQuiz || !sentQuiz.current) return;
   sfx.click();
-  speakSentence(sentQuiz.current);
+  const question = sentQuiz.current;
+  speakSentence(question, false, () => clearSentenceQuizKaraoke(question),
+    (progress) => updateSentenceQuizKaraoke(question, progress));
 });
 $("sentQuizNextBtn").addEventListener("click", () => {
   sfx.click();
@@ -1962,22 +2049,22 @@ function sentRemove(i) {
 
 // เล่นเสียงประโยคจากไฟล์ audio/zh|th/<ประโยคจีน>.mp3 (edge-tts จาก tools/gen_sentence_audio.py)
 // ถ้าไม่มีไฟล์จะ fallback เป็น TTS อัตโนมัติผ่าน playWordAudio
-function speakSentence(s, withTh = false, onDone) {
+function speakSentence(s, withTh = false, onDone, onProgress) {
   const zh = s[0].trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
   wordAudio.play([
     { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], duck: withTh },
     ...(withTh && th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }] : []),
-  ], onDone);
+  ], onDone, onProgress);
 }
 
-function speakSentencePrompt(s, language) {
+function speakSentencePrompt(s, language, onProgress, onDone) {
   const zh = (s[0] || "").trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
   if (language === "th" && th) {
-    wordAudio.play([{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }]);
+    wordAudio.play([{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }], onDone);
   } else if (zh) {
-    playWordAudio(zh, [[zh, "zh-CN"]]);
+    wordAudio.play([{ url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"] }], onDone, onProgress);
   }
 }
 
@@ -6532,6 +6619,8 @@ function lisSetNativeBackgroundAudio(active) {
 }
 function lisStopMedia() {
   lisMediaSeq++;
+  clearTimeout(lisMediaWatchTimer);
+  lisMediaWatchTimer = null;
   lisMediaAudio.onended = null;
   lisMediaAudio.ontimeupdate = null;
   lisMediaAudio.onloadedmetadata = null;
@@ -6562,6 +6651,8 @@ function lisPlayMediaItems(items, onDone) {
   const fallback = () => {
     if (failed || lisMediaSeq !== token || !lis || !lis.playing) return;
     failed = true;
+    clearTimeout(lisMediaWatchTimer);
+    lisMediaWatchTimer = null;
     lisMediaAudio.onended = null;
     lisMediaAudio.ontimeupdate = null;
     lisMediaAudio.onloadedmetadata = null;
@@ -6569,7 +6660,9 @@ function lisPlayMediaItems(items, onDone) {
     lisMediaAudio.pause();
     lisMediaAudio.removeAttribute("src");
     lisMediaAudio.load();
-    speakSeq(items.slice(index).map((item) => item.tts), onDone);
+    // Retry with Web Audio/TTS if native playback never advances or errors;
+    // this also guarantees onDone can release the queue if `ended` never fires.
+    wordAudio.play(items.slice(index), onDone);
   };
   const playNext = () => {
     if (lisMediaSeq !== token || !lis || !lis.playing) return;
@@ -6582,6 +6675,18 @@ function lisPlayMediaItems(items, onDone) {
     let itemFinished = false;
     let itemStart = 0;
     let itemEnd = Infinity;
+    let lastProgressTime = 0;
+    const armProgressWatch = () => {
+      clearTimeout(lisMediaWatchTimer);
+      lisMediaWatchTimer = setTimeout(() => {
+        if (failed || itemFinished || lisMediaSeq !== token || !lis || !lis.playing || lisMediaAudio.paused) return;
+        if (lisMediaAudio.currentTime <= lastProgressTime + 0.025) fallback();
+        else {
+          lastProgressTime = lisMediaAudio.currentTime;
+          armProgressWatch();
+        }
+      }, 2500);
+    };
     const trimStart = Math.max(0, item.trimStart || 0);
     const trimEnd = Math.max(0, item.trimEnd || 0);
     const applyTrim = () => {
@@ -6601,6 +6706,8 @@ function lisPlayMediaItems(items, onDone) {
     const finishItem = () => {
       if (failed || itemFinished || lisMediaSeq !== token) return;
       itemFinished = true;
+      clearTimeout(lisMediaWatchTimer);
+      lisMediaWatchTimer = null;
       lisMediaAudio.onended = null;
       lisMediaAudio.ontimeupdate = null;
       lisMediaAudio.onloadedmetadata = null;
@@ -6609,11 +6716,26 @@ function lisPlayMediaItems(items, onDone) {
       playNext();
     };
     lisMediaAudio.src = encodeURI(item.url);
-    lisMediaAudio.onloadedmetadata = applyTrim;
-    lisMediaAudio.ontimeupdate = applyTrim;
+    lisMediaAudio.onloadedmetadata = () => {
+      applyTrim();
+      if (itemFinished) return;
+      lastProgressTime = lisMediaAudio.currentTime;
+      armProgressWatch();
+    };
+    lisMediaAudio.ontimeupdate = () => {
+      applyTrim();
+      if (itemFinished) return;
+      if (lisMediaAudio.currentTime > lastProgressTime + 0.025) {
+        lastProgressTime = lisMediaAudio.currentTime;
+        armProgressWatch();
+      }
+    };
     lisMediaAudio.onended = finishItem;
     lisMediaAudio.onerror = fallback;
-    lisMediaAudio.play().then(() => lisSetMediaState("playing")).catch(fallback);
+    lisMediaAudio.play().then(() => {
+      lisSetMediaState("playing");
+      armProgressWatch();
+    }).catch(fallback);
   };
   playNext();
 }
@@ -6826,6 +6948,7 @@ if (document.fonts && document.fonts.ready) {
 // ร่วมกับเกมระเบิดและพจนานุกรม — ไม่มีคะแนน/ชีวิต เล่นเพลงธีม sentence
 let cpWriter = null; // HanziWriter instance เดียว ใช้ซ้ำทั้งเซสชันและข้ามคำ
 let cpWriteMode = localStorage.getItem("cr_copy_write_mode") || "off"; // 'off' = เขียนนอกเกม, 'on' = เขียนในเกม
+let cpPenOnly = localStorage.getItem("cr_copy_pen_only") === "on"; // ใช้เฉพาะ pointerType=pen ในโหมดเขียนอิสระ
 let cpOutline = localStorage.getItem("cr_copy_outline") !== "off"; // true = แสดงเส้นนำการเขียน, false = ซ่อนแล้วใบ้เมื่อเขียนผิด
 let cpWriteWriter = null; // HanziWriter ตรวจการเขียนในเกม (ใช้ซ้ำทั้งเซสชัน)
 
@@ -6833,10 +6956,12 @@ let cpWriteWriter = null; // HanziWriter ตรวจการเขียนใ
 function cpSyncSetupUI() {
   const isCopy = gameMode === "copy";
   $("cpWriteRow").style.display = isCopy ? "" : "none";
+  $("cpPenRow").style.display = isCopy && cpWriteMode === "free" ? "" : "none";
   // โหมดเขียนในเกม + เขียนแบบอิสระ ใช้แถว "เส้นนำการเขียน" ร่วมกัน (อิสระ = ตัวจางในช่อง ให้ลอก)
   $("cpOutlineRow").style.display = isCopy && cpWriteMode !== "off" ? "" : "none";
   if (!isCopy) return;
   document.querySelectorAll("#cpWriteSelect .cpw-btn").forEach((b) => b.classList.toggle("selected", b.dataset.write === cpWriteMode));
+  document.querySelectorAll("#cpPenSelect .cpw-btn").forEach((b) => b.classList.toggle("selected", b.dataset.penOnly === (cpPenOnly ? "on" : "off")));
   document.querySelectorAll("#cpOutlineSelect .cpo-btn").forEach((b) => b.classList.toggle("selected", b.dataset.outline === (cpOutline ? "on" : "off")));
 }
 
@@ -6876,7 +7001,9 @@ function cpAdvance() {
   cp.done.add(cp.current[0]);
   $("cpProg").textContent = progPct(cp.done.size, cp.deck.length);
   cpRender();
-  speakSentence(cp.current);
+  const question = cp.current;
+  speakSentence(question, false, () => clearCopyKaraoke(question),
+    (progress) => updateCopyKaraoke(question, progress));
 }
 
 function cpRender() {
@@ -7392,6 +7519,10 @@ let cpFreeCell = 0;           // ขนาดช่อง (px) — จุดล�
 let cpFreeOrigX = 0, cpFreeOrigY = 0; // มุมบนซ้ายของผังช่อง เทียบกับ canvas
 
 function cpFreeEnabled() { return cpWriteMode === "free" && !!cp && !!cpFree && !$("cpFree").hidden; }
+function cpFreePointerAllowed(e) { return !cpPenOnly || e.pointerType === "pen"; }
+function cpFreeCanStart(e) {
+  return cpFreeEnabled() && e.isPrimary && e.button === 0 && cpFreePointerAllowed(e) && cpFree.pointerId == null;
+}
 function cpFreeStatus(text) { $("cpFreeStatus").textContent = text || ""; }
 function cpFreeNextEnabled(on) { $("cpFreeNextBtn").disabled = !on; }
 
@@ -7404,7 +7535,7 @@ function cpFreeSyncButtons() {
 function cpFreeSetup() {
   if (!cp) return;
   $("cpFree").hidden = false;
-  cpFree = { chars: cp.writeChars.slice(), cells: [], strokes: [], cur: null, drawing: false, result: null, results: null, eraser: false, erasing: false };
+  cpFree = { chars: cp.writeChars.slice(), cells: [], strokes: [], cur: null, drawing: false, pointerId: null, result: null, results: null, eraser: false, erasing: false };
   cpFreeSetEraser(false); // ประโยคใหม่เริ่มที่โหมดเขียนเสมอ (กันเผลอลบโดยไม่ตั้งใจ)
   $("cpFreeHint").textContent = `${cpFree.chars.length} ตัว • ผ่าน ${CP_FREE_MIN}%`;
   cpFreeLayout();
@@ -7562,6 +7693,7 @@ function cpFreeReset(keepStatus) {
   cpFree.strokes = [];
   cpFree.cur = null;
   cpFree.drawing = false;
+  cpFree.pointerId = null;
   cpFreeClearResult();
   cpFreeSyncButtons();
   cpFreePaint();
@@ -7589,8 +7721,9 @@ function cpFreePos(e) {
 }
 
 function cpFreeDown(e) {
-  if (!cpFreeEnabled() || !e.isPrimary || e.button !== 0) return;
+  if (!cpFreeCanStart(e)) return;
   e.preventDefault();
+  cpFree.pointerId = e.pointerId;
   try { cpFreeCanvas.setPointerCapture(e.pointerId); } catch (err) {}
   // โหมดยางลบ: แตะ/ลากบนเส้นที่ต้องการลบ (ไม่วาดเส้นใหม่)
   if (cpFree.eraser) {
@@ -7608,7 +7741,7 @@ function cpFreeDown(e) {
 }
 
 function cpFreeMove(e) {
-  if (!cpFree) return;
+  if (!cpFree || e.pointerId !== cpFree.pointerId || !cpFreePointerAllowed(e)) return;
   if (cpFree.eraser) { // ยางลบ: ลากผ่านเส้นไหนก็ลบเส้นนั้น
     if (cpFree.erasing) cpFreeEraseAt(cpFreePos(e));
     return;
@@ -7626,11 +7759,12 @@ function cpFreeMove(e) {
 }
 
 function cpFreeUp(e) {
-  if (!cpFree) return;
+  if (!cpFree || e.pointerId !== cpFree.pointerId) return;
   const release = () => { try { if (cpFreeCanvas.hasPointerCapture(e.pointerId)) cpFreeCanvas.releasePointerCapture(e.pointerId); } catch (err) {} };
-  if (cpFree.erasing) { cpFree.erasing = false; release(); return; }
-  if (!cpFree.drawing) return;
+  if (cpFree.erasing) { cpFree.erasing = false; cpFree.pointerId = null; release(); return; }
+  if (!cpFree.drawing) { cpFree.pointerId = null; release(); return; }
   cpFree.drawing = false;
+  cpFree.pointerId = null;
   const pts = cpFree.cur || [];
   cpFree.cur = null;
   // จุดเดี่ยว (เช่น 丶 ที่แตะเฉยๆ) ไม่ให้หายไป — เติมจุดเลื่อนจิ๋วให้เป็นขีดสั้นๆ
@@ -7692,6 +7826,7 @@ function cpFreeSetEraser(on) {
     cpFree.erasing = false;
     cpFree.cur = null;
     cpFree.drawing = false;
+    cpFree.pointerId = null;
   }
   const panel = $("cpFree");
   if (panel) panel.classList.toggle("erasing", on2);
@@ -7947,7 +8082,7 @@ function cpFreeShowResult(results, pct, skipped) {
 }
 
 // ยางลบเปิดอยู่ = ไม่มีเสียงดินสอ และไม่วาดเส้นใหม่ (ดู cpFreeDown/Move)
-$("cpFreeCanvas").addEventListener("pointerdown", (e) => { if (!cpFree || !cpFree.eraser) pencilSound.start(e); cpFreeDown(e); });
+$("cpFreeCanvas").addEventListener("pointerdown", (e) => { if (cpFreeCanStart(e) && !cpFree.eraser) pencilSound.start(e); cpFreeDown(e); });
 $("cpFreeCanvas").addEventListener("pointermove", (e) => { if (!cpFree || !cpFree.eraser) pencilSound.move(e); cpFreeMove(e); });
 $("cpFreeCanvas").addEventListener("pointerup", cpFreeUp);
 $("cpFreeCanvas").addEventListener("pointercancel", cpFreeUp);
@@ -8086,7 +8221,11 @@ async function cpStrokePlay(index) {
 
 $("cpListenBtn").addEventListener("click", () => {
   sfx.click();
-  if (cp && cp.current) speakSentence(cp.current);
+  if (cp && cp.current) {
+    const question = cp.current;
+    speakSentence(question, false, () => clearCopyKaraoke(question),
+      (progress) => updateCopyKaraoke(question, progress));
+  }
 });
 $("cpSkipBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
 $("cpNextBtn").addEventListener("click", () => { sfx.click(); cpAdvance(); });
@@ -8701,6 +8840,15 @@ $("cpWriteSelect").addEventListener("click", (e) => {
   btn.classList.add("selected");
   cpWriteMode = btn.dataset.write;
   localStorage.setItem("cr_copy_write_mode", cpWriteMode);
+  cpSyncSetupUI();
+});
+
+$("cpPenSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".cpw-btn");
+  if (!btn) return;
+  sfx.click();
+  cpPenOnly = btn.dataset.penOnly === "on";
+  localStorage.setItem("cr_copy_pen_only", cpPenOnly ? "on" : "off");
   cpSyncSetupUI();
 });
 

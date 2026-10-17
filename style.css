@@ -395,6 +395,7 @@ html, body {
 #setupIcon.bomb-card-icon { width: 110px; height: 110px; line-height: 100px; font-size: clamp(48px, 13vw, 64px); }
 .setup-row { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .setup-label { color: #8fd3ff; font-size: clamp(14px, 3.8vw, 17px); font-weight: 700; }
+.cp-pen-note { max-width: min(520px, 90vw); color: var(--fg-dim); text-align: center; line-height: 1.45; }
 
 .big-btn {
   min-width: 240px;
@@ -711,6 +712,13 @@ html, body {
 }
 #sentQuizPrompt[lang="zh"] { font-family: var(--font-ui); }
 .sq-prompt-main { display: block; }
+#sentQuizPrompt .cp-zh-tok.sq-karaoke-active,
+#cpZh .cp-zh-tok.sq-karaoke-active {
+  color: #ffe2a0;
+  background: rgba(255, 196, 107, .22);
+  border-bottom-color: #ffc46b;
+  box-shadow: 0 0 18px rgba(255, 196, 107, .2);
+}
 .sq-prompt-pinyin {
   display: block;
   margin-top: 4px;
