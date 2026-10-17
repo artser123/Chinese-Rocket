@@ -8831,3 +8831,61 @@ if (catSelectEl) {
   });
 }
 updateCategoryDropdownUI();
+
+// Native Android hardware-back navigation: unwind overlays, then return from
+// gameplay to its setup screen. The home screen returns false so Android exits.
+window.__handleAndroidBack = function () {
+  const active = document.querySelector(".screen.active");
+  if (!active || active === menuEl) return false;
+
+  const overlays = [
+    ["pauseOverlay", "resumeBtn"],
+    ["zPauseOverlay", "zResumeBtn"],
+    ["bombPauseOverlay", "bombResumeBtn"],
+    ["matchPauseOverlay", "matchResumeBtn"],
+  ];
+  for (const [overlayId, resumeId] of overlays) {
+    if ($(overlayId)?.classList.contains("show")) {
+      $(resumeId)?.click();
+      return true;
+    }
+  }
+
+  if (active === $("setup")) {
+    $("setupBackBtn").click();
+    return true;
+  }
+  if (active === overEl) {
+    $("menuBtn").click();
+    return true;
+  }
+
+  const quitByScreen = {
+    game: "quitBtn",
+    quiz: "quizQuitBtn",
+    sentQuiz: "sentQuizQuitBtn",
+    sent: "sentQuitBtn",
+    fill: "fillQuitBtn",
+    zombie: "zQuitBtn",
+    matching: "matchQuitBtn",
+    bomb: "bombQuitBtn",
+    dict: "dictQuitBtn",
+    speak: "spkQuitBtn",
+    listen: "lisQuitBtn",
+    copy: "cpQuitBtn",
+    trace: "tcQuitBtn",
+  };
+  const quit = $(quitByScreen[active.id]);
+  if (quit) quit.click();
+  else {
+    sfx.click();
+    switchScreen(menuEl);
+    updateBestLine();
+  }
+
+  if (gameMode && gameMode !== "dict") {
+    switchScreen($("setup"));
+    updateStartBtn();
+  }
+  return true;
+};
