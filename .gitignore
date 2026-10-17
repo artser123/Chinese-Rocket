@@ -41,3 +41,18 @@ __pycache__/
 .env
 .env.*
 *.key
+
+# Generated personal Android offline build
+offline-android/node_modules/
+offline-android/www/
+offline-android/android/.gradle/
+offline-android/android/local.properties
+offline-android/android/.idea/
+offline-android/android/**/build/
+offline-android/android/app/src/main/assets/public/
+offline-android/android/.DS_Store
+offline-android/vendor/
+dist/
+.opencode/
+offline-android/
+

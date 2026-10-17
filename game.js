@@ -28,12 +28,17 @@ let quiz = null;
 let sent = null;            // sentence-ordering game state
 let sentQuiz = null;        // sentence translation multiple-choice quiz state
 let sentQuizDirection = localStorage.getItem("cr_sentence_quiz_direction") === "th" ? "th" : "zh"; // 'zh' = Chinese prompt, 'th' = Thai prompt
+let sentQuizShowPinyin = localStorage.getItem("cr_sentence_quiz_pinyin") === "on";
 let fill = null;            // fill-in-the-blank game state
 let zb = null;              // zombie shooter game state
 let lis = null;             // listening practice state
 const lisMediaAudio = new Audio(); // Native media playback can continue while the screen is locked
 lisMediaAudio.preload = "none";
 let lisMediaSeq = 0;
+// Native playback is used in listen mode so it survives screen lock. Skip the
+// padding silence that WebAudio's audioBounds() already trims in other modes.
+const LIS_EDGE_TTS_TRIM = { trimStart: 0.18, trimEnd: 0.62 };
+const LIS_VOICECLONE_TRIM = { trimStart: 0.18, trimEnd: 0.08 };
 let cp = null;              // sentence copying practice state
 let lisType = "word";       // 'word' | 'sent' — ฟังเป็นคำหรือประโยค
 let lisGap = 1.2;           // วินาที — ช่วงห่างก่อนเปลี่ยนคำ/ประโยคถัดไป
@@ -1646,7 +1651,7 @@ function startSentenceQuiz(level) {
   sentQuiz = {
     lives: 3, score: 0, answered: false, nextTimer: null,
     done: new Set(), deck: shuffle(list.slice()), current: null, options: [],
-    direction: sentQuizDirection, optionPool, lastZh: ""
+    direction: sentQuizDirection, showPinyin: sentQuizShowPinyin, optionPool, lastZh: ""
   };
   stopSpeech();
   music.start("sentencequiz");
@@ -1687,13 +1692,41 @@ function nextSentenceQuizQuestion() {
   unique.set(correctText, sentQuiz.current);
   const distractors = shuffle([...unique.values()].filter((s) => sentenceQuizAnswerText(s, direction) !== correctText));
   sentQuiz.options = shuffle([sentQuiz.current, ...distractors.slice(0, 3)]);
-  $("sentQuizPrompt").textContent = direction === "zh" ? sentQuiz.current[0].split(/[｜|]/)[0] : sentQuiz.current[2];
-  $("sentQuizPrompt").setAttribute("lang", direction === "zh" ? "zh" : "th");
+  const prompt = $("sentQuizPrompt");
+  prompt.replaceChildren();
+  prompt.setAttribute("lang", direction === "zh" ? "zh" : "th");
+  if (direction === "zh") {
+    const main = document.createElement("span");
+    main.className = "sq-prompt-main";
+    main.textContent = sentQuiz.current[0].split(/[｜|]/)[0];
+    prompt.appendChild(main);
+    if (sentQuiz.showPinyin && sentQuiz.current[1]) {
+      const pinyin = document.createElement("span");
+      pinyin.className = "sq-prompt-pinyin";
+      pinyin.lang = "zh-Latn";
+      pinyin.textContent = sentQuiz.current[1];
+      prompt.appendChild(pinyin);
+    }
+  } else {
+    prompt.textContent = sentQuiz.current[2];
+  }
   $("sentQuizHint").textContent = direction === "zh" ? "อ่านข้อความจีน แล้วเลือกคำแปลภาษาไทย" : "อ่านข้อความไทย แล้วเลือกประโยคภาษาจีน";
   sentQuizBtns.forEach((btn, i) => {
     btn.className = "sqopt";
     btn.disabled = false;
-    btn.textContent = sentQuiz.options[i] ? sentenceQuizAnswerText(sentQuiz.options[i], direction) : "";
+    btn.replaceChildren();
+    const option = sentQuiz.options[i];
+    if (!option) return;
+    const answer = document.createElement("span");
+    answer.textContent = sentenceQuizAnswerText(option, direction);
+    btn.appendChild(answer);
+    if (direction === "th" && sentQuiz.showPinyin && option[1]) {
+      const pinyin = document.createElement("span");
+      pinyin.className = "sqopt-pinyin";
+      pinyin.lang = "zh-Latn";
+      pinyin.textContent = option[1];
+      btn.appendChild(pinyin);
+    }
   });
   speakSentencePrompt(sentQuiz.current, direction === "th" ? "th" : "zh");
 }
@@ -4707,7 +4740,7 @@ const startLabel = () => {
   if (gameMode === "matching") return `เริ่ม ${lvl} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`;
   if (gameMode === "vocab") return `🚀 เริ่ม ${lvl} (${quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย"}, Endless)`;
   if (gameMode === "sentence") return `🚀 เริ่ม ${lvl} (เกมเรียงประโยค, Endless)`;
-  if (gameMode === "sentencequiz") return `💬 เริ่ม ${lvl} (${sentQuizDirection === "zh" ? "จีน → ไทย" : "ไทย → จีน"}, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
+  if (gameMode === "sentencequiz") return `💬 เริ่ม ${lvl} (${sentQuizDirection === "zh" ? "จีน → ไทย" : "ไทย → จีน"}, ${sentQuizShowPinyin ? "มีพินอิน" : "ไม่มีพินอิน"}, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   if (gameMode === "fillblank") return `🚀 เริ่ม ${lvl} (เกมเติมคำในประโยค, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   if (gameMode === "zombie") return `🔫 เริ่ม ${lvl} (${DIFF[difficulty].label}, ${zDurLabel()})`;
   if (gameMode === "speak") return `🎤 เริ่มฝึกพูด ${lvl} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
@@ -6437,9 +6470,20 @@ function lisSource() {
 function lisSetMediaState(state) {
   try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state; } catch (e) {}
 }
+function lisSetNativeBackgroundAudio(active) {
+  try {
+    const native = window.ChineseRocketAndroid
+      || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
+    if (!native || !native.setListenMode) return;
+    const result = native.setListenMode({ active: !!active });
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch (e) {}
+}
 function lisStopMedia() {
   lisMediaSeq++;
   lisMediaAudio.onended = null;
+  lisMediaAudio.ontimeupdate = null;
+  lisMediaAudio.onloadedmetadata = null;
   lisMediaAudio.onerror = null;
   lisMediaAudio.pause();
   lisMediaAudio.removeAttribute("src");
@@ -6468,6 +6512,8 @@ function lisPlayMediaItems(items, onDone) {
     if (failed || lisMediaSeq !== token || !lis || !lis.playing) return;
     failed = true;
     lisMediaAudio.onended = null;
+    lisMediaAudio.ontimeupdate = null;
+    lisMediaAudio.onloadedmetadata = null;
     lisMediaAudio.onerror = null;
     lisMediaAudio.pause();
     lisMediaAudio.removeAttribute("src");
@@ -6482,12 +6528,39 @@ function lisPlayMediaItems(items, onDone) {
       return;
     }
     const item = items[index];
-    lisMediaAudio.src = encodeURI(item.url);
-    lisMediaAudio.onended = () => {
-      if (lisMediaSeq !== token) return;
+    let itemFinished = false;
+    let itemStart = 0;
+    let itemEnd = Infinity;
+    const trimStart = Math.max(0, item.trimStart || 0);
+    const trimEnd = Math.max(0, item.trimEnd || 0);
+    const applyTrim = () => {
+      if (failed || itemFinished || lisMediaSeq !== token) return;
+      const duration = lisMediaAudio.duration;
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      const minKeep = Math.min(0.45, duration * 0.65);
+      const trimRoom = Math.max(0, duration - minKeep);
+      itemStart = Math.min(trimStart, trimRoom / 2);
+      const endTrim = Math.min(trimEnd, Math.max(0, duration - itemStart - minKeep));
+      itemEnd = duration - endTrim;
+      if (lisMediaAudio.currentTime < itemStart - 0.015) {
+        try { lisMediaAudio.currentTime = itemStart; } catch (e) {}
+      }
+      if (trimEnd > 0 && lisMediaAudio.currentTime >= itemEnd) finishItem();
+    };
+    const finishItem = () => {
+      if (failed || itemFinished || lisMediaSeq !== token) return;
+      itemFinished = true;
+      lisMediaAudio.onended = null;
+      lisMediaAudio.ontimeupdate = null;
+      lisMediaAudio.onloadedmetadata = null;
+      lisMediaAudio.onerror = null;
       index++;
       playNext();
     };
+    lisMediaAudio.src = encodeURI(item.url);
+    lisMediaAudio.onloadedmetadata = applyTrim;
+    lisMediaAudio.ontimeupdate = applyTrim;
+    lisMediaAudio.onended = finishItem;
     lisMediaAudio.onerror = fallback;
     lisMediaAudio.play().then(() => lisSetMediaState("playing")).catch(fallback);
   };
@@ -6502,6 +6575,7 @@ if ("mediaSession" in navigator) {
   mediaAction("play", () => {
     if (!lis) return;
     lis.playing = true;
+    lisSetNativeBackgroundAudio(true);
     clearTimeout(lis.timer);
     lis.timer = null;
     $("lisPlayBtn").textContent = "⏸ พัก";
@@ -6510,6 +6584,7 @@ if ("mediaSession" in navigator) {
   mediaAction("pause", () => {
     if (!lis || !lis.playing) return;
     lis.playing = false;
+    lisSetNativeBackgroundAudio(false);
     clearTimeout(lis.timer);
     lisStopMedia();
     stopSpeech();
@@ -6519,6 +6594,7 @@ if ("mediaSession" in navigator) {
   mediaAction("nexttrack", () => {
     if (!lis) return;
     lis.playing = true;
+    lisSetNativeBackgroundAudio(true);
     $("lisPlayBtn").textContent = "⏸ พัก";
     lisAdvance();
   });
@@ -6542,16 +6618,16 @@ function lisPlayCurrent() {
     const zh = it[0].trim().split(/[｜|]/)[0];
     const th = (it[2] || "").trim();
     lisPlayMediaItems([
-      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"] },
-      ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"] }] : []),
+      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], ...LIS_EDGE_TTS_TRIM },
+      ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], ...LIS_VOICECLONE_TRIM }] : []),
     ], done);
   } else {
     const zh = it[0].split(/[｜|]/)[0].trim();
     const m = (it[2] || "").trim();
     const key = wordAudioKey(it[0], it[1]); // 了 (คำช่วย le) ใช้ไฟล์ 了-le.mp3 ที่อ่านถูก
     lisPlayMediaItems([
-      { url: `audio/zh/${key}.mp3`, tts: [key === "了-le" ? "le" : zh, "zh-CN"] },
-      ...(m ? [{ url: `audio/th/${key}.mp3`, tts: [m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"] }] : []),
+      { url: `audio/zh/${key}.mp3`, tts: [key === "了-le" ? "le" : zh, "zh-CN"], ...LIS_EDGE_TTS_TRIM },
+      ...(m ? [{ url: `audio/th/${key}.mp3`, tts: [m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"], ...LIS_EDGE_TTS_TRIM }] : []),
     ], done);
   }
   lisSetMediaMetadata(it);
@@ -6562,6 +6638,7 @@ function lisReplayBtnClick() {
   clearTimeout(lis.timer);
   lis.timer = null;
   lis.playing = true;
+  lisSetNativeBackgroundAudio(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisPlayCurrent();
 }
@@ -6623,6 +6700,7 @@ function startListenGame(level) {
           done: new Set(), total: 0 };
   lis.deck = shuffle(lisSource().slice());
   lis.total = lis.deck.length;
+  lisSetNativeBackgroundAudio(false);
   lisStopMedia();
   stopSpeech();
   music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
@@ -6633,6 +6711,7 @@ function startListenGame(level) {
   $("lisPlayBtn").textContent = "⏸ พัก";
   $("lisCount").textContent = "0";
   $("lisProg").textContent = "0%";
+  lisSetNativeBackgroundAudio(true);
   lisAdvance();
 }
 
@@ -6640,6 +6719,7 @@ $("lisPlayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = !lis.playing;
+  lisSetNativeBackgroundAudio(lis.playing);
   $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
   if (lis.playing) {
     lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
@@ -6660,6 +6740,7 @@ $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = true;
+  lisSetNativeBackgroundAudio(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisAdvance();
 });
@@ -6668,6 +6749,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   sfx.click();
   clearTimeout(lis && lis.timer);
   if (lis) lis.timer = null;
+  lisSetNativeBackgroundAudio(false);
   lisStopMedia();
   lis = null;
   $("lisCard").classList.remove("playing");
@@ -8427,6 +8509,7 @@ $("cards").addEventListener("click", (e) => {
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
   $("sentQuizDirRow").style.display = gameMode === "sentencequiz" ? "" : "none";
+  $("sentQuizPinyinRow").style.display = gameMode === "sentencequiz" ? "" : "none";
   $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
@@ -8498,6 +8581,18 @@ $("sentQuizDirSelect").addEventListener("click", (e) => {
   updateStartBtn();
 });
 document.querySelectorAll(".sqd-btn").forEach((b) => b.classList.toggle("selected", b.dataset.sqd === sentQuizDirection));
+
+$("sentQuizPinyinSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".sqp-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".sqp-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  sentQuizShowPinyin = btn.dataset.sqp === "on";
+  localStorage.setItem("cr_sentence_quiz_pinyin", sentQuizShowPinyin ? "on" : "off");
+  updateStartBtn();
+});
+document.querySelectorAll(".sqp-btn").forEach((b) => b.classList.toggle("selected", (b.dataset.sqp === "on") === sentQuizShowPinyin));
 
 $("lifeSelect").addEventListener("click", (e) => {
   const btn = e.target.closest(".life-btn");
@@ -8663,6 +8758,7 @@ document.addEventListener("visibilitychange", () => {
   }
   // โหมดฝึกฟังใช้ native media playback; ไม่ขอ Wake Lock เพราะต้องการให้จอดับได้
   if (!document.hidden && lis) {
+    lisSetNativeBackgroundAudio(lis.playing);
     if (lis.playing && lisMediaAudio.paused && !lis.timer) lisPlayCurrent();
   }
 });

@@ -265,7 +265,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -278,7 +278,7 @@ html, body {
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
               border-color var(--dur-fast), background var(--dur-fast);
 }
-.level-btn:active, .diff-btn:active, .ans-btn:active, .sqd-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
+.level-btn:active, .diff-btn:active, .ans-btn:active, .sqd-btn:active, .sqp-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
 .lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active { transform: translateY(1px) scale(.985); }
 .level-btn.selected {
   background: linear-gradient(180deg, var(--accent-warm-1), var(--accent-warm-2));
@@ -286,8 +286,8 @@ html, body {
   color: #fff;
   box-shadow: var(--sh-glow-warm), var(--hi-top);
 }
-.diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected {
+.diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected {
   background: linear-gradient(180deg, var(--accent-green-1), var(--accent-green-2));
   border-color: #8fffb0;
   color: #fff;
@@ -710,6 +710,14 @@ html, body {
   text-shadow: 0 0 26px rgba(120, 140, 255, .5);
 }
 #sentQuizPrompt[lang="zh"] { font-family: var(--font-ui); }
+.sq-prompt-main { display: block; }
+.sq-prompt-pinyin {
+  display: block;
+  margin-top: 4px;
+  color: #bdc9ff;
+  font: 500 clamp(16px, 4.2vw, 24px)/1.45 var(--font-pinyin);
+  text-shadow: none;
+}
 #sentQuizOptions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -741,6 +749,12 @@ html, body {
   font-size: clamp(13px, 3.5vw, 17px);
   font-weight: 400;
   line-height: 1.45;
+}
+.sqopt-pinyin {
+  display: block;
+  margin-top: 3px;
+  color: #c7d0ff;
+  font: 500 clamp(12px, 3.4vw, 16px)/1.4 var(--font-pinyin);
 }
 .sqopt.wrong .sqopt-sub { color: #ffc1c1; }
 #sentQuizNextBtn {
@@ -2452,7 +2466,7 @@ button.fill-blank {
   #menu::before, #menu::after, #setup::before, #setup::after { animation: none !important; }
   .card { animation: none !important; }
   .screen.active { animation: none !important; }
-  .card, .level-btn, .diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .tc-slot {
+  .card, .level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .tc-slot {
     transition: none !important;
   }
 }
