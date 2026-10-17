@@ -46,6 +46,7 @@ let lisMediaWatchTimer = null;
 // Native playback is used in listen mode so it survives screen lock. Skip the
 // padding silence that WebAudio's audioBounds() already trims in other modes.
 const LIS_EDGE_TTS_TRIM = { trimStart: 0.18, trimEnd: 0.62 };
+const LIS_SENTENCE_ZH_TRIM = { trimStart: 0.18, trimEnd: 0 };
 const LIS_VOICECLONE_TRIM = { trimStart: 0.18, trimEnd: 0.08 };
 let cp = null;              // sentence copying practice state
 let lisType = "word";       // 'word' | 'sent' — ฟังเป็นคำหรือประโยค
@@ -6685,7 +6686,7 @@ function lisPlayMediaItems(items, onDone, onProgress) {
           lastProgressTime = lisMediaAudio.currentTime;
           armProgressWatch();
         }
-      }, 800);
+      }, 1200);
     };
     const trimStart = Math.max(0, item.trimStart || 0);
     const trimEnd = Math.max(0, item.trimEnd || 0);
@@ -6834,7 +6835,7 @@ function lisPlayCurrent() {
     const zh = it[0].trim().split(/[｜|]/)[0];
     const th = (it[2] || "").trim();
     lisPlayMediaItems([
-      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], ...LIS_EDGE_TTS_TRIM },
+      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], ...LIS_SENTENCE_ZH_TRIM },
       ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], ...LIS_VOICECLONE_TRIM }] : []),
     ], done, (progress) => updateListenKaraoke(it, progress));
   } else {
