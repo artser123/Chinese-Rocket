@@ -1686,8 +1686,8 @@ function sentenceQuizAnswerText(s, direction = sentQuizDirection) {
   return direction === "zh" ? (s[2] || "").trim() : (s[0] || "").trim().split(/[｜|]/)[0];
 }
 
-function applySentenceKaraoke(root, progress) {
-  const tokens = Array.from(root.querySelectorAll(".cp-zh-tok"));
+function applySentenceKaraoke(root, progress, selector = ".cp-zh-tok") {
+  const tokens = Array.from(root.querySelectorAll(selector));
   if (!tokens.length) return;
   const weights = tokens.map((token) => Math.max(1, Array.from(token.textContent).length));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
@@ -6642,7 +6642,7 @@ function lisSetMediaMetadata(item) {
     }
   } catch (e) {}
 }
-function lisPlayMediaItems(items, onDone) {
+function lisPlayMediaItems(items, onDone, onProgress) {
   lisStopMedia();
   const token = lisMediaSeq;
   stopSpeech(); // Cancel any previous TTS/Web Audio fallback.
@@ -6662,7 +6662,7 @@ function lisPlayMediaItems(items, onDone) {
     lisMediaAudio.load();
     // Retry with Web Audio/TTS if native playback never advances or errors;
     // this also guarantees onDone can release the queue if `ended` never fires.
-    wordAudio.play(items.slice(index), onDone);
+    wordAudio.play(items.slice(index), onDone, onProgress);
   };
   const playNext = () => {
     if (lisMediaSeq !== token || !lis || !lis.playing) return;
@@ -6685,7 +6685,7 @@ function lisPlayMediaItems(items, onDone) {
           lastProgressTime = lisMediaAudio.currentTime;
           armProgressWatch();
         }
-      }, 2500);
+      }, 800);
     };
     const trimStart = Math.max(0, item.trimStart || 0);
     const trimEnd = Math.max(0, item.trimEnd || 0);
@@ -6706,6 +6706,7 @@ function lisPlayMediaItems(items, onDone) {
     const finishItem = () => {
       if (failed || itemFinished || lisMediaSeq !== token) return;
       itemFinished = true;
+      if (onProgress && item.tts && String(item.tts[1] || "").startsWith("zh")) onProgress(1);
       clearTimeout(lisMediaWatchTimer);
       lisMediaWatchTimer = null;
       lisMediaAudio.onended = null;
@@ -6715,16 +6716,23 @@ function lisPlayMediaItems(items, onDone) {
       index++;
       playNext();
     };
+    const reportProgress = () => {
+      if (!onProgress || !item.tts || !String(item.tts[1] || "").startsWith("zh")
+        || !Number.isFinite(itemEnd) || itemEnd <= itemStart) return;
+      onProgress(Math.min(1, Math.max(0, (lisMediaAudio.currentTime - itemStart) / (itemEnd - itemStart))));
+    };
     lisMediaAudio.src = encodeURI(item.url);
     lisMediaAudio.onloadedmetadata = () => {
       applyTrim();
       if (itemFinished) return;
+      reportProgress();
       lastProgressTime = lisMediaAudio.currentTime;
       armProgressWatch();
     };
     lisMediaAudio.ontimeupdate = () => {
       applyTrim();
       if (itemFinished) return;
+      reportProgress();
       if (lisMediaAudio.currentTime > lastProgressTime + 0.025) {
         lastProgressTime = lisMediaAudio.currentTime;
         armProgressWatch();
@@ -6763,6 +6771,7 @@ if ("mediaSession" in navigator) {
     stopSpeech();
     $("lisPlayBtn").textContent = "▶ เล่นต่อ";
     $("lisCard").classList.remove("playing");
+    if (lis.current) clearListenKaraoke(lis.current);
   });
   mediaAction("nexttrack", () => {
     if (!lis) return;
@@ -6775,11 +6784,44 @@ if ("mediaSession" in navigator) {
 }
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
+function renderListenSentence(s) {
+  const el = $("lisZh"), zh = s[0] || "";
+  el.replaceChildren();
+  let pos = 0;
+  const addText = (text) => { if (text) el.appendChild(document.createTextNode(text)); };
+  for (const token of s[4] || []) {
+    if (!token) continue;
+    const at = zh.indexOf(token, pos);
+    if (at < 0) continue;
+    addText(zh.slice(pos, at));
+    if (/[㐀-鿿豈-﫿]/.test(token)) {
+      const span = document.createElement("span");
+      span.className = "lis-zh-tok";
+      span.textContent = token;
+      el.appendChild(span);
+    } else addText(token);
+    pos = at + token.length;
+  }
+  addText(zh.slice(pos));
+}
+
+function updateListenKaraoke(s, progress) {
+  if (!lis || lis.type !== "sent" || lis.current !== s) return;
+  if (progress >= 1) clearSentenceKaraoke($("lisZh"));
+  else applySentenceKaraoke($("lisZh"), progress, ".lis-zh-tok");
+}
+
+function clearListenKaraoke(s) {
+  if (!lis || lis.current !== s) return;
+  clearSentenceKaraoke($("lisZh"));
+}
+
 function lisPlayCurrent() {
   if (!lis || !lis.current || !lis.playing) return;
   const it = lis.current;
   const done = () => {
     if (!lis || !lis.playing) return;
+    clearListenKaraoke(it);
     $("lisCard").classList.remove("playing");
     lis.timer = setTimeout(() => {
       if (lis) lis.timer = null;
@@ -6788,12 +6830,13 @@ function lisPlayCurrent() {
   };
   $("lisCard").classList.add("playing");
   if (lis.type === "sent") {
+    clearListenKaraoke(it);
     const zh = it[0].trim().split(/[｜|]/)[0];
     const th = (it[2] || "").trim();
     lisPlayMediaItems([
       { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], ...LIS_EDGE_TTS_TRIM },
       ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], ...LIS_VOICECLONE_TRIM }] : []),
-    ], done);
+    ], done, (progress) => updateListenKaraoke(it, progress));
   } else {
     const zh = it[0].split(/[｜|]/)[0].trim();
     const m = (it[2] || "").trim();
@@ -6835,7 +6878,8 @@ function lisAdvance() {
   lis.done.add(lis.current[0]);
   $("lisProg").textContent = progPct(lis.done.size, lis.total);
   const it = lis.current;
-  $("lisZh").textContent = it[0];
+  if (lis.type === "sent") renderListenSentence(it);
+  else $("lisZh").textContent = it[0];
   $("lisPy").textContent = it[1] || "";
   $("lisTh").textContent = it[2] || "";
   $("lisSub").textContent = lis.type === "sent" && it[3] ? `📐 จุดไวยากรณ์: ${it[3]}` : "";
@@ -6902,6 +6946,7 @@ $("lisPlayBtn").addEventListener("click", () => {
     $("lisCard").classList.remove("playing");
     lisStopMedia();
     stopSpeech();
+    if (lis.current) clearListenKaraoke(lis.current);
   }
 });
 $("lisReplayBtn").addEventListener("click", () => {
@@ -6924,6 +6969,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   if (lis) lis.timer = null;
   lisSetNativeBackgroundAudio(false);
   lisStopMedia();
+  if (lis && lis.current) clearListenKaraoke(lis.current);
   lis = null;
   $("lisCard").classList.remove("playing");
   stopSpeech();

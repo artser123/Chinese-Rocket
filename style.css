@@ -1093,6 +1093,12 @@ button.fill-blank {
   font-weight: 800;
   color: #fff;
 }
+#lisZh .lis-zh-tok { border-radius: .2em; transition: background-color .12s, color .12s; }
+#lisZh .lis-zh-tok.sq-karaoke-active {
+  color: #ffe2a0;
+  background: rgba(255, 196, 107, .22);
+  box-shadow: 0 0 18px rgba(255, 196, 107, .2);
+}
 #lisPy { font-family: var(--font-pinyin); font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); color: #8fd3ff; }
 #lisTh { font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); color: #9dff9d; }
 #lisSub { font-size: clamp(12px, 3.4vw, 15px); color: #8b95c9; min-height: 1.2em; }
