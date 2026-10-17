@@ -79,6 +79,11 @@
       <div class="card-title">เกมเรียงประโยค</div>
       <div class="card-desc">อ่านคำแปลไทย แล้วแตะเรียงชิ้นคำจีนให้เป็นประโยคที่ถูกต้อง</div>
     </button>
+    <button class="card" data-mode="sentencequiz">
+      <div class="card-icon">💬</div>
+      <div class="card-title">เกมทายประโยค</div>
+      <div class="card-desc">อ่านประโยคจีนหรือไทย แล้วเลือกคำแปลที่ถูกจาก 4 ตัวเลือก</div>
+    </button>
     <button class="card" data-mode="speak">
       <div class="card-icon">🎤🗣️</div>
       <div class="card-title">เกมฝึกพูด</div>
@@ -164,6 +169,14 @@
       <div class="level-select" id="ansSelect">
         <button class="ans-btn selected" data-ans="pinyin">🔤 เลือกพินอิน</button>
         <button class="ans-btn" data-ans="thai">🇹🇭 เลือกคำแปลไทย</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="sentQuizDirRow" style="display:none">
+      <span class="setup-label">โจทย์ที่ต้องการทาย</span>
+      <div class="level-select" id="sentQuizDirSelect">
+        <button class="sqd-btn selected" data-sqd="zh">🇨🇳 จีน → เลือกไทย</button>
+        <button class="sqd-btn" data-sqd="th">🇹🇭 ไทย → เลือกจีน</button>
       </div>
     </div>
 
@@ -302,6 +315,27 @@
   </div>
 
   <button id="quizNextBtn">คำถัดไป ▶</button>
+</div>
+
+<!-- SENTENCE TRANSLATION QUIZ SCREEN -->
+<div id="sentQuiz" class="screen">
+  <div class="qhud">
+    <div class="qhud-side"><div id="sentQuizScore">0</div><span id="sentQuizProg" class="prog-tag">0%</span></div>
+    <div class="quiz-btns">
+      <button id="sentQuizMuteBtn" class="icon-btn">🔊</button>
+      <button id="sentQuizQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="sentQuizLives">❤️❤️❤️</div>
+  <div id="sentQuizHint" class="sent-label">อ่านประโยคแล้วเลือกคำแปลที่ถูกต้อง</div>
+  <div id="sentQuizPrompt" lang="zh"></div>
+  <div id="sentQuizOptions">
+    <button class="sqopt"></button>
+    <button class="sqopt"></button>
+    <button class="sqopt"></button>
+    <button class="sqopt"></button>
+  </div>
+  <button id="sentQuizNextBtn">ประโยคถัดไป ▶</button>
 </div>
 
 <!-- SENTENCE ORDERING GAME SCREEN -->

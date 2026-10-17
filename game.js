@@ -26,6 +26,8 @@ let quizLivesOn = true;     // พลังชีวิต: 3 ชีวิต �
 let autoNext = true;        // เปลี่ยนคำถัดไปอัตโนมัติเมื่อตอบถูก
 let quiz = null;
 let sent = null;            // sentence-ordering game state
+let sentQuiz = null;        // sentence translation multiple-choice quiz state
+let sentQuizDirection = localStorage.getItem("cr_sentence_quiz_direction") === "th" ? "th" : "zh"; // 'zh' = Chinese prompt, 'th' = Thai prompt
 let fill = null;            // fill-in-the-blank game state
 let zb = null;              // zombie shooter game state
 let lis = null;             // listening practice state
@@ -59,6 +61,7 @@ let currentCategory = localStorage.getItem("cr_vocab_category") || "hsk";
 const IT_SUB_MAP = {
   hardware: "硬件设备",
   system: "系统与安装",
+  software: "常用软件",
   trouble: "故障与问题",
   repair: "维修与工具",
   network: "网络与运维"
@@ -153,9 +156,10 @@ const CATEGORIES = {
     badge: "💻 IT & Computer",
     levelLabel: "หมวดย่อยไอที",
     levels: [
-      { id: "all", label: "🌐 ทั้งหมด (268 คำ)" },
+      { id: "all", label: "🌐 ทั้งหมด (293 คำ)" },
       { id: "hardware", label: "🖥️ ฮาร์ดแวร์ (66 คำ)" },
       { id: "system", label: "💿 ลง Windows (59 คำ)" },
+      { id: "software", label: "🪟 ซอฟต์แวร์ใช้งานบ่อย (25 คำ)" },
       { id: "trouble", label: "⚠️ อาการเสีย (47 คำ)" },
       { id: "repair", label: "🔧 ซ่อม & เครื่องมือ (47 คำ)" },
       { id: "network", label: "🌐 เครือข่าย (49 คำ)" }
@@ -756,6 +760,7 @@ const _ZOM = { wave: "sawtooth", bassWave: "sawtooth", melVol: 0.045, bassVol: 0
 const _MAT = { wave: "sine", bassWave: "sine", melVol: 0.05, bassVol: 0.06, kickVol: 0.1, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.05, pad: 0.032, arp: 0.028, detune: 5, base: 0.35 };
 const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09, kickVol: 0.24, mul: 1, kickEvery: 2, snare: true, hats: true, swing: 0.04, pad: 0.032, arp: 0.034, detune: 8, base: 0.5 };
 const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.08, pad: 0.034, arp: 0.026, detune: 4, base: 0.3 };
+const _SQUIZ = { wave: "sine", bassWave: "sine", melVol: 0.03, bassVol: 0.035, kickVol: 0.05, mul: 0.82, kickEvery: 0, snare: false, hats: false, swing: 0.1, pad: 0.026, arp: 0.014, detune: 2, base: 0.16 };
 const MUSIC_THEMES = {
   meteor: [
     { ..._MET, bpm: 122,
@@ -821,7 +826,29 @@ const MUSIC_THEMES = {
     { ..._SEN, bpm: 104, bassWave: "sawtooth",
       melody: [0, null, 5, null, 7, null, 10, null, 12, null, 10, null, 7, null, 5, null,
                0, null, 5, null, 7, null, 10, null, 7, 5, 3, 2, 0, null, null, null],
-      roots: [0, -5, -3, -5, 0, -5, -4, -2] },
+       roots: [0, -5, -3, -5, 0, -5, -4, -2] },
+  ],
+  sentencequiz: [
+    { ..._SQUIZ, bpm: 72,
+      melody: [0, null, 4, null, 7, null, null, 4, 5, null, 9, null, 7, null, 4, null,
+               0, null, 4, null, 7, null, 9, null, 7, null, 4, null, 2, null, null, null],
+      roots: [0, -5, -7, -5, 0, -5, -2, -5] },
+    { ..._SQUIZ, bpm: 76, wave: "triangle", mul: 0.76,
+      melody: [7, null, null, 4, null, 2, null, null, 5, null, null, 2, null, 0, null, null,
+               4, null, 7, null, 9, null, 7, null, 5, null, 4, null, 2, null, null, null],
+      roots: [-2, -7, -5, -7, -2, -7, -4, -7] },
+    { ..._SQUIZ, bpm: 70, melVol: 0.026, pad: 0.03,
+      melody: [0, null, null, 5, null, null, 7, null, 9, null, 7, null, 5, null, null, null,
+               4, null, null, 7, null, 9, null, 12, null, 9, null, 7, 4, null, null, null],
+      roots: [0, -3, -5, -3, 0, -3, -7, -5] },
+    { ..._SQUIZ, bpm: 78, swing: 0.06, mul: 0.72,
+      melody: [5, null, 7, null, 9, null, null, 7, 4, null, null, 2, null, 4, null, null,
+               5, null, 7, null, 9, null, 12, null, 9, null, 7, null, 5, null, null, null],
+      roots: [-5, -2, -7, -2, -5, -2, 0, -2] },
+    { ..._SQUIZ, bpm: 74, wave: "triangle", melVol: 0.027, bassVol: 0.03,
+      melody: [0, null, 3, null, 7, null, null, 5, 3, null, null, 0, null, 2, null, null,
+               0, null, 3, null, 5, null, 7, null, 10, null, 7, null, 5, null, 3, null],
+      roots: [0, -4, -5, -4, 0, -4, -2, -5] },
   ],
   trace: [
     { ..._TRA, bpm: 96,
@@ -1392,7 +1419,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("trace"), $("setup")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sentQuiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("copy"), $("trace"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
   // เลเยอร์ FX ของโหมดระเบิดเป็น fixed เต็มจอ — ซ่อนไว้เสมอถ้าไม่ได้อยู่หน้าเกมระเบิด
   const bombFxEl = $("bombFx");
@@ -1549,6 +1576,161 @@ function quizGameOver() {
 
 qoptBtns.forEach((b, i) => b.addEventListener("pointerdown", (e) => { e.preventDefault(); answerQuiz(i); }));
 
+/* ================= Sentence translation quiz mode (เกมทายประโยค) ================= */
+const sentQuizBtns = Array.from(document.querySelectorAll(".sqopt"));
+
+function sentenceQuizAnswerText(s, direction = sentQuizDirection) {
+  return direction === "zh" ? (s[2] || "").trim() : (s[0] || "").trim().split(/[｜|]/)[0];
+}
+
+function allCategorySentences() {
+  if (currentCategory === "hsk") return SENT_OK ? Object.values(SENTENCES).flat() : [];
+  return getSentencePool("all");
+}
+
+function startSentenceQuiz(level) {
+  const list = getSentencePool(level).filter((s) => s && s[0] && s[2]);
+  if (!list.length) return;
+  currentLevel = level;
+  lastStarter = () => startSentenceQuiz(level);
+  const fallback = allCategorySentences().filter((s) => s && s[0] && s[2]);
+  const answers = new Set(list.map((s) => sentenceQuizAnswerText(s)).filter(Boolean));
+  const optionPool = answers.size >= 4 ? list : [...new Map([...list, ...fallback].map((s) => [sentenceQuizAnswerText(s), s])).values()];
+  sentQuiz = {
+    lives: 3, score: 0, answered: false, nextTimer: null,
+    done: new Set(), deck: shuffle(list.slice()), current: null, options: [],
+    direction: sentQuizDirection, optionPool, lastZh: ""
+  };
+  stopSpeech();
+  music.start("sentencequiz");
+  switchScreen($("sentQuiz"));
+  updateSentenceQuizHUD();
+  nextSentenceQuizQuestion();
+}
+
+function updateSentenceQuizHUD() {
+  if (!sentQuiz) return;
+  $("sentQuizScore").textContent = sentQuiz.score;
+  $("sentQuizLives").textContent = quizLivesOn
+    ? "❤️".repeat(Math.max(0, sentQuiz.lives)) + "🖤".repeat(Math.max(0, 3 - sentQuiz.lives))
+    : "♾️ ไม่จำกัด";
+  $("sentQuizProg").textContent = progPct(sentQuiz.done.size, getSentencePool(currentLevel).length);
+}
+
+function nextSentenceQuizQuestion() {
+  if (!sentQuiz) return;
+  clearTimeout(sentQuiz.nextTimer);
+  sentQuiz.answered = false;
+  $("sentQuizNextBtn").classList.remove("show");
+  if (!sentQuiz.deck.length) {
+    sentQuiz.deck = shuffle(getSentencePool(currentLevel).filter((s) => s && s[0] && s[2]));
+    if (sentQuiz.deck.length > 1 && sentQuiz.deck[sentQuiz.deck.length - 1][0] === sentQuiz.lastZh) sentQuiz.deck.unshift(sentQuiz.deck.pop());
+  }
+  sentQuiz.current = sentQuiz.deck.pop();
+  if (!sentQuiz.current) return;
+  sentQuiz.lastZh = sentQuiz.current[0];
+
+  const direction = sentQuiz.direction;
+  const unique = new Map();
+  for (const s of sentQuiz.optionPool) {
+    const answer = sentenceQuizAnswerText(s, direction);
+    if (answer) unique.set(answer, s);
+  }
+  const correctText = sentenceQuizAnswerText(sentQuiz.current, direction);
+  unique.set(correctText, sentQuiz.current);
+  const distractors = shuffle([...unique.values()].filter((s) => sentenceQuizAnswerText(s, direction) !== correctText));
+  sentQuiz.options = shuffle([sentQuiz.current, ...distractors.slice(0, 3)]);
+  $("sentQuizPrompt").textContent = direction === "zh" ? sentQuiz.current[0].split(/[｜|]/)[0] : sentQuiz.current[2];
+  $("sentQuizPrompt").setAttribute("lang", direction === "zh" ? "zh" : "th");
+  $("sentQuizHint").textContent = direction === "zh" ? "อ่านข้อความจีน แล้วเลือกคำแปลภาษาไทย" : "อ่านข้อความไทย แล้วเลือกประโยคภาษาจีน";
+  sentQuizBtns.forEach((btn, i) => {
+    btn.className = "sqopt";
+    btn.disabled = false;
+    btn.textContent = sentQuiz.options[i] ? sentenceQuizAnswerText(sentQuiz.options[i], direction) : "";
+  });
+  speakSentencePrompt(sentQuiz.current, direction === "th" ? "th" : "zh");
+}
+
+function answerSentenceQuiz(i) {
+  if (!sentQuiz || sentQuiz.answered) return;
+  const option = sentQuiz.options[i], btn = sentQuizBtns[i];
+  if (!option || btn.disabled) return;
+  if (sentenceQuizAnswerText(option) === sentenceQuizAnswerText(sentQuiz.current)) {
+    sentQuiz.answered = true;
+    sentQuiz.score++;
+    sentQuiz.done.add(sentQuiz.current[0]);
+    btn.classList.add("correct");
+    sentQuizBtns.forEach((b, j) => {
+      b.disabled = true;
+      b.classList.add("reveal");
+      const optionSentence = sentQuiz.options[j];
+      if (!optionSentence) return;
+      const meaning = document.createElement("span");
+      meaning.className = "sqopt-sub";
+      meaning.textContent = sentQuiz.direction === "zh"
+        ? (optionSentence[0] || "").trim().split(/[｜|]/)[0]
+        : (optionSentence[2] || "").trim();
+      b.appendChild(meaning);
+    });
+    sfx.correct();
+    confettiBurst($("sentQuiz"), 24);
+    updateSentenceQuizHUD();
+    if (autoNext) {
+      const answeredQuiz = sentQuiz;
+      speakSentence(sentQuiz.current, false, () => {
+        if (sentQuiz !== answeredQuiz || !sentQuiz.answered) return;
+        sentQuiz.nextTimer = setTimeout(nextSentenceQuizQuestion, 400);
+      });
+    } else {
+      speakSentence(sentQuiz.current);
+      $("sentQuizNextBtn").classList.add("show");
+    }
+  } else {
+    btn.classList.add("wrong");
+    btn.disabled = true;
+    sfx.wrong();
+    if (quizLivesOn) {
+      sentQuiz.lives--;
+      updateSentenceQuizHUD();
+      if (sentQuiz.lives <= 0) sentenceQuizGameOver();
+    }
+  }
+}
+
+function sentenceQuizGameOver() {
+  clearTimeout(sentQuiz && sentQuiz.nextTimer);
+  const finalScore = sentQuiz ? sentQuiz.score : 0;
+  const direction = sentQuiz ? sentQuiz.direction : sentQuizDirection;
+  sentQuiz = null;
+  music.stop();
+  stopSpeech();
+  sfx.over();
+  showGameOver("💬 จบเกม!", finalScore,
+    `${levelDisplayName(currentLevel)} • ${direction === "zh" ? "จีน → ไทย" : "ไทย → จีน"}`,
+    `cr_best_${catPrefix()}${currentLevel}_sentencequiz_${direction}`);
+}
+
+sentQuizBtns.forEach((btn, i) => btn.addEventListener("pointerdown", (e) => { e.preventDefault(); answerSentenceQuiz(i); }));
+$("sentQuizNextBtn").addEventListener("click", () => {
+  sfx.click();
+  if (!sentQuiz) return;
+  $("sentQuizNextBtn").classList.remove("show");
+  nextSentenceQuizQuestion();
+});
+$("sentQuizMuteBtn").addEventListener("click", toggleMute);
+$("sentQuizQuitBtn").addEventListener("click", () => {
+  sfx.click();
+  if (sentQuiz) {
+    clearTimeout(sentQuiz.nextTimer);
+    saveBest(`cr_best_${catPrefix()}${currentLevel}_sentencequiz_${sentQuiz.direction}`, sentQuiz.score);
+  }
+  sentQuiz = null;
+  music.stop();
+  stopSpeech();
+  switchScreen(menuEl);
+  updateBestLine();
+});
+
 /* ================= Sentence ordering mode (เกมเรียงประโยค) ================= */
 function startSentGame(level) {
   const list = getSentencePool(level);
@@ -1668,10 +1850,20 @@ function sentRemove(i) {
 
 // เล่นเสียงประโยคจากไฟล์ audio/zh|th/<ประโยคจีน>.mp3 (edge-tts จาก tools/gen_sentence_audio.py)
 // ถ้าไม่มีไฟล์จะ fallback เป็น TTS อัตโนมัติผ่าน playWordAudio
-function speakSentence(s, withTh = false) {
+function speakSentence(s, withTh = false, onDone) {
   const zh = s[0].trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
-  playWordAudio(zh, [[zh, "zh-CN"], ...(withTh && th ? [[th, "th-TH"]] : [])]);
+  playWordAudio(zh, [[zh, "zh-CN"], ...(withTh && th ? [[th, "th-TH"]] : [])], onDone);
+}
+
+function speakSentencePrompt(s, language) {
+  const zh = (s[0] || "").trim().split(/[｜|]/)[0];
+  const th = (s[2] || "").trim();
+  if (language === "th" && th) {
+    wordAudio.play([{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }]);
+  } else if (zh) {
+    playWordAudio(zh, [[zh, "zh-CN"]]);
+  }
 }
 
 function showSentReveal(wrong) {
@@ -4434,7 +4626,7 @@ window.addEventListener("resize", renderBombFall);
 window.addEventListener("resize", bombFxResize);
 
 let selectedLevel = null;
-const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต", vocab: "📖 เกมคำศัพท์", sentence: "🧩 เกมเรียงประโยค", zombie: "🧟 เกมยิงซอมบี้", fillblank: "✏️ เกมเติมคำในประโยค" };
+const MODE_TITLES = { meteor: "☄️ เกมยิงอุกกาบาต", vocab: "📖 เกมคำศัพท์", sentence: "🧩 เกมเรียงประโยค", sentencequiz: "💬 เกมทายประโยค", zombie: "🧟 เกมยิงซอมบี้", fillblank: "✏️ เกมเติมคำในประโยค" };
 MODE_TITLES.matching = "เกมแฟลชการ์ดจับคู่";
 MODE_TITLES.bomb = "เกมเขียนปลดระเบิด";
 MODE_TITLES.dict = "📚 พจนานุกรมจีน";
@@ -4450,6 +4642,8 @@ const bestKey = () => gameMode === "bomb"
   ? `cr_best_${catPrefix()}${selectedLevel}_quiz_${quizMode}`
   : gameMode === "sentence"
     ? `cr_best_${catPrefix()}${selectedLevel}_sent`
+    : gameMode === "sentencequiz"
+      ? `cr_best_${catPrefix()}${selectedLevel}_sentencequiz_${sentQuizDirection}`
     : gameMode === "fillblank"
       ? `cr_best_${catPrefix()}${selectedLevel}_fill`
       : gameMode === "zombie"
@@ -4466,6 +4660,7 @@ const startLabel = () => {
   if (gameMode === "matching") return `เริ่ม ${lvl} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`;
   if (gameMode === "vocab") return `🚀 เริ่ม ${lvl} (${quizMode === "pinyin" ? "เลือกพินอิน" : "เลือกคำแปลไทย"}, Endless)`;
   if (gameMode === "sentence") return `🚀 เริ่ม ${lvl} (เกมเรียงประโยค, Endless)`;
+  if (gameMode === "sentencequiz") return `💬 เริ่ม ${lvl} (${sentQuizDirection === "zh" ? "จีน → ไทย" : "ไทย → จีน"}, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   if (gameMode === "fillblank") return `🚀 เริ่ม ${lvl} (เกมเติมคำในประโยค, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   if (gameMode === "zombie") return `🔫 เริ่ม ${lvl} (${DIFF[difficulty].label}, ${zDurLabel()})`;
   if (gameMode === "speak") return `🎤 เริ่มฝึกพูด ${lvl} (${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
@@ -4494,7 +4689,7 @@ function updateStartBtn() {
     : currentCategory === "media"
     ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
     : (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0);
-  const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak")
+  const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;
   $("startBtn").textContent = noSent
@@ -8025,7 +8220,7 @@ $("cards").addEventListener("click", (e) => {
     : currentCategory === "media"
     ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
     : (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0);
-  if ((gameMode === "sentence" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
+  if ((gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
     $("startBtn").disabled = true;
@@ -8038,6 +8233,7 @@ $("cards").addEventListener("click", (e) => {
   $("diffRow").style.display = arcade || isMatching || gameMode === "bomb" ? "" : "none";
   $("timeRow").style.display = gameMode === "zombie" || isMatching ? "" : "none";
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
+  $("sentQuizDirRow").style.display = gameMode === "sentencequiz" ? "" : "none";
   $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
@@ -8098,6 +8294,18 @@ $("ansSelect").addEventListener("click", (e) => {
   updateStartBtn();
 });
 
+$("sentQuizDirSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".sqd-btn");
+  if (!btn) return;
+  sfx.click();
+  document.querySelectorAll(".sqd-btn").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  sentQuizDirection = btn.dataset.sqd === "th" ? "th" : "zh";
+  localStorage.setItem("cr_sentence_quiz_direction", sentQuizDirection);
+  updateStartBtn();
+});
+document.querySelectorAll(".sqd-btn").forEach((b) => b.classList.toggle("selected", b.dataset.sqd === sentQuizDirection));
+
 $("lifeSelect").addEventListener("click", (e) => {
   const btn = e.target.closest(".life-btn");
   if (!btn) return;
@@ -8105,6 +8313,7 @@ $("lifeSelect").addEventListener("click", (e) => {
   document.querySelectorAll(".life-btn").forEach((b) => b.classList.remove("selected"));
   btn.classList.add("selected");
   quizLivesOn = btn.dataset.life === "on";
+  updateStartBtn();
 });
 
 $("nextSelect").addEventListener("click", (e) => {
@@ -8190,6 +8399,7 @@ $("startBtn").addEventListener("click", () => {
   sfx.click();
   if (gameMode === "vocab") startQuizGame(selectedLevel);
   else if (gameMode === "sentence") startSentGame(selectedLevel);
+  else if (gameMode === "sentencequiz") startSentenceQuiz(selectedLevel);
   else if (gameMode === "fillblank") startFillGame(selectedLevel);
   else if (gameMode === "zombie") startZombieGame(selectedLevel);
   else if (gameMode === "matching") startMatchingGame(selectedLevel);

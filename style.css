@@ -265,7 +265,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -278,7 +278,7 @@ html, body {
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
               border-color var(--dur-fast), background var(--dur-fast);
 }
-.level-btn:active, .diff-btn:active, .ans-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
+.level-btn:active, .diff-btn:active, .ans-btn:active, .sqd-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
 .lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active { transform: translateY(1px) scale(.985); }
 .level-btn.selected {
   background: linear-gradient(180deg, var(--accent-warm-1), var(--accent-warm-2));
@@ -286,8 +286,8 @@ html, body {
   color: #fff;
   box-shadow: var(--sh-glow-warm), var(--hi-top);
 }
-.diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected {
+.diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected {
   background: linear-gradient(180deg, var(--accent-green-1), var(--accent-green-2));
   border-color: #8fffb0;
   color: #fff;
@@ -685,6 +685,81 @@ html, body {
 }
 #quizNextBtn.show { display: block; }
 #quizNextBtn:active { transform: scale(.96); }
+
+/* ---------- Sentence translation quiz ---------- */
+#sentQuiz {
+  background: radial-gradient(ellipse at 50% 0%, #16204d 0%, #05081e 65%);
+  justify-content: flex-start;
+  padding: calc(14px + env(safe-area-inset-top)) 12px calc(18px + env(safe-area-inset-bottom));
+  gap: 12px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+#sentQuiz > * { flex-shrink: 0; }
+#sentQuizLives { font-size: clamp(16px, 4.5vw, 24px); letter-spacing: 3px; }
+#sentQuizPrompt {
+  width: min(760px, 94vw);
+  min-height: 1.5em;
+  margin-top: 2px;
+  color: #fff;
+  font-size: clamp(25px, 7vw, 46px);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-shadow: 0 0 26px rgba(120, 140, 255, .5);
+}
+#sentQuizPrompt[lang="zh"] { font-family: var(--font-ui); }
+#sentQuizOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: min(760px, 94vw);
+}
+.sqopt {
+  min-width: 0;
+  min-height: clamp(82px, 14vh, 132px);
+  padding: 12px;
+  border: 2px solid #4a58c0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(42, 54, 116, .96), rgba(23, 32, 73, .96));
+  color: #fff;
+  font: 600 clamp(16px, 4.2vw, 24px)/1.5 var(--font-ui);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #1e2450, 0 8px 14px rgba(0,0,0,.5);
+  touch-action: manipulation;
+}
+.sqopt:active:not(:disabled) { transform: translateY(3px) scale(.98); box-shadow: 0 2px 0 #1e2450; }
+.sqopt.correct { border-color: #58ff88; background: linear-gradient(180deg, #1c5c34, #0f4020); }
+.sqopt.wrong { border-color: #ff3b3b; background: #561313; opacity: .58; }
+.sqopt:disabled { cursor: default; }
+.sqopt-sub {
+  display: block;
+  margin-top: 5px;
+  color: #a9ffbc;
+  font-size: clamp(13px, 3.5vw, 17px);
+  font-weight: 400;
+  line-height: 1.45;
+}
+.sqopt.wrong .sqopt-sub { color: #ffc1c1; }
+#sentQuizNextBtn {
+  display: none;
+  min-width: 210px;
+  margin-top: 2px;
+  padding: 14px 26px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffd23c, #ff7b1c);
+  color: #301400;
+  font-size: clamp(17px, 4.5vw, 22px);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 140, 0, .45);
+  touch-action: manipulation;
+}
+#sentQuizNextBtn.show { display: block; }
+#sentQuizNextBtn:active { transform: scale(.96); }
 
 /* ---------- Sentence ordering & fill-in-the-blank games ---------- */
 #sent, #fill {
@@ -2377,7 +2452,7 @@ button.fill-blank {
   #menu::before, #menu::after, #setup::before, #setup::after { animation: none !important; }
   .card { animation: none !important; }
   .screen.active { animation: none !important; }
-  .card, .level-btn, .diff-btn, .ans-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .tc-slot {
+  .card, .level-btn, .diff-btn, .ans-btn, .sqd-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .tc-slot {
     transition: none !important;
   }
 }
