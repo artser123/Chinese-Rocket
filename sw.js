@@ -1,7 +1,7 @@
 /* Chinese Rocket service worker — PWA offline support
    Strategy: precache the app shell, stale-while-revalidate for everything
    else cacheable (audio clips, whisper model, CDN libs, fonts). */
-const CACHE = "cr-v45";
+const CACHE = "cr-v47";
 
 const CORE = [
   "./",
@@ -30,6 +30,8 @@ const CORE = [
   "./data/sentences_media.js",
   "./data/vocab_business.js",
   "./data/sentences_business.js",
+  "./data/vocab_phone.js",
+  "./data/sentences_phone.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",

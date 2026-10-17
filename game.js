@@ -31,10 +31,12 @@ let sentQuizDirection = localStorage.getItem("cr_sentence_quiz_direction") === "
 let fill = null;            // fill-in-the-blank game state
 let zb = null;              // zombie shooter game state
 let lis = null;             // listening practice state
+const lisMediaAudio = new Audio(); // Native media playback can continue while the screen is locked
+lisMediaAudio.preload = "none";
+let lisMediaSeq = 0;
 let cp = null;              // sentence copying practice state
 let lisType = "word";       // 'word' | 'sent' — ฟังเป็นคำหรือประโยค
 let lisGap = 1.2;           // วินาที — ช่วงห่างก่อนเปลี่ยนคำ/ประโยคถัดไป
-let lisWakeLock = null;     // Screen Wake Lock กันจอดับตอนฟังระหว่างเดินทาง
 let zDuration = 120;        // เวลาเล่นเกมยิงซอมบี้ (วินาที), 0 = ไม่จำกัดเวลา
 const zDurLabel = () => zDuration ? `${zDuration} วิ` : "ไม่จำกัดเวลา";
 let lastStarter = null;
@@ -121,6 +123,14 @@ const BUSINESS_SUB_MAP = {
   finance: "财务投资与融资",
   marketing: "市场营销与销售",
   operations: "商务运营与人力"
+};
+
+const PHONE_SUB_MAP = {
+  device: "手机硬件与配件",
+  telecom: "通信网络与通话",
+  system: "系统设置与安全",
+  apps: "应用软件与社交",
+  daily: "移动生活与便民"
 };
 
 const CATEGORIES = {
@@ -411,6 +421,39 @@ const CATEGORIES = {
       const words = typeof VOCAB_BUSINESS !== "undefined" ? VOCAB_BUSINESS.filter((w) => w[3] === cat).map((w) => w[0]) : [];
       const filtered = SENTENCES_BUSINESS.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_BUSINESS;
+    }
+  },
+  phone: {
+    id: "phone",
+    name: "โทรศัพท์และสมาร์ตโฟน (Smartphones & Mobile Tech)",
+    icon: "📱",
+    badge: "📱 Phone",
+    levelLabel: "หมวดย่อยโทรศัพท์มือถือ",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (265 คำ)" },
+      { id: "device", label: "📱 ตัวเครื่อง ฮาร์ดแวร์ และอุปกรณ์เสริม (53 คำ)" },
+      { id: "telecom", label: "📶 เครือข่าย สัญญาณ และการโทร (53 คำ)" },
+      { id: "system", label: "⚙️ การตั้งค่าระบบและความปลอดภัย (53 คำ)" },
+      { id: "apps", label: "📲 แอปพลิเคชันและการสื่อสารโซเชียล (53 คำ)" },
+      { id: "daily", label: "💳 การใช้งานประจำวันและไลฟ์สไตล์มือถือ (53 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_PHONE === "undefined") return [];
+      if (!level || level === "all") return VOCAB_PHONE;
+      const cat = PHONE_SUB_MAP[level];
+      if (!cat) return VOCAB_PHONE;
+      const filtered = VOCAB_PHONE.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_PHONE;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_PHONE === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_PHONE;
+      const cat = PHONE_SUB_MAP[level];
+      if (!cat) return SENTENCES_PHONE;
+      const words = typeof VOCAB_PHONE !== "undefined" ? VOCAB_PHONE.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_PHONE.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_PHONE;
     }
   }
 };
@@ -731,13 +774,13 @@ function wordAudioKey(zh, pinyin) {
 }
 
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
-function speakWordHit(w) {
+function speakWordHit(w, onDone) {
   const zh = w[0].split(/[｜|]/)[0].trim();
   const audioKey = wordAudioKey(w[0], w[1]);
   const spokenZh = audioKey === "了-le" ? "le" : zh;
   const meaning = (w[2] || "").trim();
   playWordAudio(audioKey, [[spokenZh, "zh-CN"],
-    ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])]);
+    ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])], onDone);
 }
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
 
@@ -1532,7 +1575,6 @@ function answerQuiz(i) {
     btn.classList.add("correct");
     sfx.hit();
     confettiBurst(quizEl, 22);
-    speakWordHit(w);
     // reveal the complementary attribute on all 4 boxes so distractors are learned too
     quiz.options.forEach((o, j) => {
       const b = qoptBtns[j];
@@ -1542,8 +1584,13 @@ function answerQuiz(i) {
     });
     updateQuizHUD();
     if (autoNext) {
-      quiz.nextTimer = setTimeout(() => { if (quiz) nextQuizQuestion(); }, 2000);
+      const answeredQuiz = quiz;
+      speakWordHit(w, () => {
+        if (quiz !== answeredQuiz || !quiz.answered) return;
+        quiz.nextTimer = setTimeout(nextQuizQuestion, 400);
+      });
     } else {
+      speakWordHit(w);
       $("quizNextBtn").classList.add("show");
     }
   } else {
@@ -4688,7 +4735,9 @@ function updateStartBtn() {
     ? (typeof SENTENCES_FOOD !== "undefined" && SENTENCES_FOOD.length > 0)
     : currentCategory === "media"
     ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
-    : (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0);
+    : currentCategory === "business"
+    ? (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0)
+    : (typeof SENTENCES_PHONE !== "undefined" && SENTENCES_PHONE.length > 0);
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;
@@ -4802,6 +4851,8 @@ function dictSearch(query) {
     vocabSources.push({ lvl: "MEDIA", badge: "📸 Media", words: VOCAB_MEDIA });
   } else if (currentCategory === "business" && typeof VOCAB_BUSINESS !== "undefined") {
     vocabSources.push({ lvl: "BUSINESS", badge: "💼 Business", words: VOCAB_BUSINESS });
+  } else if (currentCategory === "phone" && typeof VOCAB_PHONE !== "undefined") {
+    vocabSources.push({ lvl: "PHONE", badge: "📱 Phone", words: VOCAB_PHONE });
   }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
@@ -4829,6 +4880,9 @@ function dictSearch(query) {
   }
   if (currentCategory !== "business" && typeof VOCAB_BUSINESS !== "undefined") {
     vocabSources.push({ lvl: "BUSINESS", badge: "💼 Business", words: VOCAB_BUSINESS });
+  }
+  if (currentCategory !== "phone" && typeof VOCAB_PHONE !== "undefined") {
+    vocabSources.push({ lvl: "PHONE", badge: "📱 Phone", words: VOCAB_PHONE });
   }
 
   for (const src of vocabSources) {
@@ -4874,6 +4928,7 @@ function dictSearch(query) {
     if (lvl === "FOOD") return currentCategory === "food" ? 0 : 99;
     if (lvl === "MEDIA") return currentCategory === "media" ? 0 : 99;
     if (lvl === "BUSINESS") return currentCategory === "business" ? 0 : 99;
+    if (lvl === "PHONE") return currentCategory === "phone" ? 0 : 99;
     return Number(lvl === "7-9" ? 9 : lvl);
   };
   results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
@@ -5016,6 +5071,17 @@ function dictPinyinIndex() {
   }
   if (typeof VOCAB_BUSINESS !== "undefined") {
     for (const w of VOCAB_BUSINESS) {
+      const zh = w[0], py = w[1];
+      if (!zh || !py) continue;
+      if (!wordPy.has(zh)) wordPy.set(zh, py);
+      const syls = py.trim().split(/\s+/);
+      if (syls.length === zh.length) {
+        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
+      }
+    }
+  }
+  if (typeof VOCAB_PHONE !== "undefined") {
+    for (const w of VOCAB_PHONE) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -5413,6 +5479,16 @@ function dictFindExamples(zh, lvl) {
   // 1.12) SENTENCES_BUSINESS (Business category sentences)
   if (typeof SENTENCES_BUSINESS !== "undefined") {
     for (const s of SENTENCES_BUSINESS) {
+      const tokens = s[4] || [];
+      if (tokens.includes(zh) || s[0].includes(zh)) {
+        examples.push(s);
+        if (examples.length >= 3) return examples;
+      }
+    }
+  }
+  // 1.13) SENTENCES_PHONE (Phone category sentences)
+  if (typeof SENTENCES_PHONE !== "undefined") {
+    for (const s of SENTENCES_PHONE) {
       const tokens = s[4] || [];
       if (tokens.includes(zh) || s[0].includes(zh)) {
         examples.push(s);
@@ -6356,17 +6432,97 @@ function lisSource() {
   return lis.type === "sent" ? getSentencePool(lis.level) : getVocabPool(lis.level);
 }
 
-// ขอ Screen Wake Lock กันจอดับระหว่างฟัง (ปล่อยคืนตอนออกจากโหมด)
-async function lisRequestWake() {
+// Use a native <audio> element for this mode: Web Audio can be suspended when a
+// phone locks, while browser media playback can keep going and expose lock-screen controls.
+function lisSetMediaState(state) {
+  try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state; } catch (e) {}
+}
+function lisStopMedia() {
+  lisMediaSeq++;
+  lisMediaAudio.onended = null;
+  lisMediaAudio.onerror = null;
+  lisMediaAudio.pause();
+  lisMediaAudio.removeAttribute("src");
+  lisMediaAudio.load();
+  lisSetMediaState("paused");
+}
+function lisSetMediaMetadata(item) {
+  if (!("mediaSession" in navigator)) return;
   try {
-    if (navigator.wakeLock && (!lisWakeLock || lisWakeLock.released)) {
-      lisWakeLock = await navigator.wakeLock.request("screen");
+    if ("MediaMetadata" in window) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item[0],
+        artist: `Chinese Rocket · HSK ${lis.level}`,
+        album: lis.type === "sent" ? "ฟังประโยคภาษาจีน" : "ฟังคำศัพท์ภาษาจีน",
+      });
     }
   } catch (e) {}
 }
-function lisReleaseWake() {
-  try { if (lisWakeLock) lisWakeLock.release(); } catch (e) {}
-  lisWakeLock = null;
+function lisPlayMediaItems(items, onDone) {
+  lisStopMedia();
+  const token = lisMediaSeq;
+  stopSpeech(); // Cancel any previous TTS/Web Audio fallback.
+  let index = 0;
+  let failed = false;
+  const fallback = () => {
+    if (failed || lisMediaSeq !== token || !lis || !lis.playing) return;
+    failed = true;
+    lisMediaAudio.onended = null;
+    lisMediaAudio.onerror = null;
+    lisMediaAudio.pause();
+    lisMediaAudio.removeAttribute("src");
+    lisMediaAudio.load();
+    speakSeq(items.slice(index).map((item) => item.tts), onDone);
+  };
+  const playNext = () => {
+    if (lisMediaSeq !== token || !lis || !lis.playing) return;
+    if (index >= items.length) {
+      lisSetMediaState("playing");
+      if (onDone) onDone();
+      return;
+    }
+    const item = items[index];
+    lisMediaAudio.src = encodeURI(item.url);
+    lisMediaAudio.onended = () => {
+      if (lisMediaSeq !== token) return;
+      index++;
+      playNext();
+    };
+    lisMediaAudio.onerror = fallback;
+    lisMediaAudio.play().then(() => lisSetMediaState("playing")).catch(fallback);
+  };
+  playNext();
+}
+
+// Lock-screen / headset controls, where the browser supports the Media Session API.
+if ("mediaSession" in navigator) {
+  const mediaAction = (name, handler) => {
+    try { navigator.mediaSession.setActionHandler(name, handler); } catch (e) {}
+  };
+  mediaAction("play", () => {
+    if (!lis) return;
+    lis.playing = true;
+    clearTimeout(lis.timer);
+    lis.timer = null;
+    $("lisPlayBtn").textContent = "⏸ พัก";
+    lisPlayCurrent();
+  });
+  mediaAction("pause", () => {
+    if (!lis || !lis.playing) return;
+    lis.playing = false;
+    clearTimeout(lis.timer);
+    lisStopMedia();
+    stopSpeech();
+    $("lisPlayBtn").textContent = "▶ เล่นต่อ";
+    $("lisCard").classList.remove("playing");
+  });
+  mediaAction("nexttrack", () => {
+    if (!lis) return;
+    lis.playing = true;
+    $("lisPlayBtn").textContent = "⏸ พัก";
+    lisAdvance();
+  });
+  mediaAction("previoustrack", () => { if (lis) lisReplayBtnClick(); });
 }
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
@@ -6376,26 +6532,45 @@ function lisPlayCurrent() {
   const done = () => {
     if (!lis || !lis.playing) return;
     $("lisCard").classList.remove("playing");
-    lis.timer = setTimeout(() => { if (lis && lis.playing) lisAdvance(); }, lis.gap * 1000);
+    lis.timer = setTimeout(() => {
+      if (lis) lis.timer = null;
+      if (lis && lis.playing) lisAdvance();
+    }, lis.gap * 1000);
   };
   $("lisCard").classList.add("playing");
   if (lis.type === "sent") {
     const zh = it[0].trim().split(/[｜|]/)[0];
     const th = (it[2] || "").trim();
-    playWordAudio(zh, [[zh, "zh-CN"], ...(th ? [[th, "th-TH"]] : [])], done);
+    lisPlayMediaItems([
+      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"] },
+      ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"] }] : []),
+    ], done);
   } else {
     const zh = it[0].split(/[｜|]/)[0].trim();
     const m = (it[2] || "").trim();
     const key = wordAudioKey(it[0], it[1]); // 了 (คำช่วย le) ใช้ไฟล์ 了-le.mp3 ที่อ่านถูก
-    playWordAudio(key, [[key === "了-le" ? "le" : zh, "zh-CN"],
-      ...(m ? [[m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"]] : [])], done);
+    lisPlayMediaItems([
+      { url: `audio/zh/${key}.mp3`, tts: [key === "了-le" ? "le" : zh, "zh-CN"] },
+      ...(m ? [{ url: `audio/th/${key}.mp3`, tts: [m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"] }] : []),
+    ], done);
   }
+  lisSetMediaMetadata(it);
+}
+
+function lisReplayBtnClick() {
+  if (!lis) return;
+  clearTimeout(lis.timer);
+  lis.timer = null;
+  lis.playing = true;
+  $("lisPlayBtn").textContent = "⏸ พัก";
+  lisPlayCurrent();
 }
 
 // ดึงตัวถัดไปจากกองที่สับไว้ — ครบกองแล้วสับใหม่ (ตัวแรกรอบใหม่จะไม่ซ้ำตัวที่เพิ่งเล่น)
 function lisAdvance() {
   if (!lis) return;
   clearTimeout(lis.timer);
+  lis.timer = null;
   if (lis.pos >= lis.deck.length) {
     const lastZh = lis.current && lis.current[0];
     lis.deck = shuffle(lisSource().slice());
@@ -6416,7 +6591,7 @@ function lisAdvance() {
   $("lisSub").textContent = lis.type === "sent" && it[3] ? `📐 จุดไวยากรณ์: ${it[3]}` : "";
   $("lisCount").textContent = ++lis.played;
   $("lisStatus").textContent =
-    `สุ่มไม่ซ้ำ กองละ ${lis.deck.length} ${lis.type === "sent" ? "ประโยค" : "คำ"} • ห่าง ${lis.gap} วิ`;
+    `สุ่มไม่ซ้ำ กองละ ${lis.deck.length} ${lis.type === "sent" ? "ประโยค" : "คำ"} • ห่าง ${lis.gap} วิ • ล็อกจอ/สลับแอปเพื่อฟังต่อได้`;
   lisPlayCurrent();
   fitListenCard(); // วัดทันทีหลังใส่ข้อความ (ไม่รอเฟรมถัดไป จะได้ไม่เห็นตัวใหญ่แล้วหดให้เห็น)
   requestAnimationFrame(fitListenCard); // ย้ำอีกรอบเผื่อรอบแรกเลย์เอาต์/ฟอนต์ยังไม่นิ่ง
@@ -6448,6 +6623,7 @@ function startListenGame(level) {
           done: new Set(), total: 0 };
   lis.deck = shuffle(lisSource().slice());
   lis.total = lis.deck.length;
+  lisStopMedia();
   stopSpeech();
   music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
   switchScreen($("listen"));
@@ -6457,7 +6633,6 @@ function startListenGame(level) {
   $("lisPlayBtn").textContent = "⏸ พัก";
   $("lisCount").textContent = "0";
   $("lisProg").textContent = "0%";
-  lisRequestWake();
   lisAdvance();
 }
 
@@ -6467,21 +6642,19 @@ $("lisPlayBtn").addEventListener("click", () => {
   lis.playing = !lis.playing;
   $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
   if (lis.playing) {
-    lisRequestWake();
     lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
   } else {
     clearTimeout(lis.timer);
+    lis.timer = null;
     $("lisCard").classList.remove("playing");
+    lisStopMedia();
     stopSpeech();
   }
 });
 $("lisReplayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
-  clearTimeout(lis.timer);
-  lis.playing = true;
-  $("lisPlayBtn").textContent = "⏸ พัก";
-  lisPlayCurrent();
+  lisReplayBtnClick();
 });
 $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
@@ -6494,10 +6667,17 @@ $("lisMuteBtn").addEventListener("click", toggleMute);
 $("lisQuitBtn").addEventListener("click", () => {
   sfx.click();
   clearTimeout(lis && lis.timer);
+  if (lis) lis.timer = null;
+  lisStopMedia();
   lis = null;
   $("lisCard").classList.remove("playing");
   stopSpeech();
-  lisReleaseWake();
+  try {
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
+    }
+  } catch (e) {}
   switchScreen(menuEl);
 });
 
@@ -6751,6 +6931,17 @@ function cpWordIndex() {
   }
   if (typeof VOCAB_BUSINESS !== "undefined") {
     for (const w of VOCAB_BUSINESS) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || cpWordIdx.has(zh)) return;
+        cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+      });
+    }
+  }
+  if (typeof VOCAB_PHONE !== "undefined") {
+    for (const w of VOCAB_PHONE) {
       const variants = w[0].split(/[｜|]/).map((v) => v.trim());
       const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
       const th = (w[2] || "").trim();
@@ -8219,7 +8410,9 @@ $("cards").addEventListener("click", (e) => {
     ? (typeof SENTENCES_FOOD !== "undefined" && SENTENCES_FOOD.length > 0)
     : currentCategory === "media"
     ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
-    : (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0);
+    : currentCategory === "business"
+    ? (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0)
+    : (typeof SENTENCES_PHONE !== "undefined" && SENTENCES_PHONE.length > 0);
   if ((gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));
@@ -8468,11 +8661,9 @@ document.addEventListener("visibilitychange", () => {
     zb.paused = true;
     $("zPauseOverlay").classList.add("show");
   }
-  // โหมดฝึกฟังไม่หยุดตอนจอซ่อน (ฟังตอนเดินทาง) — กลับมาที่จอแล้วขอ wake lock ใหม่
-  // และเล่นคำปัจจุบันซ้ำ เผื่อเสียงค้างจาก AudioContext ที่ถูกระบบ suspend
+  // โหมดฝึกฟังใช้ native media playback; ไม่ขอ Wake Lock เพราะต้องการให้จอดับได้
   if (!document.hidden && lis) {
-    lisRequestWake();
-    if (lis.playing) { clearTimeout(lis.timer); lisPlayCurrent(); }
+    if (lis.playing && lisMediaAudio.paused && !lis.timer) lisPlayCurrent();
   }
 });
 
