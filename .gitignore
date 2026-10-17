@@ -15,8 +15,9 @@ review/
 # Windows artifact
 nul
 
-# Local TTS AB-test lab (separate folder, kept out of the repo)
+# Local TTS AB-test lab + audio backups (kept out of the repo)
 tts_lab/
+audio/th/Backup/
 
 # OS / Editor
 .DS_Store
