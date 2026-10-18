@@ -88,7 +88,7 @@ function startSpeakGame(level) {
   switchScreen($("speak"));
   updateSpkHUD();
   // ซ่อนปุ่มไมค์ถ้าไม่มีทั้ง Web Speech และ mic (Whisper)
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = window.CR_OFFLINE_APP ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   $("spkMicBtn").hidden = !SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   nextSpkQuestion();
 }
@@ -238,7 +238,7 @@ function spkGameOver() {
 }
 
 function spkStartMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = window.CR_OFFLINE_APP ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   const micBtn = $("spkMicBtn");
   if (spkRecognition) { spkRecognition.stop(); return; }
   if (spkWRecord) { spkStopMicWhisper(); return; }

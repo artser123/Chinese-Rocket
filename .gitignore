@@ -55,4 +55,8 @@ offline-android/
 
 tools/.openai_key
 
+# Personal MaoMi podcast transcripts/audio timing (copyrighted source text)
+data/podcasts.js
+podcast_cache/
+
 audio/zh/Backup/

@@ -110,6 +110,11 @@
       <div class="card-title">เกมฝึกฟัง</div>
       <div class="card-desc">ฟังคำศัพท์หรือประโยคจีน-ไทยวนไปเรื่อยๆ สุ่มไม่ซ้ำ เลือกจังหวะเปลี่ยนคำได้ เหมาะตอนเดินทาง</div>
     </button>
+    <button class="card" data-mode="podcast">
+      <div class="card-icon">🎙️📖</div>
+      <div class="card-title">ฟังพอดแคสต์จีน</div>
+      <div class="card-desc">ฟัง MaoMi Chinese พร้อม transcript พินอิน คำแปล และไฮไลท์คำตามเสียง</div>
+    </button>
     <button class="card" data-mode="copy">
       <div class="card-icon">✍️📜</div>
       <div class="card-title">เกมเขียนเป็นประโยค</div>
@@ -618,6 +623,60 @@
   </div>
 </div>
 
+<!-- PODCAST LISTENING MODE -->
+<div id="podcast" class="screen">
+  <header class="pod-header">
+    <div>
+      <div class="pod-brand">🎙️ MAOMI CHINESE</div>
+      <h2 id="podHeading">เลือกตอนพอดแคสต์</h2>
+    </div>
+    <button id="podQuitBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+  </header>
+  <section id="podEpisodes" class="pod-episodes" aria-label="รายการพอดแคสต์">
+    <label class="pod-search-wrap" for="podSearch">🔎
+      <input id="podSearch" type="search" placeholder="ค้นหาตอนหรือหัวข้อ..." autocomplete="off">
+    </label>
+    <p id="podListStatus" class="pod-list-status" role="status"></p>
+    <div id="podEpisodeList" class="pod-episode-list"></div>
+  </section>
+  <section id="podPlayer" class="pod-player" hidden>
+    <div class="pod-sticky-controls">
+      <button id="podBackBtn" class="pod-back" type="button">← เลือกตอนอื่น</button>
+      <div class="pod-transport">
+        <div class="pod-seek-row">
+          <span id="podCurrentTime">0:00</span>
+          <input id="podSeek" type="range" min="0" max="1000" value="0" aria-label="ตำแหน่งเสียง">
+          <span id="podDuration">0:00</span>
+        </div>
+        <div class="pod-player-buttons">
+          <button id="podRewindBtn" class="big-btn secondary" type="button">↶ 10 วิ</button>
+          <button id="podPlayBtn" class="lis-play" type="button">▶ เล่น</button>
+          <button id="podForwardBtn" class="big-btn secondary" type="button">10 วิ ↷</button>
+          <select id="podRate" aria-label="ความเร็วเสียง">
+            <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
+            <option value="1" selected>1×</option><option value="1.1">1.1×</option>
+            <option value="1.25">1.25×</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="pod-now-playing">
+      <div class="pod-ep-number" id="podEpisodeNumber"></div>
+      <h3 id="podTitle"></h3>
+      <p id="podEnglishTitle" class="pod-english-title"></p>
+      <p id="podMeta"></p>
+    </div>
+    <audio id="podAudio" preload="metadata" playsinline></audio>
+    <div class="pod-transcript-heading">
+      <span>📝 Transcript ภาษาจีน</span>
+      <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
+    </div>
+    <div id="podThaiNotice" class="pod-thai-notice" hidden>คำแปลไทยของตอนนี้ยังไม่ได้สร้าง — ตั้งค่า BING_TRANSLATE_KEY แล้วรัน tools/build_podcast_data.py อีกครั้ง</div>
+    <div id="podTranscript" class="pod-transcript" lang="zh-CN"></div>
+    <p id="podStatus" class="pod-status" role="status" aria-live="polite"></p>
+  </section>
+</div>
+
 <!-- SENTENCE COPYING PRACTICE SCREEN -->
 <div id="copy" class="screen">
   <div class="qhud">
@@ -797,6 +856,7 @@
 <script src="js/10-listen.js"></script>
 <script src="js/11-copy.js"></script>
 <script src="js/12-trace.js"></script>
+<script src="js/13-podcast.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

@@ -422,6 +422,10 @@ $("cards").addEventListener("click", (e) => {
     startDict();
     return;
   }
+  if (gameMode === "podcast") {
+    startPodcastGame();
+    return;
+  }
   const hasSentenceData = currentCategory === "hsk"
     ? SENT_OK
     : currentCategory === "it"
@@ -754,6 +758,7 @@ window.__handleAndroidBack = function () {
     dict: "dictQuitBtn",
     speak: "spkQuitBtn",
     listen: "lisQuitBtn",
+    podcast: "podQuitBtn",
     copy: "cpQuitBtn",
     trace: "tcQuitBtn",
   };
@@ -765,7 +770,7 @@ window.__handleAndroidBack = function () {
     updateBestLine();
   }
 
-  if (gameMode && gameMode !== "dict") {
+  if (gameMode && gameMode !== "dict" && gameMode !== "podcast") {
     switchScreen($("setup"));
     updateStartBtn();
   }

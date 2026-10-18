@@ -406,7 +406,10 @@ async function cpLoadCharData(chars) {
   await Promise.all([...new Set(chars)].map(async (char) => {
     if (bombCharData.has(char)) return;
     try {
-      const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+      const dataUrl = window.CR_OFFLINE_APP
+        ? `vendor3/hanzi-writer-data/${encodeURIComponent(char)}.json`
+        : `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`;
+      const res = await fetch(dataUrl);
       const data = res.ok ? await res.json() : null;
       bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
     } catch (e) { /* network error — leave uncached so the next try retries */ }

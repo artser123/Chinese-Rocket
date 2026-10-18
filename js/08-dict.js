@@ -11,7 +11,7 @@ let dictMicLang = localStorage.getItem("cr_dict_mic_lang") || "zh";
 const dictLangName = () => (dictMicLang === "th" ? "ภาษาไทย" : "ภาษาจีน");
 // เครื่องยนต์จดจำเสียง: auto = ลอง Google ก่อนแล้วตกไป Whisper / google = Web Speech เท่านั้น /
 // whisper = ข้าม Google เข้าโมเดลออฟไลน์ทันที (ใช้ในที่ที่บล็อก Google เช่นจีน ไม่ต้องรอ timeout)
-let dictMicEngine = localStorage.getItem("cr_dict_mic_engine") || "auto";
+let dictMicEngine = window.CR_OFFLINE_APP ? "whisper" : (localStorage.getItem("cr_dict_mic_engine") || "auto");
 const MIC_ENGINES = {
   auto:    { icon: "🔀", label: "อัตโนมัติ (Google → Whisper ออฟไลน์)" },
   google:  { icon: "🌐", label: "Google Speech (ต้องเข้าถึง Google ได้)" },
@@ -55,11 +55,11 @@ function startDict() {
   dictResults.innerHTML = '<p class="dict-placeholder">พิมพ์พินอิน ตัวจีน หรือภาษาไทยเพื่อค้นหา — กด 🎤 เพื่อพูด (เลือกภาษาได้ที่ปุ่มข้างๆ) หรือ ✍️ เพื่อเขียน</p>';
   dictWritePanel.hidden = true;
   // show mic button if speech recognition is available
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = window.CR_OFFLINE_APP ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   // show mic when Web Speech exists, or when mic capture is possible (Whisper fallback)
   $("dictMicBtn").hidden = !SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   $("dictMicLangBtn").hidden = $("dictMicBtn").hidden;
-  $("dictMicEngBtn").hidden = $("dictMicBtn").hidden;
+  $("dictMicEngBtn").hidden = window.CR_OFFLINE_APP || $("dictMicBtn").hidden;
   dictMicLangUi();
   dictMicEngUi();
   setTimeout(() => { dictInput.focus(); }, 100);
@@ -198,6 +198,7 @@ let dictTransSeq = 0; // stale-guard for the sentence translation card
 
 // free MyMemory translation API (no key needed; falls back to Bing link on failure)
 async function dictTranslate(text, langpair) {
+  if (window.CR_OFFLINE_APP) throw new Error("Offline app: online translation is unavailable");
   const url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=" + langpair;
   const res = await fetch(url);
   if (!res.ok) throw new Error("translate " + res.status);
@@ -565,7 +566,10 @@ async function dictToggleStrokes(entry, btn, zh) {
     await Promise.all([...new Set(st.chars)].map(async (char) => {
       if (bombCharData.has(char)) return;
       try {
-        const res = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`);
+        const dataUrl = window.CR_OFFLINE_APP
+          ? `vendor3/hanzi-writer-data/${encodeURIComponent(char)}.json`
+          : `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`;
+        const res = await fetch(dataUrl);
         const data = res.ok ? await res.json() : null;
         bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
       } catch (e) { /* network error — leave uncached so the next open retries */ }
@@ -752,7 +756,7 @@ function dictFindExamples(zh, lvl) {
 }
 
 function dictStartMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = window.CR_OFFLINE_APP ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   const micBtn = $("dictMicBtn");
   if (dictRecognition) { dictRecognition.stop(); return; }
   if (dictWRecord) { dictStopMicWhisper(); return; }
@@ -990,11 +994,13 @@ function loadDictLookup() {
   if (dictLookupPromise) return dictLookupPromise;
   dictLookupPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/hanzilookup.min.js";
+    script.src = window.CR_OFFLINE_APP
+      ? "vendor3/hanzilookup.min.js"
+      : "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/hanzilookup.min.js";
     script.onload = () => {
       if (!window.HanziLookup) { reject(new Error("HanziLookup not loaded")); return; }
       window.HanziLookup.init("mmah",
-        "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/mmah.json",
+        window.CR_OFFLINE_APP ? "vendor3/mmah.json" : "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/dist/mmah.json",
         (ok) => { ok ? (dictLookupReady = true, resolve()) : reject(new Error("mmah data failed")) });
     };
     script.onerror = () => reject(new Error("hanzilookup.min.js failed to load"));
@@ -1084,6 +1090,7 @@ function dictClearCanvas() {
 // matcher (same engine as Google's handwriting keyboard, tolerant of
 // stroke-order slips). Requires internet; HanziLookup below is the fallback.
 async function dictRecognizeGoogle() {
+  if (window.CR_OFFLINE_APP) return [];
   const ink = dictStrokes.map((s) => [s.map((p) => p[0]), s.map((p) => p[1]), s.map((p) => Math.round(p[2]))]);
   const body = {
     input_type: 0,

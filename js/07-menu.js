@@ -649,9 +649,13 @@ function loadBombLibrary() {
       reject(new Error("โหลดระบบตรวจลายมือไม่สำเร็จ"));
     };
     const timer = setTimeout(fail, 15000);
-    script.src = "https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js";
-    script.integrity = "sha384-xd6VpwMU5AxPFzG/nyhXrW70SSR2usiUNV8RrA0wlOjYlCrZyzZC6JiR/mT51pm2";
-    script.crossOrigin = "anonymous";
+    script.src = window.CR_OFFLINE_APP
+      ? "vendor3/hanzi-writer.min.js"
+      : "https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js";
+    if (!window.CR_OFFLINE_APP) {
+      script.integrity = "sha384-xd6VpwMU5AxPFzG/nyhXrW70SSR2usiUNV8RrA0wlOjYlCrZyzZC6JiR/mT51pm2";
+      script.crossOrigin = "anonymous";
+    }
     script.onload = () => { clearTimeout(timer); window.HanziWriter ? resolve() : fail(); };
     script.onerror = fail;
     document.head.appendChild(script);
@@ -759,7 +763,10 @@ async function prepareBombWord() {
   try {
     await Promise.all([loadBombLibrary(), ...[...new Set(s.chars)].map(async (char) => {
       if (bombCharData.has(char)) return;
-      const response = await fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`, { signal: controller.signal });
+      const dataUrl = window.CR_OFFLINE_APP
+        ? `vendor3/hanzi-writer-data/${encodeURIComponent(char)}.json`
+        : `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`;
+      const response = await fetch(dataUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("ไม่พบข้อมูลเส้นอักษร");
       const data = await response.json();
       if (!data.strokes?.length || data.strokes.length !== data.medians?.length) throw new Error("ข้อมูลเส้นอักษรไม่สมบูรณ์");
@@ -1110,6 +1117,7 @@ MODE_TITLES.speak = "🎤 เกมฝึกพูด";
 MODE_TITLES.listen = "🎧 เกมฝึกฟัง";
 MODE_TITLES.copy = "✍️ เกมเขียนเป็นประโยค";
 MODE_TITLES.trace = "✍️ เกมคัดลายมือ";
+MODE_TITLES.podcast = "🎙️ ฟังพอดแคสต์จีน";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
