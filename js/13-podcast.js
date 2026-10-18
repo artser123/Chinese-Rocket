@@ -9,6 +9,14 @@ let podSeeking = false;
 let podThaiVisible = true;
 let podDataPromise = null;
 
+// Transcript text zoom (A-/A+ buttons). 1 = the CSS default, persisted so a
+// chosen size survives episodes and app restarts.
+const POD_FS_KEY = "cr_pod_font_scale";
+const POD_FS_MIN = 0.8;
+const POD_FS_MAX = 1.8;
+const POD_FS_STEP = 0.1;
+let podFontScale = podLoadFontScale();
+
 // The podcast dataset contains copyrighted transcript text. Keep it out of the
 // public web build; the private offline APK loads its bundled copy on demand.
 const podCard = document.querySelector('.card[data-mode="podcast"]');
@@ -28,6 +36,43 @@ function podLoadData() {
     document.head.appendChild(script);
   });
   return podDataPromise;
+}
+
+// ---- transcript text size (A-/A+) --------------------------------------
+function podClampFontScale(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(POD_FS_MAX, Math.max(POD_FS_MIN, Math.round(n * 10) / 10));
+}
+
+function podLoadFontScale() {
+  try {
+    const raw = localStorage.getItem(POD_FS_KEY);
+    return raw === null || raw === "" ? 1 : podClampFontScale(raw);
+  } catch (err) {
+    return 1;
+  }
+}
+
+function podApplyFontScale() {
+  const root = $("podcast");
+  if (root) root.style.setProperty("--pod-fs", String(podFontScale));
+  const label = $("podFontLabel");
+  if (label) label.textContent = `${Math.round(podFontScale * 100)}%`;
+  const minus = $("podFontMinus");
+  const plus = $("podFontPlus");
+  if (minus) minus.disabled = podFontScale <= POD_FS_MIN + 0.001;
+  if (plus) plus.disabled = podFontScale >= POD_FS_MAX - 0.001;
+}
+
+function podSetFontScale(next) {
+  podFontScale = podClampFontScale(next);
+  try {
+    localStorage.setItem(POD_FS_KEY, String(podFontScale));
+  } catch (err) {
+    /* storage unavailable (private mode): keep the in-memory value */
+  }
+  podApplyFontScale();
 }
 
 function podFormatTime(seconds) {
@@ -394,6 +439,15 @@ $("podSeek").addEventListener("change", (event) => {
   podUpdateHighlight();
 });
 window.addEventListener("pointerup", () => { podSeeking = false; });
+$("podFontMinus").addEventListener("click", () => {
+  sfx.click();
+  podSetFontScale(podFontScale - POD_FS_STEP);
+});
+$("podFontPlus").addEventListener("click", () => {
+  sfx.click();
+  podSetFontScale(podFontScale + POD_FS_STEP);
+});
+podApplyFontScale();
 $("podThaiToggle").addEventListener("click", () => {
   if ($("podThaiToggle").disabled) return;
   podThaiVisible = !podThaiVisible;

@@ -668,8 +668,15 @@
     </div>
     <audio id="podAudio" preload="metadata" playsinline></audio>
     <div class="pod-transcript-heading">
-      <span>📝 Transcript ภาษาจีน</span>
-      <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
+      <span class="pod-transcript-label">📝 Transcript ภาษาจีน</span>
+      <div class="pod-heading-actions">
+        <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทถอดเสียง">
+          <button id="podFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
+          <span id="podFontLabel" class="pod-font-label" aria-live="polite">100%</span>
+          <button id="podFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
+        </div>
+        <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
+      </div>
     </div>
     <div id="podThaiNotice" class="pod-thai-notice" hidden>คำแปลไทยของตอนนี้ยังไม่ได้สร้าง — ตั้งค่า BING_TRANSLATE_KEY แล้วรัน tools/build_podcast_data.py อีกครั้ง</div>
     <div id="podTranscript" class="pod-transcript" lang="zh-CN"></div>

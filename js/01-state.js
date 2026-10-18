@@ -269,6 +269,7 @@ const CATEGORIES = {
       const cat = FACTORY_SUB_MAP[level];
       if (!cat) return SENTENCES_FACTORY;
       const words = typeof VOCAB_FACTORY !== "undefined" ? VOCAB_FACTORY.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_FACTORY.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_FACTORY;
     }
   },
