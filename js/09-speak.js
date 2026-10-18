@@ -5,6 +5,113 @@
 let spk = null;
 let spkRecognition = null;
 let spkWRecord = null;
+let spkNativeActive = false;
+let spkNativeRequestId = null;
+let spkNativeSeq = 0;
+let spkNativeListenersReady = null;
+
+function spkNativePlugin() {
+  return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeSpeech;
+}
+
+function spkEnsureNativeListeners() {
+  const native = spkNativePlugin();
+  if (!native) return Promise.resolve(false);
+  if (!spkNativeListenersReady) {
+    spkNativeListenersReady = Promise.all([
+      native.addListener("partial", ({ requestId, text }) => {
+        if (!spk || requestId !== spkNativeRequestId || !text) return;
+        const heard = $("spkHeard");
+        heard.classList.add("listening");
+        heard.innerHTML = '<div class="heard-label">กำลังฟัง…</div><div></div>';
+        heard.lastChild.textContent = text;
+      }),
+      native.addListener("result", ({ requestId, text }) => {
+        if (!spk || requestId !== spkNativeRequestId) return;
+        spkNativeRequestId = null;
+        spkNativeActive = false;
+        $("spkMicBtn").classList.remove("listening");
+        $("spkHeard").classList.remove("listening");
+        if (text) spkEvaluate(text);
+        else {
+          spkSetStatus("🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูดภาษาจีนอีกครั้ง");
+          spkRearm();
+        }
+      }),
+      native.addListener("error", ({ requestId, code }) => {
+        if (!spk || requestId !== spkNativeRequestId) return;
+        spkNativeRequestId = null;
+        spkNativeActive = false;
+        $("spkMicBtn").classList.remove("listening");
+        $("spkHeard").classList.remove("listening");
+        if (code === "NO_MATCH" || code === "NO_SPEECH") {
+          spkSetStatus("🤔 ไม่ได้ยินเสียงพูด ลองพูดอีกครั้ง");
+          spkRearm();
+        } else if (code === "CANCELLED") {
+          spkSetStatus("ยกเลิกการรู้จำเสียงแล้ว — กด 🎤 เมื่อต้องการลองอีกครั้ง");
+          spkRearm();
+        } else if (code === "PERMISSION_DENIED") {
+          spkSetStatus("🚫 ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน");
+          spkRearm();
+        } else {
+          // Unsupported Chinese offline pack/service -> use the Whisper model bundled in the APK.
+          spkSetStatus("ระบบเสียงออฟไลน์ของ Android ใช้ไม่ได้ — กำลังเปลี่ยนไปใช้ Whisper ในแอป…");
+          spkStartMicWhisper();
+        }
+      }),
+    ]).then(() => true).catch(() => false);
+  }
+  return spkNativeListenersReady;
+}
+
+async function spkStartMicNative() {
+  const native = spkNativePlugin();
+  if (!native) { spkStartMicWhisper(); return; }
+  const micBtn = $("spkMicBtn");
+  const requestId = String(++spkNativeSeq);
+  spkNativeRequestId = requestId;
+  spkNativeActive = true;
+  micBtn.classList.add("listening");
+  $("spkHeard").classList.add("listening");
+  $("spkHeard").innerHTML = '<div class="heard-label">🎤 กำลังฟังด้วยระบบเสียงออฟไลน์ของ Android…</div>';
+  spkSetStatus("กำลังใช้ระบบรู้จำเสียงออนไลน์ของ Android/Google — พูดประโยคได้เลย (เสียงจะถูกส่งไปถอดข้อความ)");
+  try {
+    if (!await spkEnsureNativeListeners()) throw new Error("native speech listener unavailable");
+    if (!spk || spkNativeRequestId !== requestId) return;
+    const availability = await native.isAvailable();
+    if (!spk || spkNativeRequestId !== requestId) return;
+    if (!availability || !availability.available) throw new Error("on-device recognition unavailable");
+    await native.startListening({ language: "zh-CN", requestId, online: true });
+    if (!spk || spkNativeRequestId !== requestId) native.cancelListening().catch(() => {});
+  } catch (error) {
+    if (spkNativeRequestId !== requestId) return;
+    spkNativeRequestId = null;
+    spkNativeActive = false;
+    micBtn.classList.remove("listening");
+    $("spkHeard").classList.remove("listening");
+    if (error && error.code === "PERMISSION_DENIED") {
+      spkSetStatus("🚫 ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน");
+      spkRearm();
+      return;
+    }
+    spkSetStatus("ระบบเสียงออฟไลน์ของ Android ใช้ไม่ได้ — กำลังเปลี่ยนไปใช้ Whisper ในแอป…");
+    spkStartMicWhisper();
+  }
+}
+
+function spkStopNativeMic() {
+  const native = spkNativePlugin();
+  if (!native || !spkNativeActive) return;
+  spkSetStatus("กำลังประมวลผลเสียง…");
+  native.stopListening().catch(() => {
+    if (spkNativeRequestId) {
+      spkNativeRequestId = null;
+      spkNativeActive = false;
+      $("spkMicBtn").classList.remove("listening");
+      spkStartMicWhisper();
+    }
+  });
+}
 
 // ตัวจีนตัวเต็ม -> ตัวย่อ (Whisper บางครั้งถอดเสียงเป็นตัวเต็ม)
 const TRAD2SIMP = {};
@@ -66,6 +173,10 @@ function spkSetStatus(t) { $("spkStatus").textContent = t; }
 
 // หยุดการจดจำเสียงทุกอย่างของโหมดนี้ (ใช้ตอนข้าม/ออก/ซ่อนหน้าจอ)
 function spkStopAll() {
+  const native = spkNativePlugin();
+  if (native && spkNativeRequestId) native.cancelListening().catch(() => {});
+  spkNativeRequestId = null;
+  spkNativeActive = false;
   if (spkRecognition) {
     const r = spkRecognition;
     r.onresult = r.onend = r.onerror = null;
@@ -90,6 +201,7 @@ function startSpeakGame(level) {
   // ซ่อนปุ่มไมค์ถ้าไม่มีทั้ง Web Speech และ mic (Whisper)
   const SR = window.CR_OFFLINE_APP ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   $("spkMicBtn").hidden = !SR && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if (window.CR_OFFLINE_APP) spkEnsureNativeListeners();
   nextSpkQuestion();
 }
 
@@ -242,6 +354,7 @@ function spkStartMic() {
   const micBtn = $("spkMicBtn");
   if (spkRecognition) { spkRecognition.stop(); return; }
   if (spkWRecord) { spkStopMicWhisper(); return; }
+  if (spkNativeActive) { spkStopNativeMic(); return; }
   if (!spk || !spk.current) return;
   // มีผลตัดสินค้างอยู่: ถูกแล้วกดพูด = ไปข้อถัดไป / ผิดแล้วกดพูด = ขอลองใหม่ทันที
   const card = $("spkCard");
@@ -257,6 +370,11 @@ function spkStartMic() {
     card.classList.remove("wrong");
     $("spkZh").textContent = spk.current[0];
     $("spkHeard").innerHTML = "";
+  }
+  // The APK uses Android's local recognition service first; browser/PWA behavior is unchanged.
+  if (window.CR_OFFLINE_APP) {
+    spkStartMicNative();
+    return;
   }
   if (!SR) {
     if (dictMicEngine === "google") {

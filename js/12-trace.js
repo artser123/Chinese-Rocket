@@ -688,7 +688,9 @@ $("menuBtn").addEventListener("click", () => { sfx.click(); switchScreen(menuEl)
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { pauseMatchingGame(); pauseBombGame(); cpHideWordPopup(); }
-  if (document.hidden && spk) spkStopAll();
+  // Android's Google recognition UI is a separate activity; don't invalidate
+  // its pending result when it temporarily hides the WebView.
+  if (document.hidden && spk && !spkNativeActive) spkStopAll();
   if (document.hidden && running && !paused) {
     paused = true;
     $("pauseOverlay").classList.add("show");

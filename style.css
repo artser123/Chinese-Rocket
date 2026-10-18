@@ -2604,6 +2604,11 @@ button.fill-blank {
 .pod-player-buttons { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 5px; }
 .pod-player-buttons .big-btn { min-width: 0; flex: 1; padding: 10px 7px; font-size: clamp(12px, 3.5vw, 15px); }
 .pod-player-buttons .lis-play { min-width: 86px; flex: 1.2; padding: 10px 8px; font-size: 16px; }
+.pod-voice-row { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
+.pod-voice-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.pod-voice-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
+.pod-voice-toggle[hidden] { display: none; }
+.pod-voice-hint { color: var(--fg-mute); font-size: 10px; line-height: 1.35; }
 #podRate { min-height: 42px; padding: 0 7px; border: 1px solid var(--line-1); border-radius: 10px; background: #171e45; color: var(--fg); font: inherit; font-size: 12px; }
 .pod-transcript-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--fg-dim); font-size: 13px; font-weight: 700; }
 .pod-transcript-label { min-width: 0; }

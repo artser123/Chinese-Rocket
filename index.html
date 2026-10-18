@@ -658,6 +658,10 @@
             <option value="1.25">1.25×</option>
           </select>
         </div>
+        <div class="pod-voice-row">
+          <button id="podVoiceToggle" class="pod-voice-toggle" type="button" aria-pressed="true" hidden>🇹🇭 เสียงแปล: เปิด</button>
+          <span id="podVoiceHint" class="pod-voice-hint">เสียงแปลไทยจะเล่นหลังจบแต่ละประโยค</span>
+        </div>
       </div>
     </div>
     <div class="pod-now-playing">
@@ -667,6 +671,7 @@
       <p id="podMeta"></p>
     </div>
     <audio id="podAudio" preload="metadata" playsinline></audio>
+    <audio id="podThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
     <div class="pod-transcript-heading">
       <span class="pod-transcript-label">📝 Transcript ภาษาจีน</span>
       <div class="pod-heading-actions">
