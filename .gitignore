@@ -8,6 +8,7 @@ tools/
 gen_audio.py
 gen_sentence_audio_extra.py
 gen_vocab_audio.py
+serve.py
 
 # ไฟล์ตรวจ/แก้คำแปลชั่วคราว (รายงานผลตรวจคำศัพท์ ไม่เกี่ยวกับตัวเว็บ)
 review/

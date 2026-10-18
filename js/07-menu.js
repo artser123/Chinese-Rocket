@@ -1174,7 +1174,9 @@ function updateStartBtn() {
     ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
     : currentCategory === "business"
     ? (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0)
-    : (typeof SENTENCES_PHONE !== "undefined" && SENTENCES_PHONE.length > 0);
+    : currentCategory === "phone"
+    ? (typeof SENTENCES_PHONE !== "undefined" && SENTENCES_PHONE.length > 0)
+    : (typeof SENTENCES_GYM !== "undefined" && SENTENCES_GYM.length > 0);
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
   $("startBtn").disabled = !selectedLevel || noSent;

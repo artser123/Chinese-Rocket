@@ -17,6 +17,7 @@ const POD_THAI_VOICE_KEY = "cr_pod_thai_voice";
 let podThaiVoiceEnabled = podLoadThaiVoiceEnabled();
 let podThaiVoicePlayback = null;
 let podThaiVoiceLastIndex = -1;
+let podSeekSequence = 0;
 
 // Transcript text zoom (A-/A+ buttons). 1 = the CSS default, persisted so a
 // chosen size survives episodes and app restarts.
@@ -134,6 +135,92 @@ function podResetThaiVoicePosition(time) {
   podcastState.intervals.forEach((interval, index) => {
     if (interval && interval.end <= time) podThaiVoiceLastIndex = index;
   });
+}
+
+// Wait until the media element has completed a seek before resuming playback.
+// Calling play() immediately after setting currentTime can make some WebViews
+// start from 0 while the requested seek is still pending.
+function podSeekAudio(target, resumeAfterSeek = false) {
+  const audio = $("podAudio");
+  if (audio.readyState < 1 && audio.src) {
+    // Media metadata (duration/currentTime) is not known yet, so a seek would
+    // be dropped. Retry once the browser has loaded the media header.
+    const onMetadata = () => {
+      audio.removeEventListener("loadedmetadata", onMetadata);
+      podSeekAudio(target, resumeAfterSeek);
+    };
+    audio.addEventListener("loadedmetadata", onMetadata);
+    return;
+  }
+  const duration = audio.duration;
+  const requested = Number(target);
+  const maxTime = Number.isFinite(duration) ? duration : Math.max(0, requested || 0);
+  const time = Math.min(maxTime, Math.max(0, requested || 0));
+
+  // Some sources cannot be seeked at all — the browser then reports a seekable
+  // range of [0, 0] (e.g. a server that ignores HTTP Range requests). Assigning
+  // currentTime is silently dropped in that case and playback would just restart
+  // from 0:00, so refuse the jump and say why instead of faking it.
+  const ranges = audio.seekable;
+  if (ranges && ranges.length && audio.readyState >= 2 &&
+      ranges.end(ranges.length - 1) - ranges.start(0) < 1 && time > 1) {
+    podUpdateHighlight();
+    $("podStatus").textContent = "ไฟล์เสียงนี้เลื่อนไปยังประโยคที่เลือกไม่ได้ — ต้องเปิดผ่านเครื่องเล่นที่รองรับการเลื่อน";
+    return;
+  }
+
+  const episode = podcastState && podcastState.episode;
+  const sequence = ++podSeekSequence;
+  let timer = null;
+  let finished = false;
+
+  audio.pause();
+  if (!resumeAfterSeek) podWantPlay = false;
+
+  const cleanup = () => {
+    audio.removeEventListener("seeked", onSeeked);
+    if (timer !== null) clearTimeout(timer);
+  };
+  const finish = (timedOut = false) => {
+    if (finished) return;
+    if (sequence !== podSeekSequence) {
+      finished = true;
+      cleanup();
+      return;
+    }
+    if (audio.seeking && !timedOut) return;
+    if (Math.abs(audio.currentTime - time) > 1) {
+      if (!timedOut) return;
+      finished = true;
+      cleanup();
+      podWantPlay = false;
+      $("podStatus").textContent = "เลื่อนไปยังประโยคที่เลือกไม่ได้ — ลองแตะอีกครั้ง";
+      return;
+    }
+
+    finished = true;
+    cleanup();
+    podResetThaiVoicePosition(time);
+    podUpdateHighlight();
+    if (resumeAfterSeek && podcastState && podcastState.episode === episode &&
+        document.querySelector(".screen.active") === $("podcast")) {
+      podPlay();
+    }
+  };
+  const onSeeked = () => finish();
+
+  audio.addEventListener("seeked", onSeeked);
+  timer = setTimeout(() => finish(true), 3000);
+  try {
+    audio.currentTime = time;
+  } catch (error) {
+    finish(true);
+    return;
+  }
+  podResetThaiVoicePosition(time);
+  if (!audio.seeking && Math.abs(audio.currentTime - time) <= 0.05) {
+    queueMicrotask(() => finish());
+  }
 }
 
 function podInterruptThaiVoice() {
@@ -367,14 +454,12 @@ function podTranscript(ep) {
     para.addEventListener("click", (event) => {
       if (event.target.closest(".pod-word")) return;
       const start = Number(para.dataset.start);
-      const audio = $("podAudio");
-      if (Number.isFinite(start) && audio.duration) {
-        const resumeAfterVoice = podInterruptThaiVoice();
-        audio.currentTime = Math.min(start, audio.duration);
-        podResetThaiVoicePosition(audio.currentTime);
-        if (audio.paused) podPlay();
-        else if (resumeAfterVoice) podPlay();
-      }
+      if (para.dataset.start === "" || !Number.isFinite(start)) return;
+      podInterruptThaiVoice();
+      podWantPlay = true;
+      // podSeekAudio resumes playback only after the seek has completed, so the
+      // WebView can no longer restart the clip from 0 while the seek is pending.
+      podSeekAudio(start, true);
     });
     root.appendChild(para);
   }
@@ -388,6 +473,7 @@ function podTranscript(ep) {
 }
 
 function podSelectEpisode(ep) {
+  podSeekSequence++;
   podInterruptThaiVoice();
   podcastState = { episode: ep, intervals: podSentenceIntervals(ep) };
   podThaiVoiceLastIndex = -1;
@@ -418,6 +504,7 @@ function podSelectEpisode(ep) {
 }
 
 function podPlay() {
+  podSeekSequence++;
   podWantPlay = true;
   podInterruptThaiVoice();
   const audio = $("podAudio");
@@ -436,6 +523,7 @@ function podPlay() {
 }
 
 function podPause() {
+  podSeekSequence++;
   podWantPlay = false;
   podInterruptThaiVoice();
   const audio = $("podAudio");
@@ -517,6 +605,7 @@ function podBackToList() {
 }
 
 function quitPodcastGame() {
+  podSeekSequence++;
   podWantPlay = false;
   const audio = $("podAudio");
   audio.pause();
@@ -573,20 +662,16 @@ $("podPlayBtn").addEventListener("click", () => {
 $("podRewindBtn").addEventListener("click", () => {
   sfx.click();
   const audio = $("podAudio");
+  const resumeAfterSeek = !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
-  audio.currentTime = Math.max(0, audio.currentTime - 10);
-  podResetThaiVoicePosition(audio.currentTime);
-  podUpdateHighlight();
-  if (resumeAfterVoice) podPlay();
+  podSeekAudio(Math.max(0, audio.currentTime - 10), resumeAfterSeek || resumeAfterVoice);
 });
 $("podForwardBtn").addEventListener("click", () => {
   sfx.click();
   const audio = $("podAudio");
+  const resumeAfterSeek = !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
-  audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10);
-  podResetThaiVoicePosition(audio.currentTime);
-  podUpdateHighlight();
-  if (resumeAfterVoice) podPlay();
+  podSeekAudio(Math.min(audio.duration || Infinity, audio.currentTime + 10), resumeAfterSeek || resumeAfterVoice);
 });
 $("podRate").addEventListener("change", (event) => {
   $("podAudio").playbackRate = Number(event.target.value) || 1;
@@ -601,12 +686,12 @@ $("podSeek").addEventListener("input", (event) => {
 });
 $("podSeek").addEventListener("change", (event) => {
   const audio = $("podAudio");
+  const resumeAfterSeek = !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
-  if (Number.isFinite(audio.duration)) audio.currentTime = audio.duration * Number(event.target.value) / 1000;
-  podResetThaiVoicePosition(audio.currentTime);
   podSeeking = false;
-  podUpdateHighlight();
-  if (resumeAfterVoice) podPlay();
+  if (Number.isFinite(audio.duration)) {
+    podSeekAudio(audio.duration * Number(event.target.value) / 1000, resumeAfterSeek || resumeAfterVoice);
+  }
 });
 window.addEventListener("pointerup", () => { podSeeking = false; });
 $("podFontMinus").addEventListener("click", () => {
@@ -694,20 +779,16 @@ if ("mediaSession" in navigator) {
   podMediaAction("seekbackward", (details) => {
     if (!podcastState) return;
     const audio = $("podAudio");
+    const resumeAfterSeek = !audio.paused || podWantPlay;
     const resumeAfterVoice = podInterruptThaiVoice();
-    audio.currentTime = Math.max(0, audio.currentTime - (details && details.seekOffset ? details.seekOffset : 10));
-    podResetThaiVoicePosition(audio.currentTime);
-    podUpdateHighlight();
-    if (resumeAfterVoice || podWantPlay) podPlay();
+    podSeekAudio(Math.max(0, audio.currentTime - (details && details.seekOffset ? details.seekOffset : 10)), resumeAfterSeek || resumeAfterVoice);
   });
   podMediaAction("seekforward", (details) => {
     if (!podcastState) return;
     const audio = $("podAudio");
+    const resumeAfterSeek = !audio.paused || podWantPlay;
     const resumeAfterVoice = podInterruptThaiVoice();
-    audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + (details && details.seekOffset ? details.seekOffset : 10));
-    podResetThaiVoicePosition(audio.currentTime);
-    podUpdateHighlight();
-    if (resumeAfterVoice || podWantPlay) podPlay();
+    podSeekAudio(Math.min(audio.duration || Infinity, audio.currentTime + (details && details.seekOffset ? details.seekOffset : 10)), resumeAfterSeek || resumeAfterVoice);
   });
   podMediaAction("stop", () => {
     if (!podcastState) return;

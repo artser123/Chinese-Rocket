@@ -147,6 +147,14 @@ const PHONE_SUB_MAP = {
   daily: "移动生活与便民"
 };
 
+const GYM_SUB_MAP = {
+  equipment: "常用器械与力量设备",
+  exercises: "健身动作与训练",
+  muscles: "身体肌肉部位",
+  facilities: "健身房设施与服务",
+  nutrition_gear: "运动装备与营养补剂"
+};
+
 const CATEGORIES = {
   hsk: {
     id: "hsk",
@@ -469,6 +477,39 @@ const CATEGORIES = {
       const words = typeof VOCAB_PHONE !== "undefined" ? VOCAB_PHONE.filter((w) => w[3] === cat).map((w) => w[0]) : [];
       const filtered = SENTENCES_PHONE.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_PHONE;
+    }
+  },
+  gym: {
+    id: "gym",
+    name: "ฟิตเนส ยิม และเครื่องออกกำลังกาย (Gym & Fitness)",
+    icon: "🏋️",
+    badge: "🏋️ Gym & Fitness",
+    levelLabel: "หมวดย่อยฟิตเนส",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (170 คำ)" },
+      { id: "equipment", label: "🏋️ เครื่องออกกำลังกาย & อุปกรณ์ (38 คำ)" },
+      { id: "exercises", label: "🏃 ท่าออกกำลังกาย & การฝึก (39 คำ)" },
+      { id: "muscles", label: "💪 กล้ามเนื้อ & ร่างกาย (30 คำ)" },
+      { id: "facilities", label: "🏢 สิ่งอำนวยความสะดวก & บริการ (30 คำ)" },
+      { id: "nutrition_gear", label: "🥤 อุปกรณ์ & อาหารเสริม (33 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_GYM === "undefined") return [];
+      if (!level || level === "all") return VOCAB_GYM;
+      const cat = GYM_SUB_MAP[level];
+      if (!cat) return VOCAB_GYM;
+      const filtered = VOCAB_GYM.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_GYM;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_GYM === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_GYM;
+      const cat = GYM_SUB_MAP[level];
+      if (!cat) return SENTENCES_GYM;
+      const words = typeof VOCAB_GYM !== "undefined" ? VOCAB_GYM.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_GYM.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_GYM;
     }
   }
 };
