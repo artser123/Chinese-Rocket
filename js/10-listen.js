@@ -11,7 +11,12 @@ function lisSource() {
 function lisSetMediaState(state) {
   try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state; } catch (e) {}
 }
-function lisSetNativeBackgroundAudio(active) {
+// Shared by listen mode and podcast mode: a native foreground service + partial
+// wake lock keeps the WebView's JS running while the app is backgrounded or the
+// screen is off. Without it Android freezes the page and any JS-driven audio
+// handoff (e.g. the podcast pausing the source to play a Thai translation clip)
+// never resumes, so the audio dies on app switch / screen lock.
+function crSetNativeBackgroundAudio(active) {
   try {
     const native = window.ChineseRocketAndroid
       || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
@@ -163,7 +168,7 @@ if ("mediaSession" in navigator) {
   mediaAction("play", () => {
     if (!lis) return;
     lis.playing = true;
-    lisSetNativeBackgroundAudio(true);
+    crSetNativeBackgroundAudio(true);
     clearTimeout(lis.timer);
     lis.timer = null;
     $("lisPlayBtn").textContent = "⏸ พัก";
@@ -172,7 +177,7 @@ if ("mediaSession" in navigator) {
   mediaAction("pause", () => {
     if (!lis || !lis.playing) return;
     lis.playing = false;
-    lisSetNativeBackgroundAudio(false);
+    crSetNativeBackgroundAudio(false);
     clearTimeout(lis.timer);
     lisStopMedia();
     stopSpeech();
@@ -183,7 +188,7 @@ if ("mediaSession" in navigator) {
   mediaAction("nexttrack", () => {
     if (!lis) return;
     lis.playing = true;
-    lisSetNativeBackgroundAudio(true);
+    crSetNativeBackgroundAudio(true);
     $("lisPlayBtn").textContent = "⏸ พัก";
     lisAdvance();
   });
@@ -261,7 +266,7 @@ function lisReplayBtnClick() {
   clearTimeout(lis.timer);
   lis.timer = null;
   lis.playing = true;
-  lisSetNativeBackgroundAudio(true);
+  crSetNativeBackgroundAudio(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisPlayCurrent();
 }
@@ -324,7 +329,7 @@ function startListenGame(level) {
           done: new Set(), total: 0 };
   lis.deck = shuffle(lisSource().slice());
   lis.total = lis.deck.length;
-  lisSetNativeBackgroundAudio(false);
+  crSetNativeBackgroundAudio(false);
   lisStopMedia();
   stopSpeech();
   music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
@@ -335,7 +340,7 @@ function startListenGame(level) {
   $("lisPlayBtn").textContent = "⏸ พัก";
   $("lisCount").textContent = "0";
   $("lisProg").textContent = "0%";
-  lisSetNativeBackgroundAudio(true);
+  crSetNativeBackgroundAudio(true);
   lisAdvance();
 }
 
@@ -343,7 +348,7 @@ $("lisPlayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = !lis.playing;
-  lisSetNativeBackgroundAudio(lis.playing);
+  crSetNativeBackgroundAudio(lis.playing);
   $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
   if (lis.playing) {
     lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
@@ -365,7 +370,7 @@ $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = true;
-  lisSetNativeBackgroundAudio(true);
+  crSetNativeBackgroundAudio(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisAdvance();
 });
@@ -374,7 +379,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   sfx.click();
   clearTimeout(lis && lis.timer);
   if (lis) lis.timer = null;
-  lisSetNativeBackgroundAudio(false);
+  crSetNativeBackgroundAudio(false);
   lisStopMedia();
   if (lis && lis.current) clearListenKaraoke(lis.current);
   lis = null;

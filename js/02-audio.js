@@ -282,6 +282,13 @@ function speakWordHit(w, onDone) {
   playWordAudio(audioKey, [[spokenZh, "zh-CN"],
     ...(meaning ? [[meaning, /[\u0E00-\u0E7F]/.test(meaning) ? "th-TH" : "en-US"]] : [])], onDone);
 }
+// อ่านตัวอักษรจีนเดี่ยวๆ ด้วยไฟล์สำเร็จรูป audio/zh/<char>.mp3 (มี TTS สำรองให้อัตโนมัติ)
+// จำเป็นเพราะ Android WebView ไม่มี speechSynthesis เลย — speak() จะเงียบใน APK
+function speakChar(ch) {
+  const c = String(ch || "").trim();
+  if (!c) return;
+  wordAudio.play([{ url: `audio/zh/${c}.mp3`, tts: [c, "zh-CN"] }]);
+}
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
 
 /* ============== Background music (WebAudio synth + FX bus) ============== */

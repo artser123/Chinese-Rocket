@@ -18,6 +18,14 @@ let podThaiVoiceEnabled = podLoadThaiVoiceEnabled();
 let podThaiVoicePlayback = null;
 let podThaiVoiceLastIndex = -1;
 let podSeekSequence = 0;
+// One-shot status line shown after the next episode starts playing (podPlay()
+// writes its own generic message once the media actually begins).
+let podStatusNote = "";
+
+// Auto-advance through the episode list (wrapping around at the end). Off by
+// default so a single episode still stops when it finishes, as before.
+const POD_AUTO_NEXT_KEY = "cr_pod_auto_next";
+let podAutoNextEnabled = podLoadAutoNextEnabled();
 
 // Transcript text zoom (A-/A+ buttons). 1 = the CSS default, persisted so a
 // chosen size survives episodes and app restarts.
@@ -98,6 +106,70 @@ function podLoadThaiVoiceEnabled() {
 
 function podSaveThaiVoiceEnabled() {
   try { localStorage.setItem(POD_THAI_VOICE_KEY, podThaiVoiceEnabled ? "1" : "0"); } catch (err) {}
+}
+
+function podLoadAutoNextEnabled() {
+  try {
+    return localStorage.getItem(POD_AUTO_NEXT_KEY) === "1";
+  } catch (err) {
+    return false;
+  }
+}
+
+function podApplyAutoNextToggle() {
+  const button = $("podAutoNextBtn");
+  const hint = $("podAutoNextHint");
+  if (button) {
+    button.setAttribute("aria-pressed", String(podAutoNextEnabled));
+    button.title = podAutoNextEnabled
+      ? "เล่นตอนถัดไปอัตโนมัติ: เปิด (วนลูปทั้งหมด) — แตะเพื่อปิด"
+      : "เล่นตอนถัดไปอัตโนมัติ: ปิด — แตะเพื่อเปิด";
+  }
+  if (hint) hint.textContent = podAutoNextEnabled
+    ? "⏭ เล่นตอนถัดไปอัตโนมัติ: เปิด (วนลูป)"
+    : "⏭ เล่นตอนถัดไปอัตโนมัติ: ปิด";
+}
+
+// Episode order is the list order shown in the picker; wrapping at the end
+// restarts the whole set from the first episode.
+function podEpisodeIndex(ep) {
+  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
+  if (!ep) return -1;
+  return list.findIndex((item) => item === ep || (item && item.n === ep.n));
+}
+
+function podNextEpisode(ep) {
+  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
+  if (!list.length) return null;
+  const index = podEpisodeIndex(ep);
+  return list[index < 0 ? 0 : (index + 1) % list.length];
+}
+
+function podReplayCurrent() {
+  if (!podcastState) return;
+  podInterruptThaiVoice();
+  podWantPlay = true;
+  podThaiVoiceLastIndex = -1;
+  podStatusNote = "🔁 เริ่มเล่นตอนนี้ซ้ำตั้งแต่ต้น";
+  podSeekAudio(0, true);
+  $("podStatus").textContent = podStatusNote;
+}
+
+function podGoToNextEpisode(manual = false) {
+  if (!podcastState) return;
+  const next = podNextEpisode(podcastState.episode);
+  if (!next) return;
+  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
+  if (next === podcastState.episode && list.length <= 1) {
+    podReplayCurrent();
+    return;
+  }
+  const wrapped = podEpisodeIndex(podcastState.episode) === list.length - 1;
+  podSelectEpisode(next);
+  podStatusNote = manual
+    ? `ข้ามไปตอนที่ #${next.n}`
+    : `⏭ เล่นตอนถัดไปอัตโนมัติ · #${next.n}${wrapped ? " (วนกลับตอนแรก)" : ""}`;
+  $("podStatus").textContent = podStatusNote;
 }
 
 function podThaiVoiceAvailable(ep) {
@@ -245,6 +317,8 @@ function podFinishThaiVoice(resumeAfter = true) {
       document.querySelector(".screen.active") === $("podcast")) {
     podPlay();
   } else {
+    podWantPlay = false;
+    podSyncNativeBackgroundAudio();
     $("podPlayBtn").textContent = "▶ เล่น";
     podSetMediaState("paused");
   }
@@ -329,6 +403,14 @@ function podSetMediaState(state) {
   try {
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state;
   } catch (e) {}
+}
+
+// The podcast swaps between two <audio> elements (the episode and the Thai
+// translation clip) under JS control, so the page must keep running while the
+// app is backgrounded or the screen is locked — otherwise the swap stalls and
+// the audio stops. Reuse the same native foreground service listen mode uses.
+function podSyncNativeBackgroundAudio() {
+  crSetNativeBackgroundAudio(Boolean(podcastState && podWantPlay));
 }
 
 function podSetMetadata(ep) {
@@ -475,6 +557,7 @@ function podTranscript(ep) {
 function podSelectEpisode(ep) {
   podSeekSequence++;
   podInterruptThaiVoice();
+  podStatusNote = "";
   podcastState = { episode: ep, intervals: podSentenceIntervals(ep) };
   podThaiVoiceLastIndex = -1;
   const screen = $("podcast");
@@ -509,11 +592,19 @@ function podPlay() {
   podInterruptThaiVoice();
   const audio = $("podAudio");
   if (!audio.src) return;
+  podSyncNativeBackgroundAudio();
   audio.play().then(() => {
     $("podPlayBtn").textContent = "⏸ พัก";
     podSetMediaState("playing");
-    $("podStatus").textContent = "กำลังเล่นเสียงต้นฉบับ · แตะคำเพื่อดูความหมาย";
+    if (podStatusNote) {
+      $("podStatus").textContent = podStatusNote;
+      podStatusNote = "";
+    } else {
+      $("podStatus").textContent = "กำลังเล่นเสียงต้นฉบับ · แตะคำเพื่อดูความหมาย";
+    }
   }).catch(() => {
+    podWantPlay = false;
+    podSyncNativeBackgroundAudio();
     $("podPlayBtn").textContent = "▶ เล่น";
     $("podStatus").textContent = window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW
       ? "เล่นไฟล์เสียงในเครื่องไม่ได้ — ลองปิดเปิดแอปอีกครั้ง"
@@ -530,6 +621,7 @@ function podPause() {
   audio.pause();
   $("podPlayBtn").textContent = "▶ เล่น";
   podSetMediaState("paused");
+  podSyncNativeBackgroundAudio();
 }
 
 function podKeepSentenceAndThaiVisible(word) {
@@ -595,6 +687,7 @@ function podUpdateHighlight() {
 
 function podBackToList() {
   podWantPlay = false;
+  podStatusNote = "";
   podPause();
   cpHideWordPopup();
   $("podPlayer").hidden = true;
@@ -607,6 +700,8 @@ function podBackToList() {
 function quitPodcastGame() {
   podSeekSequence++;
   podWantPlay = false;
+  podStatusNote = "";
+  podSyncNativeBackgroundAudio();
   const audio = $("podAudio");
   audio.pause();
   audio.removeAttribute("src");
@@ -703,6 +798,20 @@ $("podFontPlus").addEventListener("click", () => {
   podSetFontScale(podFontScale + POD_FS_STEP);
 });
 podApplyFontScale();
+$("podReplayBtn").addEventListener("click", () => {
+  sfx.click();
+  podReplayCurrent();
+});
+$("podAutoNextBtn").addEventListener("click", () => {
+  sfx.click();
+  podAutoNextEnabled = !podAutoNextEnabled;
+  try { localStorage.setItem(POD_AUTO_NEXT_KEY, podAutoNextEnabled ? "1" : "0"); } catch (err) {}
+  podApplyAutoNextToggle();
+  if (podcastState) $("podStatus").textContent = podAutoNextEnabled
+    ? "เปิดเล่นตอนถัดไปอัตโนมัติ · วนลูปครบทุกตอนแล้วกลับตอนแรก"
+    : "ปิดเล่นตอนถัดไปอัตโนมัติ · จบตอนแล้วจะหยุด";
+});
+podApplyAutoNextToggle();
 $("podThaiToggle").addEventListener("click", () => {
   if ($("podThaiToggle").disabled) return;
   podThaiVisible = !podThaiVisible;
@@ -744,8 +853,15 @@ $("podAudio").addEventListener("pause", () => {
 });
 $("podAudio").addEventListener("ended", () => {
   podWantPlay = false;
-  $("podPlayBtn").textContent = "▶ เล่นซ้ำ";
+  podSyncNativeBackgroundAudio();
   podSetMediaState("paused");
+  // Auto-advance (wraps to the first episode after the last one).
+  if (podAutoNextEnabled && podcastState) {
+    $("podPlayBtn").textContent = "⏭ ตอนถัดไป";
+    podGoToNextEpisode(false);
+    return;
+  }
+  $("podPlayBtn").textContent = "▶ เล่นซ้ำ";
 });
 $("podAudio").addEventListener("error", () => {
   if (podcastState) $("podStatus").textContent = window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW
@@ -795,12 +911,22 @@ if ("mediaSession" in navigator) {
     podWantPlay = false;
     quitPodcastGame();
   });
+  // Lock-screen / headset next & previous episode buttons.
+  podMediaAction("previoustrack", () => {
+    if (!podcastState) return;
+    podReplayCurrent();
+  });
+  podMediaAction("nexttrack", () => {
+    if (!podcastState) return;
+    podGoToNextEpisode(true);
+  });
 }
 
 document.addEventListener("visibilitychange", () => {
   if (!podcastState) return;
   const audio = $("podAudio");
   if (document.hidden) return;
+  podSyncNativeBackgroundAudio();
   if (podWantPlay && audio.paused && !podThaiVoicePlayback) {
     podPlay();
   }

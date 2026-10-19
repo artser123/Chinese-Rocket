@@ -928,7 +928,7 @@ function completeBombCharacter() {
   if (s.charIndex + 1 === s.chars.length) {
     speakWordHit(s.word);
   } else {
-    speak(s.chars[s.charIndex]);
+    speakChar(s.chars[s.charIndex]);
   }
   s.charIndex++;
   if (s.charIndex === s.chars.length) resolveBomb(true);

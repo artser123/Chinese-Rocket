@@ -532,7 +532,8 @@ async function cpWriteChar() {
 function cpWriteCompleteChar() {
   if (!cp) return;
   sfx.hit();
-  if (cp.writeChars[cp.writeIndex]) speak(cp.writeChars[cp.writeIndex]);
+  // อ่านตัวอักษรจีนที่เพิ่งเขียนเสร็จ (ไฟล์ mp3 — Android WebView ไม่มี speechSynthesis จึงใช้ speak() ไม่ได้)
+  if (cp.writeChars[cp.writeIndex]) speakChar(cp.writeChars[cp.writeIndex]);
   cp.writeIndex++;
   renderCpWriteChips();
   if (cp.writeIndex >= cp.writeChars.length) {

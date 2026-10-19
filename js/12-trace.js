@@ -703,7 +703,7 @@ document.addEventListener("visibilitychange", () => {
   }
   // โหมดฝึกฟังใช้ native media playback; ไม่ขอ Wake Lock เพราะต้องการให้จอดับได้
   if (!document.hidden && lis) {
-    lisSetNativeBackgroundAudio(lis.playing);
+    crSetNativeBackgroundAudio(lis.playing);
     if (lis.playing && lisMediaAudio.paused && !lis.timer) lisPlayCurrent();
   }
 });
