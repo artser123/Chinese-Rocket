@@ -14,6 +14,9 @@ let readerFontScale = 1;
 let readerAlternateEnabled = true;
 let readerAutoNextEnabled = false;
 let readerWordTrie = null;
+let readerQuizState = null;
+let readerBubbleOpen = false;
+let readerBubbleTap = null;
 
 const READER_LOCAL_PREVIEW = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) &&
   new URLSearchParams(location.search).get("readerPreview") === "1";
@@ -247,14 +250,26 @@ function readerMakeTranscript(story) {
     article.setAttribute("role", "button");
     article.setAttribute("aria-label", `ประโยคที่ ${index + 1}: ${turn.zh}`);
 
+    const body = document.createElement("div");
+    body.className = "reader-turn-body";
+
     const chinese = document.createElement("div");
     chinese.className = "reader-zh-line";
     chinese.lang = "zh-CN";
+    // Tapping the Chinese text starts the story from that sentence. The empty
+    // padding around the text and the Thai line stay inert — the ▶ button is
+    // the explicit way to start a sentence.
+    chinese.addEventListener("click", (event) => {
+      if (event.target.closest(".reader-word")) return;
+      sfx.click();
+      readerPlayFromTurn(index);
+    });
     const wordTokens = readerTokenizeChars(turn.tokens || []);
     for (const token of wordTokens) {
       if (token.cjk) {
         const cell = document.createElement("span");
         cell.className = "reader-word";
+        cell.dataset.word = token.text;
         if (Number.isFinite(token.start)) cell.dataset.start = String(token.start);
         if (Number.isFinite(token.end)) cell.dataset.end = String(token.end);
         const hanzi = document.createElement("span");
@@ -265,12 +280,29 @@ function readerMakeTranscript(story) {
         pinyin.lang = "zh-Latn";
         pinyin.textContent = token.pinyin || "";
         cell.append(hanzi, pinyin);
+        // Tapping a word opens the same Thai-translation bubble as the podcast
+        // and copy modes, including its "speak this word" button. While a
+        // bubble is open the next outside tap only dismisses it.
+        cell.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (readerBubbleOpen) {
+            readerBubbleOpen = false;
+            readerBubbleTap = null;
+            if (typeof cpHideWordPopup === "function") cpHideWordPopup();
+            return;
+          }
+          sfx.click();
+          if (typeof cpShowWordPopup === "function") {
+            cpShowWordPopup(token.text, cell);
+            readerBubbleOpen = true;
+          }
+        });
         chinese.appendChild(cell);
       } else {
         chinese.appendChild(document.createTextNode(token.text));
       }
     }
-    article.appendChild(chinese);
+    body.appendChild(chinese);
 
     const thaiText = (turn.thai || []).map((item) => item.text).filter(Boolean).join(" ");
     if (thaiText) {
@@ -278,14 +310,29 @@ function readerMakeTranscript(story) {
       thai.className = "reader-thai";
       thai.lang = "th";
       thai.textContent = thaiText;
-      article.appendChild(thai);
+      body.appendChild(thai);
     }
-    const seek = () => readerSeekTurn(index, true);
-    article.addEventListener("click", seek);
+    article.appendChild(body);
+
+    // Play button on the right of every sentence block: starts the story from
+    // that sentence and keeps reading the sentences below as usual.
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "reader-replay";
+    play.title = "เล่นตั้งแต่ประโยคนี้";
+    play.setAttribute("aria-label", `เล่นตั้งแต่ประโยคที่ ${index + 1}`);
+    play.textContent = "▶";
+    play.addEventListener("click", (event) => {
+      event.stopPropagation();
+      sfx.click();
+      readerPlayFromTurn(index);
+    });
+    article.appendChild(play);
+
     article.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        seek();
+        readerPlayFromTurn(index);
       }
     });
     root.appendChild(article);
@@ -294,14 +341,9 @@ function readerMakeTranscript(story) {
   root.classList.toggle("reader-hide-thai", !readerThaiVisible);
 
   const questions = $("readerQuestionList");
-  questions.replaceChildren();
-  for (const question of story.questions_zh || []) {
-    const item = document.createElement("li");
-    item.lang = "zh-CN";
-    item.textContent = question;
-    questions.appendChild(item);
-  }
-  $("readerQuestions").hidden = !(story.questions_zh || []).length;
+  if (questions) questions.replaceChildren();
+  readerMakeQuiz(story);
+  $("readerQuestions").hidden = !(story.quiz || []).length;
 
   const note = $("readerAlignmentNote");
   note.hidden = !(story.weak_alignment || story.approximate_pairing);
@@ -314,6 +356,122 @@ function readerMakeTranscript(story) {
 
 function readerResolveFile(path) {
   return readerAssetUrl(path);
+}
+
+// While the word bubble is open, the next tap outside it only dismisses the
+// bubble: the tap is swallowed so it cannot start playback or open another
+// word at the same time.
+function readerInstallBubbleGuard() {
+  document.addEventListener("pointerdown", (event) => {
+    if (!readerBubbleOpen) { readerBubbleTap = null; return; }
+    const popup = $("cpWordPopup");
+    if (!popup || popup.hidden) {
+      // The bubble was closed some other way (Escape / close button): the next
+      // tap behaves normally again.
+      readerBubbleOpen = false;
+      readerBubbleTap = null;
+      return;
+    }
+    if (popup.contains(event.target)) {
+      readerBubbleTap = null;
+      return;
+    }
+    readerBubbleTap = "dismiss";
+    if (typeof cpHideWordPopup === "function") cpHideWordPopup();
+    readerBubbleOpen = false;
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (readerBubbleTap !== "dismiss") return;
+    readerBubbleTap = null;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
+}
+
+function readerMakeQuiz(story) {
+  const root = $("readerQuizList");
+  const score = $("readerQuizScore");
+  if (!root) return;
+  root.replaceChildren();
+  if (score) score.textContent = "";
+  const quiz = story.quiz || [];
+  if (!quiz.length) return;
+
+  const state = { answered: 0, correct: 0 };
+  readerQuizState = state;
+
+  quiz.forEach((question, questionIndex) => {    const block = document.createElement("section");
+    block.className = "reader-quiz-item";
+
+    const head = document.createElement("div");
+    head.className = "reader-quiz-head";
+    const title = document.createElement("p");
+    title.className = "reader-quiz-question";
+    title.lang = "zh-CN";
+    title.textContent = `${questionIndex + 1}. ${question.question_zh}`;
+    head.appendChild(title);
+    const source = document.createElement("span");
+    source.className = "reader-quiz-source";
+    source.textContent = question.source === "gemini" ? "เพิ่มเติม" : "จากหนังสือ";
+    head.appendChild(source);
+    block.appendChild(head);
+
+    if (question.question_th) {
+      const thai = document.createElement("p");
+      thai.className = "reader-quiz-question-th";
+      thai.lang = "th";
+      thai.textContent = question.question_th;
+      block.appendChild(thai);
+    }
+
+    const options = document.createElement("div");
+    options.className = "reader-quiz-options";
+    (question.options || []).forEach((option, optionIndex) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "reader-quiz-option";
+      const zh = document.createElement("span");
+      zh.className = "reader-quiz-option-zh";
+      zh.lang = "zh-CN";
+      zh.textContent = option.zh;
+      button.appendChild(zh);
+      if (option.th) {
+        const thai = document.createElement("small");
+        thai.className = "reader-quiz-option-th";
+        thai.lang = "th";
+        thai.textContent = option.th;
+        button.appendChild(thai);
+      }
+      button.addEventListener("click", () => {
+        if (block.dataset.answered === "1") return;
+        block.dataset.answered = "1";
+        state.answered++;
+        const isCorrect = optionIndex === question.answer_index;
+        if (isCorrect) state.correct++;
+        button.classList.add(isCorrect ? "correct" : "wrong");
+        if (!isCorrect) {
+          const correctButton = options.children[question.answer_index];
+          if (correctButton) correctButton.classList.add("correct");
+        }
+        for (const sibling of options.children) sibling.disabled = true;
+        const verdict = document.createElement("p");
+        verdict.className = `reader-quiz-verdict ${isCorrect ? "correct" : "wrong"}`;
+        const correctOption = (question.options || [])[question.answer_index];
+        verdict.textContent = isCorrect
+          ? "✅ ถูกต้อง"
+          : `❌ ยังไม่ใช่ — คำตอบคือ ${correctOption ? correctOption.zh : ""}`;
+        block.appendChild(verdict);
+        if (score) {
+          score.textContent = `ตอบแล้ว ${state.answered}/${quiz.length} · ถูก ${state.correct}/${state.answered}`;
+        }
+        if (isCorrect) sfx.correct();
+        else sfx.wrong();
+      });
+      options.appendChild(button);
+    });
+    block.appendChild(options);
+    root.appendChild(block);
+  });
 }
 
 function readerSetMediaState(state) {
@@ -422,13 +580,13 @@ function readerPlay() {
 function readerPause() {
   readerSeekSequence++;
   readerWantPlay = false;
+  if (readerState) readerState.playback = null;
   const audio = $("readerAudio");
   const thaiAudio = $("readerThaiAudio");
   audio.pause();
   thaiAudio.pause();
   thaiAudio.removeAttribute("src");
   thaiAudio.load();
-  if (readerState) readerState.playback = null;
   $("readerPlayBtn").textContent = "▶ เล่น";
   readerSetMediaState("paused");
   readerSyncBackgroundAudio();
@@ -477,6 +635,49 @@ function readerMaybePlayThai(time) {
   readerRenderActiveTurn();
   readerRenderActiveWord();
   readerPlayThaiClip();
+}
+
+// Start playing at the given sentence and keep going: the Mandarin turn plays,
+// its Thai clip follows, and the story continues with the sentences below
+// exactly like normal playback.
+function readerPlayFromTurn(index) {
+  if (!readerState) return;
+  const turn = readerState.story.turns[index];
+  if (!turn) return;
+  readerPause();
+  readerState.activeTurn = index;
+  readerState.nextTurn = index;
+  readerRenderActiveTurn();
+  readerRenderActiveWord();
+  const audio = $("readerAudio");
+  const start = Math.max(0, turn.start);
+  const sequence = ++readerSeekSequence;
+  const onSeeked = () => {
+    audio.removeEventListener("seeked", onSeeked);
+    if (sequence !== readerSeekSequence || !readerState) return;
+    readerWantPlay = true;
+    readerSyncBackgroundAudio();
+    audio.play().then(() => {
+      $("readerPlayBtn").textContent = "⏸ พัก";
+      readerSetMediaState("playing");
+      $("readerStatus").textContent = `กำลังเล่นตั้งแต่ประโยคที่ ${index + 1}`;
+    }).catch(() => {
+      readerWantPlay = false;
+      readerSyncBackgroundAudio();
+      $("readerPlayBtn").textContent = "▶ เล่น";
+      readerSetMediaState("paused");
+    });
+  };
+  audio.addEventListener("seeked", onSeeked);
+  try {
+    audio.currentTime = start;
+    if (!audio.seeking && Math.abs(audio.currentTime - start) < 0.05) {
+      audio.removeEventListener("seeked", onSeeked);
+      onSeeked();
+    }
+  } catch (error) {
+    audio.removeEventListener("seeked", onSeeked);
+  }
 }
 
 function readerUpdateProgress() {
@@ -793,6 +994,7 @@ function readerThaiAudioPause() {
 }
 
 readerApplySettings();
+readerInstallBubbleGuard();
 if (READER_LOCAL_PREVIEW && READER_PARAMS.get("openReader") === "1") {
   queueMicrotask(() => startReaderGame());
 }
