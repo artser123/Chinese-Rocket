@@ -116,6 +116,11 @@
       <div class="card-title">ฟังพอดแคสต์จีน</div>
       <div class="card-desc">ฟัง MaoMi Chinese พร้อม transcript พินอิน คำแปล และไฮไลท์คำตามเสียง</div>
     </button>
+    <button class="card" data-mode="reader" hidden>
+      <div class="card-icon">📚🎧</div>
+      <div class="card-title">เกมอ่านบทความ HSK</div>
+      <div class="card-desc">เลือกบทอ่านตามระดับ HSK อ่านพร้อมพินอิน ฟังจีนสลับคำแปลไทย แล้วตอบคำถามท้ายบท</div>
+    </button>
     <button class="card" data-mode="copy">
       <div class="card-icon">✍️📜</div>
       <div class="card-title">เกมเขียนเป็นประโยค</div>
@@ -695,6 +700,82 @@
   </section>
 </div>
 
+<!-- PRIVATE HSK STORY READER (offline APK + localhost preview only) -->
+<div id="reader" class="screen">
+  <header class="reader-header">
+    <div>
+      <div class="reader-brand">📚 HSK STORY READER</div>
+      <h2 id="readerHeading">เลือกบทอ่าน</h2>
+    </div>
+    <button id="readerQuitBtn" class="icon-btn" type="button" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+  </header>
+  <section id="readerLibrary" class="reader-library" aria-label="รายการบทอ่าน">
+    <div id="readerLevelTabs" class="reader-level-tabs" role="group" aria-label="เลือกระดับ HSK">
+      <button class="reader-level-tab active" type="button" data-reader-level="1">HSK 1</button>
+      <button class="reader-level-tab" type="button" data-reader-level="2">HSK 2</button>
+      <button class="reader-level-tab" type="button" data-reader-level="3">HSK 3</button>
+    </div>
+    <label class="reader-search" for="readerSearch">🔎
+      <input id="readerSearch" type="search" placeholder="ค้นหาชื่อเรื่อง..." autocomplete="off">
+    </label>
+    <p id="readerListStatus" class="reader-status" role="status"></p>
+    <div id="readerStoryList" class="reader-story-list"></div>
+  </section>
+  <section id="readerPlayer" class="reader-player" hidden>
+    <div class="reader-sticky-controls">
+      <button id="readerBackBtn" class="pod-back" type="button">← เลือกบทอ่าน</button>
+      <div class="reader-transport">
+        <div class="pod-seek-row">
+          <span id="readerCurrentTime">0:00</span>
+          <input id="readerSeek" type="range" min="0" max="1000" value="0" aria-label="ตำแหน่งเสียงบทอ่าน">
+          <span id="readerDuration">0:00</span>
+        </div>
+        <div class="pod-player-buttons">
+          <button id="readerRewindBtn" class="big-btn secondary" type="button">↶ 10 วิ</button>
+          <button id="readerPlayBtn" class="lis-play" type="button">▶ เล่น</button>
+          <button id="readerForwardBtn" class="big-btn secondary" type="button">10 วิ ↷</button>
+          <select id="readerRate" aria-label="ความเร็วเสียงบทอ่าน">
+            <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
+            <option value="1" selected>1×</option><option value="1.1">1.1×</option>
+            <option value="1.25">1.25×</option>
+          </select>
+        </div>
+        <div class="reader-playback-options">
+          <button id="readerAlternateBtn" class="reader-option-btn" type="button" aria-pressed="false">🇨🇳↔🇹🇭 สลับจีน–ไทย: ปิด</button>
+          <button id="readerAutoNextBtn" class="reader-option-btn" type="button" aria-pressed="false">⏭ เล่นเรื่องถัดไป: ปิด</button>
+        </div>
+      </div>
+    </div>
+    <div class="reader-now-playing">
+      <div id="readerStoryNumber" class="reader-story-number"></div>
+      <h3 id="readerTitle"></h3>
+      <p id="readerTitlePinyin" class="reader-title-pinyin"></p>
+      <p id="readerMeta"></p>
+    </div>
+    <audio id="readerAudio" preload="metadata" playsinline></audio>
+    <audio id="readerThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
+    <div class="reader-transcript-heading">
+      <span>📝 บทอ่านภาษาจีน</span>
+      <div class="reader-heading-actions">
+        <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทอ่าน">
+          <button id="readerFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
+          <span id="readerFontLabel" class="pod-font-label" aria-live="polite">100%</span>
+          <button id="readerFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
+        </div>
+        <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true">พินอิน: เปิด</button>
+        <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true">ไทย: เปิด</button>
+      </div>
+    </div>
+    <p id="readerAlignmentNote" class="reader-alignment-note" hidden></p>
+    <div id="readerTranscript" class="reader-transcript" lang="zh-CN"></div>
+    <details id="readerQuestions" class="reader-questions">
+      <summary>❓ คำถามท้ายบท</summary>
+      <ol id="readerQuestionList"></ol>
+    </details>
+    <p id="readerStatus" class="reader-status" role="status" aria-live="polite"></p>
+  </section>
+</div>
+
 <!-- SENTENCE COPYING PRACTICE SCREEN -->
 <div id="copy" class="screen">
   <div class="qhud">
@@ -877,6 +958,7 @@
 <script src="js/11-copy.js"></script>
 <script src="js/12-trace.js"></script>
 <script src="js/13-podcast.js"></script>
+<script src="js/14-reader.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

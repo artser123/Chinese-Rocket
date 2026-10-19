@@ -719,6 +719,7 @@ function quitPodcastGame() {
 }
 
 async function startPodcastGame() {
+  podRegisterMediaActions();
   switchScreen($("podcast"));
   $("podPlayer").hidden = true;
   $("podEpisodes").hidden = false;
@@ -878,7 +879,8 @@ $("podThaiAudio").addEventListener("error", () => {
 
 
 // ---- Background / lock-screen support (like listen mode) -----------------
-if ("mediaSession" in navigator) {
+function podRegisterMediaActions() {
+  if (!("mediaSession" in navigator)) return;
   const podMediaAction = (name, handler) => {
     try { navigator.mediaSession.setActionHandler(name, handler); } catch (e) {}
   };
@@ -921,6 +923,7 @@ if ("mediaSession" in navigator) {
     podGoToNextEpisode(true);
   });
 }
+podRegisterMediaActions();
 
 document.addEventListener("visibilitychange", () => {
   if (!podcastState) return;

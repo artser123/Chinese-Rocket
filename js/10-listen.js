@@ -161,7 +161,8 @@ function lisPlayMediaItems(items, onDone, onProgress) {
 }
 
 // Lock-screen / headset controls, where the browser supports the Media Session API.
-if ("mediaSession" in navigator) {
+function lisRegisterMediaActions() {
+  if (!("mediaSession" in navigator)) return;
   const mediaAction = (name, handler) => {
     try { navigator.mediaSession.setActionHandler(name, handler); } catch (e) {}
   };
@@ -194,6 +195,7 @@ if ("mediaSession" in navigator) {
   });
   mediaAction("previoustrack", () => { if (lis) lisReplayBtnClick(); });
 }
+lisRegisterMediaActions();
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
 function renderListenSentence(s) {
@@ -327,6 +329,7 @@ function startListenGame(level) {
   lis = { level, type: lisType, gap: lisGap, deck: [], pos: 0,
           played: 0, playing: true, timer: null, current: null,
           done: new Set(), total: 0 };
+  lisRegisterMediaActions();
   lis.deck = shuffle(lisSource().slice());
   lis.total = lis.deck.length;
   crSetNativeBackgroundAudio(false);
