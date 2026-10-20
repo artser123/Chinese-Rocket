@@ -519,7 +519,9 @@ function readerRestoreMediaActions() {
 }
 
 function readerSyncBackgroundAudio() {
-  crSetNativeBackgroundAudio(Boolean(readerState && readerWantPlay));
+  const active = Boolean(readerState && readerWantPlay);
+  crSetNativeBackgroundAudio(active);
+  crSetScreenAwake(active); // จอไม่ดับขณะฟังบทความ ปล่อยเมื่อพัก/ปิดเรื่อง
 }
 
 function readerThaiText(turn) {

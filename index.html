@@ -639,6 +639,11 @@
     <button id="podQuitBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
   </header>
   <section id="podEpisodes" class="pod-episodes" aria-label="รายการพอดแคสต์">
+    <div class="pod-source-tabs" role="group" aria-label="เลือกแหล่งพอดแคสต์">
+      <button id="podSrcMaoMi" class="pod-src-btn" type="button" aria-pressed="true">🎙 MaoMi</button>
+      <button id="podSrcHsk" class="pod-src-btn" type="button" aria-pressed="false">📚 บทความ HSK</button>
+    </div>
+    <div id="podHskFilter" class="pod-hsk-filter" role="group" aria-label="กรองตามระดับ HSK" hidden></div>
     <label class="pod-search-wrap" for="podSearch">🔎
       <input id="podSearch" type="search" placeholder="ค้นหาตอนหรือหัวข้อ..." autocomplete="off">
     </label>

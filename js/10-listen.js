@@ -25,6 +25,70 @@ function crSetNativeBackgroundAudio(active) {
     if (result && typeof result.catch === "function") result.catch(() => {});
   } catch (e) {}
 }
+
+/* ---- จอไม่ดับขณะเล่นเสียง (ฝึกฟัง / พอดแคสต์ / อ่านบทความ) ----
+   ผู้ใช้บางครั้งเปิดหน้าจอทิ้งไว้เพื่ออ่านข้อความ จึงขอกันจอดับตลอดที่เสียงเล่นอยู่
+   และปล่อยคืนเมื่อกดพัก/ออกจากโหมด
+   - เว็บ/WebView ใหม่: Screen Wake Lock API (`navigator.wakeLock`) —
+     เบราว์เซอร์ปล่อยเองตอนแท็บถูกซ่อน จึงขอใหม่ใน visibilitychange
+   - APK: FLAG_KEEP_SCREEN_ON ทางปลั๊กอินแบบเนทีฟ (setScreenAwake) —
+     เฟรมแฟล็กนี้มีผลเฉพาะตอนแอปอยู่หน้าจอ พอล็อกจอ/สลับแอปจึงไม่ต่างจากเดิม
+     (เสียงเล่นต่อด้วย partial wake lock ของฟอร์กราวด์เซอร์วิส) */
+let crScreenAwakeSentinel = null;
+let crScreenAwakeWanted = false;
+let crScreenAwakeSeq = 0;
+
+function crScreenAwakeNative(active) {
+  try {
+    const native = window.ChineseRocketAndroid
+      || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
+    if (!native || !native.setScreenAwake) return;
+    const result = native.setScreenAwake({ active: !!active });
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch (e) {}
+}
+
+function crScreenAwakeApply() {
+  const seq = ++crScreenAwakeSeq;
+  const active = crScreenAwakeWanted && !document.hidden;
+  crScreenAwakeNative(active); // แฟล็กหน้าต่างเนทีฟ — สั่งซ้ำได้เสมอ ถูก/ไม่มีปลั๊กอินก็เงียบไป
+  if (!active) {
+    if (crScreenAwakeSentinel) {
+      crScreenAwakeSentinel.release().catch(() => {});
+      crScreenAwakeSentinel = null;
+    }
+    return;
+  }
+  if (crScreenAwakeSentinel || !("wakeLock" in navigator)) return;
+  navigator.wakeLock.request("screen").then((sentinel) => {
+    if (seq !== crScreenAwakeSeq || !crScreenAwakeWanted || document.hidden) {
+      sentinel.release().catch(() => {});
+      return;
+    }
+    crScreenAwakeSentinel = sentinel;
+    // ระบบปล่อยเอง (เช่นตอนสลับแอป) → ขอใหม่เมื่อกลับมาเห็นหน้าจอ ถ้ายังเล่นเสียงอยู่
+    sentinel.addEventListener("release", () => {
+      if (crScreenAwakeSentinel === sentinel) crScreenAwakeSentinel = null;
+      if (crScreenAwakeWanted && !document.hidden) crScreenAwakeApply(); // seq เพิ่มใน apply ตัด race ทิ้ง
+    });
+  }).catch(() => {}); // ไม่มีสิทธิ์/ไม่รองรับ → พึ่งแฟล็กเนทีฟอย่างเดียวก็พอ
+}
+
+function crSetScreenAwake(active) {
+  crScreenAwakeWanted = !!active;
+  crScreenAwakeApply();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!crScreenAwakeWanted) return;
+  crScreenAwakeApply(); // ซ่อนอยู่ → ปล่อย/ไม่ขอ; กลับมาเห็น → ขอใหม่
+});
+
+// เปิด/ปิดการเล่นของโหมดฝึกฟังครั้งเดียว ครอบคลุมทั้งเสียงเบื้องหลังและจอไม่ดับ
+function crSetPlaybackState(active) {
+  crSetNativeBackgroundAudio(active);
+  crSetScreenAwake(active);
+}
 function lisStopMedia() {
   lisMediaSeq++;
   clearTimeout(lisMediaWatchTimer);
@@ -169,7 +233,7 @@ function lisRegisterMediaActions() {
   mediaAction("play", () => {
     if (!lis) return;
     lis.playing = true;
-    crSetNativeBackgroundAudio(true);
+    crSetPlaybackState(true);
     clearTimeout(lis.timer);
     lis.timer = null;
     $("lisPlayBtn").textContent = "⏸ พัก";
@@ -178,7 +242,7 @@ function lisRegisterMediaActions() {
   mediaAction("pause", () => {
     if (!lis || !lis.playing) return;
     lis.playing = false;
-    crSetNativeBackgroundAudio(false);
+    crSetPlaybackState(false);
     clearTimeout(lis.timer);
     lisStopMedia();
     stopSpeech();
@@ -189,7 +253,7 @@ function lisRegisterMediaActions() {
   mediaAction("nexttrack", () => {
     if (!lis) return;
     lis.playing = true;
-    crSetNativeBackgroundAudio(true);
+    crSetPlaybackState(true);
     $("lisPlayBtn").textContent = "⏸ พัก";
     lisAdvance();
   });
@@ -268,7 +332,7 @@ function lisReplayBtnClick() {
   clearTimeout(lis.timer);
   lis.timer = null;
   lis.playing = true;
-  crSetNativeBackgroundAudio(true);
+  crSetPlaybackState(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisPlayCurrent();
 }
@@ -332,7 +396,7 @@ function startListenGame(level) {
   lisRegisterMediaActions();
   lis.deck = shuffle(lisSource().slice());
   lis.total = lis.deck.length;
-  crSetNativeBackgroundAudio(false);
+  crSetPlaybackState(false);
   lisStopMedia();
   stopSpeech();
   music.stop(); // ไม่มีเพลงพื้นหลัง — โหมดนี้เน้นฟังเสียงพูดล้วนๆ
@@ -343,7 +407,7 @@ function startListenGame(level) {
   $("lisPlayBtn").textContent = "⏸ พัก";
   $("lisCount").textContent = "0";
   $("lisProg").textContent = "0%";
-  crSetNativeBackgroundAudio(true);
+  crSetPlaybackState(true);
   lisAdvance();
 }
 
@@ -351,7 +415,7 @@ $("lisPlayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = !lis.playing;
-  crSetNativeBackgroundAudio(lis.playing);
+  crSetPlaybackState(lis.playing);
   $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
   if (lis.playing) {
     lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
@@ -373,7 +437,7 @@ $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
   lis.playing = true;
-  crSetNativeBackgroundAudio(true);
+  crSetPlaybackState(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisAdvance();
 });
@@ -382,7 +446,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   sfx.click();
   clearTimeout(lis && lis.timer);
   if (lis) lis.timer = null;
-  crSetNativeBackgroundAudio(false);
+  crSetPlaybackState(false);
   lisStopMedia();
   if (lis && lis.current) clearListenKaraoke(lis.current);
   lis = null;

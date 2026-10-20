@@ -35,6 +35,15 @@ const POD_FS_MAX = 1.8;
 const POD_FS_STEP = 0.1;
 let podFontScale = podLoadFontScale();
 
+// Podcast source ("maomi" = the streamed MaoMi episodes, "hsk" = the locally
+// generated HSK 1-9 articles) plus the HSK level filter (0 = all levels).
+// Both persist so the episode picker reopens the way the user left it.
+const POD_SRC_KEY = "cr_pod_source";
+const POD_HSK_FILTER_KEY = "cr_pod_hsk_filter";
+let podSource = podLoadSource();
+let podHskFilter = podLoadHskFilter();
+let podHskDataPromise = null;
+
 // The podcast dataset contains copyrighted transcript text. Keep it out of the
 // public web build; the private offline APK loads its bundled copy on demand.
 const podCard = document.querySelector('.card[data-mode="podcast"]');
@@ -79,6 +88,40 @@ function podLoadData() {
   return podDataPromise;
 }
 
+// The HSK article dataset (data/podcasts_hsk.js) is loaded on demand the same
+// lazy way: the web build never ships it, the APK/preview loads it locally.
+function podLoadHskData() {
+  if (Array.isArray(window.PODCASTS_HSK)) return Promise.resolve(window.PODCASTS_HSK);
+  if (!window.CR_OFFLINE_APP && !POD_LOCAL_PREVIEW) {
+    return Promise.reject(new Error("HSK articles are only available in the offline app"));
+  }
+  if (podHskDataPromise) return podHskDataPromise;
+  podHskDataPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "data/podcasts_hsk.js";
+    script.onload = () => {
+      if (Array.isArray(window.PODCASTS_HSK) && window.PODCASTS_HSK.length) {
+        resolve(window.PODCASTS_HSK);
+      } else {
+        reject(new Error("HSK podcast data is unavailable"));
+      }
+    };
+    script.onerror = () => reject(new Error("HSK podcast data could not be loaded"));
+    document.head.appendChild(script);
+  });
+  return podHskDataPromise;
+}
+
+// Episode list of the active (or given) source; each source wraps around its
+// own list when auto-advancing.
+function podEpisodesForSource(src = podSource) {
+  return src === "hsk" ? (window.PODCASTS_HSK || []) : (window.PODCASTS || []);
+}
+
+function podSourceOf(ep) {
+  return ep && ep.src === "hsk" ? "hsk" : "maomi";
+}
+
 // ---- transcript text size (A-/A+) --------------------------------------
 function podClampFontScale(value) {
   const n = Number(value);
@@ -92,6 +135,23 @@ function podLoadFontScale() {
     return raw === null || raw === "" ? 1 : podClampFontScale(raw);
   } catch (err) {
     return 1;
+  }
+}
+
+function podLoadSource() {
+  try {
+    return localStorage.getItem(POD_SRC_KEY) === "hsk" ? "hsk" : "maomi";
+  } catch (err) {
+    return "maomi";
+  }
+}
+
+function podLoadHskFilter() {
+  try {
+    const n = Number(localStorage.getItem(POD_HSK_FILTER_KEY));
+    return Number.isInteger(n) && n >= 0 && n <= 9 ? n : 0;
+  } catch (err) {
+    return 0;
   }
 }
 
@@ -131,15 +191,18 @@ function podApplyAutoNextToggle() {
 }
 
 // Episode order is the list order shown in the picker; wrapping at the end
-// restarts the whole set from the first episode.
+// restarts the whole set from the first episode. MaoMi and HSK articles each
+// wrap within their own source list.
 function podEpisodeIndex(ep) {
-  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
   if (!ep) return -1;
-  return list.findIndex((item) => item === ep || (item && item.n === ep.n));
+  const list = podEpisodesForSource(podSourceOf(ep));
+  return list.findIndex((item) => item === ep ||
+    (item && item.src === ep.src && item.id === ep.id) ||
+    (item && item.src === ep.src && item.n === ep.n));
 }
 
 function podNextEpisode(ep) {
-  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
+  const list = podEpisodesForSource(podSourceOf(ep));
   if (!list.length) return null;
   const index = podEpisodeIndex(ep);
   return list[index < 0 ? 0 : (index + 1) % list.length];
@@ -157,9 +220,9 @@ function podReplayCurrent() {
 
 function podGoToNextEpisode(manual = false) {
   if (!podcastState) return;
+  const list = podEpisodesForSource(podSourceOf(podcastState.episode));
   const next = podNextEpisode(podcastState.episode);
   if (!next) return;
-  const list = Array.isArray(window.PODCASTS) ? window.PODCASTS : [];
   if (next === podcastState.episode && list.length <= 1) {
     podReplayCurrent();
     return;
@@ -410,7 +473,9 @@ function podSetMediaState(state) {
 // app is backgrounded or the screen is locked — otherwise the swap stalls and
 // the audio stops. Reuse the same native foreground service listen mode uses.
 function podSyncNativeBackgroundAudio() {
-  crSetNativeBackgroundAudio(Boolean(podcastState && podWantPlay));
+  const active = Boolean(podcastState && podWantPlay);
+  crSetNativeBackgroundAudio(active);
+  crSetScreenAwake(active); // จอไม่ดับขณะฟังพอดแคสต์ ปล่อยเมื่อพัก/ออกจากตอน
 }
 
 function podSetMetadata(ep) {
@@ -418,7 +483,9 @@ function podSetMetadata(ep) {
     if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: ep.zh || ep.t,
-      artist: `MaoMi Chinese · ตอนที่ ${ep.n}`,
+      artist: ep.src === "hsk"
+        ? `Chinese Rocket · HSK ${ep.hsk}`
+        : `MaoMi Chinese · ตอนที่ ${ep.n}`,
       album: "Chinese Rocket · ฟังพอดแคสต์",
     });
   } catch (e) {}
@@ -427,13 +494,22 @@ function podSetMetadata(ep) {
 function podEpisodeList(query = "") {
   const list = $("podEpisodeList");
   const q = query.trim().toLowerCase();
-  const episodes = (window.PODCASTS || []).filter((ep) =>
-    !q || `${ep.n} ${ep.t} ${ep.zh}`.toLowerCase().includes(q));
+  const episodes = podEpisodesForSource().filter((ep) => {
+    if (podSource === "hsk" && podHskFilter && ep.hsk !== podHskFilter) return false;
+    const hay = ep.src === "hsk"
+      ? `${ep.id} ${ep.hsk} ${ep.cat || ""} ${ep.t} ${ep.zh}`
+      : `${ep.n} ${ep.t} ${ep.zh}`;
+    return !q || hay.toLowerCase().includes(q);
+  });
   list.replaceChildren();
   if (!episodes.length) {
     const empty = document.createElement("p");
     empty.className = "pod-empty";
-    empty.textContent = q ? "ไม่พบตอนที่ค้นหา" : "ยังไม่มีข้อมูลพอดแคสต์ในเครื่อง";
+    if (podSource === "hsk" && podHskFilter && !q) {
+      empty.textContent = "ยังไม่มีบทความในระดับ HSK นี้";
+    } else {
+      empty.textContent = q ? "ไม่พบตอนที่ค้นหา" : "ยังไม่มีข้อมูลพอดแคสต์ในเครื่อง";
+    }
     list.appendChild(empty);
   }
   for (const ep of episodes) {
@@ -442,7 +518,12 @@ function podEpisodeList(query = "") {
     button.className = "pod-episode";
     const n = document.createElement("span");
     n.className = "pod-episode-badge";
-    n.textContent = `#${ep.n}`;
+    if (ep.src === "hsk") {
+      n.classList.add("pod-badge-hsk");
+      n.textContent = `HSK ${ep.hsk}`;
+    } else {
+      n.textContent = `#${ep.n}`;
+    }
     const body = document.createElement("span");
     body.className = "pod-episode-copy";
     const title = document.createElement("strong");
@@ -450,7 +531,9 @@ function podEpisodeList(query = "") {
     const meta = document.createElement("small");
     const date = podEpisodeDate(ep.d);
     const duration = ep.dur ? podFormatTime(ep.dur) : "";
-    meta.textContent = [date, duration].filter(Boolean).join(" · ");
+    const weakNote = ep.src === "hsk" && ep.weakCount ? `ไฮไลท์ ${ep.weakCount} ประโยคเป็นเวลาโดยประมาณ` : "";
+    meta.textContent = [ep.src === "hsk" ? (ep.cat || "") : date, duration, weakNote]
+      .filter(Boolean).join(" · ");
     body.append(title, meta);
     const play = document.createElement("span");
     play.className = "pod-episode-play";
@@ -459,13 +542,17 @@ function podEpisodeList(query = "") {
     button.addEventListener("click", () => podSelectEpisode(ep));
     list.appendChild(button);
   }
-  $("podListStatus").textContent = q
-    ? `พบ ${episodes.length} ตอน`
-    : window.CR_OFFLINE_APP
-    ? `${episodes.length} ตอนฟรี · ฟังได้แบบออฟไลน์`
-    : POD_LOCAL_PREVIEW
-    ? `${episodes.length} ตอน · พรีวิวไฟล์ในเครื่อง`
-    : `${episodes.length} ตอนฟรี · เสียงสตรีมจาก MaoMi/Buzzsprout`;
+  if (q) {
+    $("podListStatus").textContent = `พบ ${episodes.length} ตอน`;
+  } else if (podSource === "hsk") {
+    $("podListStatus").textContent = `${episodes.length} บทความ HSK · เสียงและคำแปลในเครื่อง`;
+  } else {
+    $("podListStatus").textContent = window.CR_OFFLINE_APP
+      ? `${episodes.length} ตอนฟรี · ฟังได้แบบออฟไลน์`
+      : POD_LOCAL_PREVIEW
+      ? `${episodes.length} ตอน · พรีวิวไฟล์ในเครื่อง`
+      : `${episodes.length} ตอนฟรี · เสียงสตรีมจาก MaoMi/Buzzsprout`;
+  }
 }
 
 function podTranscript(ep) {
@@ -555,6 +642,11 @@ function podTranscript(ep) {
 }
 
 function podSelectEpisode(ep) {
+  // HSK articles whose narration has not been generated yet cannot be opened.
+  if (ep.src === "hsk" && !ep.mp3Local) {
+    $("podListStatus").textContent = "บทความนี้ยังไม่มีไฟล์เสียง — สร้างเสียงก่อนด้วย tools/gen_hsk_podcast_audio.py";
+    return;
+  }
   podSeekSequence++;
   podInterruptThaiVoice();
   podStatusNote = "";
@@ -564,7 +656,9 @@ function podSelectEpisode(ep) {
   $("podEpisodes").hidden = true;
   $("podPlayer").hidden = false;
   $("podHeading").textContent = "กำลังฟังพอดแคสต์";
-  $("podEpisodeNumber").textContent = `MAOMI CHINESE · EPISODE ${ep.n}`;
+  $("podEpisodeNumber").textContent = ep.src === "hsk"
+    ? `HSK ${ep.hsk} · ${ep.cat || ""}`
+    : `MAOMI CHINESE · EPISODE ${ep.n}`;
   $("podTitle").textContent = ep.zh || podEnglishTitle(ep.t) || ep.t;
   $("podEnglishTitle").textContent = ep.zh ? podEnglishTitle(ep.t) : "";
   const date = podEpisodeDate(ep.d);
@@ -737,11 +831,25 @@ async function startPodcastGame() {
     return;
   }
   if (document.querySelector(".screen.active") !== $("podcast")) return;
-  const episodes = window.PODCASTS;
+  if (podSource === "hsk") {
+    try {
+      await podLoadHskData();
+    } catch (e) {
+      // Stay on the MaoMi list rather than an empty screen.
+      podSource = "maomi";
+      podApplySourceUI();
+      $("podListStatus").textContent = "โหลดบทความ HSK ไม่ได้ — ตรวจสอบว่า APK มีไฟล์ข้อมูลบทความ HSK";
+    }
+  }
+  if (document.querySelector(".screen.active") !== $("podcast")) return;
+  const episodes = podEpisodesForSource();
   if (!Array.isArray(episodes) || !episodes.length) {
-    $("podListStatus").textContent = "ยังไม่มีข้อมูลพอดแคสต์ใน APK";
+    $("podListStatus").textContent = podSource === "hsk"
+      ? "ยังไม่มีข้อมูลบทความ HSK ในเครื่อง"
+      : "ยังไม่มีข้อมูลพอดแคสต์ใน APK";
     return;
   }
+  podApplySourceUI();
   podEpisodeList();
   podSetMediaState("none");
 }
@@ -813,6 +921,66 @@ $("podAutoNextBtn").addEventListener("click", () => {
     : "ปิดเล่นตอนถัดไปอัตโนมัติ · จบตอนแล้วจะหยุด";
 });
 podApplyAutoNextToggle();
+
+// ---- podcast source tabs (MaoMi / HSK articles) + HSK level filter -------
+function podApplySourceUI() {
+  const maoBtn = $("podSrcMaoMi");
+  const hskBtn = $("podSrcHsk");
+  if (maoBtn) maoBtn.setAttribute("aria-pressed", String(podSource === "maomi"));
+  if (hskBtn) hskBtn.setAttribute("aria-pressed", String(podSource === "hsk"));
+  const row = $("podHskFilter");
+  if (row) {
+    row.hidden = podSource !== "hsk";
+    for (const chip of row.querySelectorAll(".pod-hsk-chip")) {
+      chip.setAttribute("aria-pressed", String(Number(chip.dataset.hsk) === podHskFilter));
+    }
+  }
+}
+
+function podBuildHskFilter() {
+  const row = $("podHskFilter");
+  if (!row) return;
+  const chip = (label, value) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pod-hsk-chip";
+    b.textContent = label;
+    b.dataset.hsk = String(value);
+    b.addEventListener("click", () => {
+      sfx.click();
+      podHskFilter = value;
+      try { localStorage.setItem(POD_HSK_FILTER_KEY, String(podHskFilter)); } catch (err) {}
+      podApplySourceUI();
+      podEpisodeList($("podSearch").value);
+    });
+    return b;
+  };
+  row.replaceChildren(chip("ทั้งหมด", 0),
+    ...Array.from({ length: 9 }, (_, i) => chip(String(i + 1), i + 1)));
+}
+
+function podSetSource(src) {
+  if (podSource === src) return;
+  podSource = src;
+  try { localStorage.setItem(POD_SRC_KEY, podSource); } catch (err) {}
+  podApplySourceUI();
+  if (podSource === "hsk" && !Array.isArray(window.PODCASTS_HSK)) {
+    $("podListStatus").textContent = "กำลังโหลดบทความ HSK…";
+    $("podEpisodeList").replaceChildren();
+    podLoadHskData()
+      .then(() => podEpisodeList($("podSearch").value))
+      .catch(() => {
+        $("podListStatus").textContent = "โหลดบทความ HSK ไม่ได้ — บทความ HSK มีในแอปออฟไลน์เท่านั้น";
+      });
+    return;
+  }
+  podEpisodeList($("podSearch").value);
+}
+
+$("podSrcMaoMi").addEventListener("click", () => { sfx.click(); podSetSource("maomi"); });
+$("podSrcHsk").addEventListener("click", () => { sfx.click(); podSetSource("hsk"); });
+podBuildHskFilter();
+podApplySourceUI();
 $("podThaiToggle").addEventListener("click", () => {
   if ($("podThaiToggle").disabled) return;
   podThaiVisible = !podThaiVisible;

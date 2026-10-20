@@ -2540,6 +2540,56 @@ button.fill-blank {
   font-size: 16px;
 }
 .pod-search-wrap input::placeholder { color: var(--fg-mute); }
+.pod-source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.pod-src-btn {
+  min-height: 40px;
+  border: 0;
+  border-radius: calc(var(--r-md) - 5px);
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pod-src-btn:active { transform: scale(.98); }
+.pod-src-btn[aria-pressed="true"] {
+  border-color: rgba(143, 211, 255, .45);
+  background: rgba(143, 211, 255, .16);
+  color: #cfe9ff;
+  box-shadow: 0 0 12px rgba(143, 211, 255, .18);
+}
+.pod-hsk-filter { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.pod-hsk-filter[hidden] { display: none; }
+.pod-hsk-chip {
+  min-width: 40px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pod-hsk-chip:active { transform: scale(.94); }
+.pod-hsk-chip[aria-pressed="true"] {
+  border-color: rgba(143, 211, 255, .55);
+  background: rgba(143, 211, 255, .2);
+  color: #dff4ff;
+}
 .pod-list-status, .pod-status { min-height: 1.25em; color: var(--fg-mute); font-size: 12px; text-align: center; }
 .pod-episode-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px 3px 10px; overscroll-behavior: contain; }
 .pod-episode {
@@ -2561,6 +2611,7 @@ button.fill-blank {
 }
 .pod-episode:active { transform: scale(.99); border-color: var(--line-2); }
 .pod-episode-badge { color: var(--accent); font-size: 15px; font-weight: 800; text-align: center; }
+.pod-episode-badge.pod-badge-hsk { font-size: 12px; line-height: 1.35; }
 .pod-episode-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .pod-episode-copy strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 .pod-episode-copy small { color: var(--fg-mute); font-size: 11px; }

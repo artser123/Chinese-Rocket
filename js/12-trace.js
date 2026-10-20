@@ -705,9 +705,10 @@ document.addEventListener("visibilitychange", () => {
     zb.paused = true;
     $("zPauseOverlay").classList.add("show");
   }
-  // โหมดฝึกฟังใช้ native media playback; ไม่ขอ Wake Lock เพราะต้องการให้จอดับได้
+  // โหมดฝึกฟังใช้ native media playback; ขณะเล่นขอ Screen Wake Lock ด้วย (จอไม่ดับ
+  // จนกว่าจะกดพัก/ออก) — พอสลับแอป/ล็อกจอ เว็บเครื่องจะปล่อยเองและขอใหม่เมื่อกลับมาเห็นจอ
   if (!document.hidden && lis) {
-    crSetNativeBackgroundAudio(lis.playing);
+    crSetPlaybackState(lis.playing);
     if (lis.playing && lisMediaAudio.paused && !lis.timer) lisPlayCurrent();
   }
 });
