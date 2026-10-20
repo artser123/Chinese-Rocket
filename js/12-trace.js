@@ -755,6 +755,25 @@ window.__handleAndroidBack = function () {
     return true;
   }
 
+  // The podcast and the HSK story reader have two levels: the reading/player
+  // page and the episode/story list. Android back goes back to the list first
+  // (same as the on-page "← เลือกตอนอื่น" / "← เลือกบทอ่าน" buttons); only a
+  // further back leaves the mode for the home screen.
+  if (active === $("podcast") && !$("podPlayer").hidden) {
+    if (typeof podBackToList === "function") {
+      sfx.click();
+      podBackToList();
+      return true;
+    }
+  }
+  if (active === $("reader") && !$("readerPlayer").hidden) {
+    if (typeof readerBackToList === "function") {
+      sfx.click();
+      readerBackToList();
+      return true;
+    }
+  }
+
   const quitByScreen = {
     game: "quitBtn",
     quiz: "quizQuitBtn",

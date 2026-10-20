@@ -7,7 +7,13 @@ let podcastState = null;
 let podActiveToken = null;
 let podWantPlay = false;
 let podSeeking = false;
+let podBubbleOpen = false;
+let podBubbleTap = null;
 let podThaiVisible = true;
+// Pinyin visibility (independent of the Thai toggle): a learner can hide the
+// romanisation to test reading comprehension without losing the translation.
+const POD_PINYIN_KEY = "cr_pod_pinyin";
+let podPinyinVisible = podLoadPinyinVisible();
 let podDataPromise = null;
 // Private localhost-only path for testing the APK-only podcast feature in the
 // real index.html without exposing its generated data in public web builds.
@@ -174,6 +180,28 @@ function podLoadAutoNextEnabled() {
   } catch (err) {
     return false;
   }
+}
+
+function podLoadPinyinVisible() {
+  try {
+    const raw = localStorage.getItem(POD_PINYIN_KEY);
+    return raw === null ? true : raw === "1";
+  } catch (err) {
+    return true;
+  }
+}
+
+function podSavePinyinVisible() {
+  try { localStorage.setItem(POD_PINYIN_KEY, podPinyinVisible ? "1" : "0"); } catch (err) {}
+}
+
+function podApplyPinyinToggle() {
+  const button = $("podPinyinToggle");
+  if (button) {
+    button.setAttribute("aria-pressed", String(podPinyinVisible));
+    button.textContent = podPinyinVisible ? "🔤 ซ่อนพินอิน" : "🔤 แสดงพินอิน";
+  }
+  $("podTranscript").classList.toggle("pod-hide-pinyin", !podPinyinVisible);
 }
 
 function podApplyAutoNextToggle() {
@@ -574,6 +602,8 @@ function podTranscript(ep) {
     const para = document.createElement("article");
     para.className = "pod-para";
     para.dataset.start = "";
+    const body = document.createElement("div");
+    body.className = "pod-para-body";
     const zh = document.createElement("div");
     zh.className = "pod-zh-line";
     zh.lang = "zh-CN";
@@ -603,8 +633,17 @@ function podTranscript(ep) {
         word.append(hanzi, pinyin);
         word.addEventListener("click", (event) => {
           event.stopPropagation();
+          if (podBubbleOpen) {
+            podBubbleOpen = false;
+            podBubbleTap = null;
+            if (typeof cpHideWordPopup === "function") cpHideWordPopup();
+            return;
+          }
           sfx.click();
-          if (typeof cpShowWordPopup === "function") cpShowWordPopup(text, word);
+          if (typeof cpShowWordPopup === "function") {
+            cpShowWordPopup(text, word);
+            podBubbleOpen = true;
+          }
         });
         zh.appendChild(word);
       } else {
@@ -612,24 +651,49 @@ function podTranscript(ep) {
       }
     }
     para.dataset.start = firstStart === null ? "" : String(firstStart);
-    para.appendChild(zh);
+    body.appendChild(zh);
     if (p.th) {
       const th = document.createElement("p");
       th.className = "pod-thai";
       th.lang = "th";
       th.textContent = p.th;
-      para.appendChild(th);
+      body.appendChild(th);
     }
-    para.addEventListener("click", (event) => {
-      if (event.target.closest(".pod-word")) return;
-      const start = Number(para.dataset.start);
-      if (para.dataset.start === "" || !Number.isFinite(start)) return;
+    para.appendChild(body);
+
+    const controls = document.createElement("div");
+    controls.className = "pod-para-controls";
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "reader-replay";
+    play.textContent = "▶";
+    play.title = "เล่นตั้งแต่ประโยคนี้";
+    play.setAttribute("aria-label", "เล่นตั้งแต่ประโยคนี้");
+    play.disabled = firstStart === null || !Number.isFinite(Number(firstStart));
+    play.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (play.disabled) return;
+      sfx.click();
       podInterruptThaiVoice();
       podWantPlay = true;
-      // podSeekAudio resumes playback only after the seek has completed, so the
-      // WebView can no longer restart the clip from 0 while the seek is pending.
-      podSeekAudio(start, true);
+      // Resume only after the seek completes; Android WebView can otherwise
+      // restart the episode from 0 while a sentence seek is pending.
+      podSeekAudio(Number(para.dataset.start), true);
     });
+    const pause = document.createElement("button");
+    pause.type = "button";
+    pause.className = "reader-replay pod-para-pause";
+    pause.textContent = "⏸";
+    pause.title = "หยุดชั่วคราวเพื่ออ่านประโยคนี้";
+    pause.setAttribute("aria-label", "หยุดเสียงชั่วคราวเพื่ออ่านประโยคนี้");
+    pause.addEventListener("click", (event) => {
+      event.stopPropagation();
+      sfx.click();
+      podPause();
+      $("podStatus").textContent = "หยุดเสียงชั่วคราว · อ่านบทความต่อได้ แล้วแตะ ▶ เพื่อฟังต่อ";
+    });
+    controls.append(play, pause);
+    para.appendChild(controls);
     root.appendChild(para);
   }
   const hasThai = paras.some((p) => p.th);
@@ -639,6 +703,8 @@ function podTranscript(ep) {
     ? (podThaiVisible ? "🇹🇭 ซ่อนคำแปล" : "🇹🇭 แสดงคำแปล")
     : "🇹🇭 คำแปลยังไม่พร้อม";
   root.classList.toggle("pod-hide-thai", !podThaiVisible);
+  root.classList.toggle("pod-hide-pinyin", !podPinyinVisible);
+  podApplyPinyinToggle();
 }
 
 function podSelectEpisode(ep) {
@@ -777,6 +843,34 @@ function podUpdateHighlight() {
   if (!active) return;
   active.classList.add("pod-current");
   podKeepSentenceAndThaiVisible(active);
+}
+
+// While a transcript-word bubble is open, the first tap outside it only closes
+// the bubble. Swallow the matching click so it cannot activate playback,
+// controls, or another word underneath it.
+function podInstallBubbleGuard() {
+  document.addEventListener("pointerdown", (event) => {
+    if (!podBubbleOpen) { podBubbleTap = null; return; }
+    const popup = $("cpWordPopup");
+    if (!popup || popup.hidden) {
+      podBubbleOpen = false;
+      podBubbleTap = null;
+      return;
+    }
+    if (popup.contains(event.target)) {
+      podBubbleTap = null;
+      return;
+    }
+    podBubbleTap = "dismiss";
+    if (typeof cpHideWordPopup === "function") cpHideWordPopup();
+    podBubbleOpen = false;
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (podBubbleTap !== "dismiss") return;
+    podBubbleTap = null;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
 }
 
 function podBackToList() {
@@ -988,6 +1082,12 @@ $("podThaiToggle").addEventListener("click", () => {
   $("podThaiToggle").setAttribute("aria-pressed", String(podThaiVisible));
   $("podThaiToggle").textContent = podThaiVisible ? "🇹🇭 ซ่อนคำแปล" : "🇹🇭 แสดงคำแปล";
 });
+$("podPinyinToggle").addEventListener("click", () => {
+  sfx.click();
+  podPinyinVisible = !podPinyinVisible;
+  podSavePinyinVisible();
+  podApplyPinyinToggle();
+});
 $("podVoiceToggle").addEventListener("click", () => {
   if (!podThaiVoiceAvailable(podcastState && podcastState.episode)) return;
   sfx.click();
@@ -1102,3 +1202,4 @@ document.addEventListener("visibilitychange", () => {
     podPlay();
   }
 });
+podInstallBubbleGuard();

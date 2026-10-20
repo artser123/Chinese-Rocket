@@ -268,6 +268,22 @@ function cpWordIndex() {
       });
     }
   }
+  if (typeof VOCAB_READING !== "undefined") {
+    for (const w of VOCAB_READING) {
+      const variants = w[0].split(/[｜|]/).map((v) => v.trim());
+      const pys = (w[1] || "").split(/[｜|]/).map((v) => v.trim());
+      const th = (w[2] || "").trim();
+      variants.forEach((zh, i) => {
+        if (!zh || !th) return;
+        const previous = cpWordIdx.get(zh);
+        // Keep every existing translation unchanged; only fill dictionary
+        // entries that currently have no Thai/English gloss at all.
+        if (!previous || !previous.th) {
+          cpWordIdx.set(zh, { py: pys.length === variants.length ? pys[i] : (pys[0] || ""), th });
+        }
+      });
+    }
+  }
   return cpWordIdx;
 }
 

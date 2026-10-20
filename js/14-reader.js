@@ -90,7 +90,9 @@ async function readerLoadData() {
 function readerBuildWordTrie() {
   const root = {};
   if (typeof VOCAB === "undefined" || !VOCAB) return root;
-  for (const level of Object.values(VOCAB)) {
+  const levels = Object.values(VOCAB);
+  if (typeof VOCAB_READING !== "undefined") levels.push(VOCAB_READING);
+  for (const level of levels) {
     for (const row of level || []) {
       if (!Array.isArray(row) || !row[0]) continue;
       const variants = String(row[0]).split(/[｜|]/).map((word) => word.trim()).filter(Boolean);
@@ -314,8 +316,10 @@ function readerMakeTranscript(story) {
     }
     article.appendChild(body);
 
-    // Play button on the right of every sentence block: starts the story from
-    // that sentence and keeps reading the sentences below as usual.
+    // Explicit controls on the right of every sentence: replay from this turn,
+    // or pause the narration to read at your own pace.
+    const controls = document.createElement("div");
+    controls.className = "reader-turn-controls";
     const play = document.createElement("button");
     play.type = "button";
     play.className = "reader-replay";
@@ -327,7 +331,20 @@ function readerMakeTranscript(story) {
       sfx.click();
       readerPlayFromTurn(index);
     });
-    article.appendChild(play);
+    const pause = document.createElement("button");
+    pause.type = "button";
+    pause.className = "reader-replay reader-pause";
+    pause.title = "หยุดชั่วคราวเพื่ออ่านประโยคนี้";
+    pause.setAttribute("aria-label", `หยุดเสียงชั่วคราวเพื่ออ่านประโยคที่ ${index + 1}`);
+    pause.textContent = "⏸";
+    pause.addEventListener("click", (event) => {
+      event.stopPropagation();
+      sfx.click();
+      readerPause();
+      $("readerStatus").textContent = "หยุดเสียงชั่วคราว · อ่านบทอ่านต่อได้ แล้วแตะ ▶ เพื่อฟังต่อ";
+    });
+    controls.append(play, pause);
+    article.appendChild(controls);
 
     article.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
