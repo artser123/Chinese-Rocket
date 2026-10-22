@@ -76,6 +76,11 @@
       <div class="card-title">เกมคำศัพท์</div>
       <div class="card-desc">จับคู่คำจีนกับพินอินหรือคำแปลไทย 4 ตัวเลือก ฝึกเรื่อยๆ ไม่จบ</div>
     </button>
+    <button class="card" data-mode="vocaboverview">
+      <div class="card-icon">📑</div>
+      <div class="card-title">เกมรวมคำศัพท์</div>
+      <div class="card-desc">หน้ารวมคำศัพท์และประโยคของหมวดที่เลือกในหน้าหลัก ทั้งตัวอักษรจีน พินอิน คำแปล และเสียงอ่าน</div>
+    </button>
     <button class="card" data-mode="sentence">
       <div class="card-icon">🧩</div>
       <div class="card-title">เกมเรียงประโยค</div>
@@ -642,8 +647,13 @@
     <div class="pod-source-tabs" role="group" aria-label="เลือกแหล่งพอดแคสต์">
       <button id="podSrcMaoMi" class="pod-src-btn" type="button" aria-pressed="true">🎙 MaoMi</button>
       <button id="podSrcHsk" class="pod-src-btn" type="button" aria-pressed="false">📚 บทความ HSK</button>
+      <button id="podSrcSpecialized" class="pod-src-btn" type="button" aria-pressed="false">🗂 บทความเฉพาะทาง</button>
     </div>
     <div id="podHskFilter" class="pod-hsk-filter" role="group" aria-label="กรองตามระดับ HSK" hidden></div>
+    <label id="podSpecializedFilterWrap" class="pod-specialized-filter-wrap" hidden>
+      <span>หมวดบทความ</span>
+      <select id="podSpecializedFilter" aria-label="เลือกหมวดบทความเฉพาะทาง"></select>
+    </label>
     <label class="pod-search-wrap" for="podSearch">🔎
       <input id="podSearch" type="search" placeholder="ค้นหาตอนหรือหัวข้อ..." autocomplete="off">
     </label>
@@ -674,6 +684,11 @@
           <button id="podAutoNextBtn" class="pod-icon-btn" type="button" aria-pressed="false" title="เล่นเรื่องถัดไปอัตโนมัติ (วนลูปทั้งหมด)" aria-label="เล่นเรื่องถัดไปอัตโนมัติ">⏭</button>
           <span id="podAutoNextHint" class="pod-loop-hint">เล่นตอนถัดไปอัตโนมัติ: ปิด</span>
         </div>
+        <div class="pod-sleep-row">
+          <button id="podSleepBtn" class="pod-icon-btn" type="button" aria-pressed="false" aria-expanded="false" title="ตั้งเวลาหยุดเล่นอัตโนมัติ" aria-label="ตั้งเวลาหยุดเล่นอัตโนมัติ">🌙</button>
+          <span id="podSleepHint" class="pod-loop-hint">ตั้งเวลาปิดอัตโนมัติ: ปิด</span>
+        </div>
+        <div id="podSleepOptions" class="sleep-options" hidden></div>
         <div class="pod-voice-row">
           <button id="podVoiceToggle" class="pod-voice-toggle" type="button" aria-pressed="true" hidden>🇹🇭 เสียงแปล: เปิด</button>
           <span id="podVoiceHint" class="pod-voice-hint">เสียงแปลไทยจะเล่นหลังจบแต่ละประโยค</span>
@@ -683,11 +698,13 @@
     <div class="pod-now-playing">
       <div class="pod-ep-number" id="podEpisodeNumber"></div>
       <h3 id="podTitle"></h3>
+      <p id="podIntroTitle" class="pod-intro-title" hidden></p>
       <p id="podEnglishTitle" class="pod-english-title"></p>
       <p id="podMeta"></p>
     </div>
     <audio id="podAudio" preload="metadata" playsinline></audio>
     <audio id="podThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
+    <audio id="podIntroAudio" preload="none" playsinline aria-hidden="true"></audio>
     <div class="pod-transcript-heading">
       <span class="pod-transcript-label">📝 Transcript ภาษาจีน</span>
       <div class="pod-heading-actions">
@@ -750,6 +767,10 @@
           <button id="readerAlternateBtn" class="reader-option-btn" type="button" aria-pressed="false">🇨🇳↔🇹🇭 สลับจีน–ไทย: ปิด</button>
           <button id="readerAutoNextBtn" class="reader-option-btn" type="button" aria-pressed="false">⏭ เล่นเรื่องถัดไป: ปิด</button>
         </div>
+        <div class="reader-sleep-row">
+          <button id="readerSleepBtn" class="reader-option-btn" type="button" aria-pressed="false" aria-expanded="false">🌙 ตั้งเวลาปิด: ปิด</button>
+        </div>
+        <div id="readerSleepOptions" class="sleep-options" hidden></div>
       </div>
     </div>
     <div class="reader-now-playing">
@@ -914,6 +935,63 @@
   </div>
 </div>
 
+
+<!-- VOCABULARY OVERVIEW SCREEN — เกมรวมคำศัพท์และประโยคตามหมวดหมู่ -->
+<div id="vocaboverview" class="screen">
+  <div class="vo-header">
+    <button id="voBackBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">🔙</button>
+    <div class="vo-title-group">
+      <h2 class="vo-title">📑 เกมรวมคำศัพท์</h2>
+      <div class="vo-cat-indicator" id="voCatIndicator">
+        <span class="vo-cat-icon" id="voCatIcon">📂</span>
+        <select id="voCategorySelect" class="vo-category-select" aria-label="สลับหมวดหมู่คำศัพท์"></select>
+      </div>
+    </div>
+    <button id="voMuteBtn" class="icon-btn" title="เปิด/ปิดเสียง" aria-label="เปิด/ปิดเสียง">🔊</button>
+  </div>
+
+  <div class="vo-controls-panel">
+    <div class="vo-subcat-bar" id="voSubcatBar" role="tablist" aria-label="หมวดย่อยคำศัพท์">
+      <!-- Subcategory / Level filter buttons generated dynamically -->
+    </div>
+
+    <div class="vo-search-row">
+      <div class="vo-search-wrap">
+        <span class="vo-search-icon" aria-hidden="true">🔍</span>
+        <input id="voSearchInput" type="search" class="vo-search-input" placeholder="ค้นหาตัวจีน, พินอิน หรือคำแปล..." autocomplete="off">
+        <button id="voSearchClear" class="vo-search-clear" title="ล้างการค้นหา" aria-label="ล้างการค้นหา" hidden>✕</button>
+      </div>
+      <div class="vo-stats" id="voStatsBadge">กำลังโหลดคำศัพท์...</div>
+    </div>
+
+    <div class="vo-toggles-row">
+      <button id="voTogglePy" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงพินอิน">
+        <span class="vo-toggle-check">✓</span> พินอิน
+      </button>
+      <button id="voToggleTh" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงคำแปลไทย">
+        <span class="vo-toggle-check">✓</span> คำแปลไทย
+      </button>
+      <button id="voToggleSent" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงประโยคตัวอย่าง">
+        <span class="vo-toggle-check">✓</span> ประโยคตัวอย่าง
+      </button>
+      <button id="voPlayAllBtn" class="vo-action-btn" type="button" title="เล่นเสียงคำศัพท์อัตโนมัติ">
+        ▶ เล่นเสียงวน
+      </button>
+    </div>
+  </div>
+
+  <div id="voListContainer" class="vo-list-container">
+    <div id="voList" class="vo-list"></div>
+    <div id="voEmptyNotice" class="vo-empty-notice" hidden>
+      <div class="vo-empty-icon">🔍</div>
+      <div class="vo-empty-title" id="voEmptyTitle">ไม่พบคำศัพท์ที่ตรงกับการค้นหา</div>
+      <div class="vo-empty-desc" id="voEmptyDesc">ลองค้นหาด้วยคำอื่น หรือกด "ทั้งหมด" เพื่อดูคำศัพท์ทั้งหมดในหมวดนี้</div>
+    </div>
+  </div>
+
+  <button id="voScrollTopBtn" class="vo-scroll-top-btn" title="ขึ้นด้านบน" aria-label="ขึ้นด้านบน" hidden>⬆</button>
+</div>
+
 <!-- WORD POPUP — แตะคำในประโยค (เกมเขียนเป็นประโยค) เพื่อดูคำแปลไทยรายคำ ลอยอยู่เหนือคำนั้น -->
 <div id="cpWordPopup" hidden>
   <button id="cpWordCloseBtn" class="cpw-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
@@ -967,6 +1045,7 @@
 <script src="js/12-trace.js"></script>
 <script src="js/13-podcast.js"></script>
 <script src="js/14-reader.js"></script>
+<script src="js/15-vocaboverview.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

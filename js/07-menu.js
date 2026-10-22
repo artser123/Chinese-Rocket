@@ -1118,6 +1118,7 @@ MODE_TITLES.listen = "🎧 เกมฝึกฟัง";
 MODE_TITLES.copy = "✍️ เกมเขียนเป็นประโยค";
 MODE_TITLES.trace = "✍️ เกมคัดลายมือ";
 MODE_TITLES.podcast = "🎙️ ฟังพอดแคสต์จีน";
+MODE_TITLES.vocaboverview = "📑 เกมรวมคำศัพท์";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"

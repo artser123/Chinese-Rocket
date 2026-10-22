@@ -155,6 +155,22 @@ const GYM_SUB_MAP = {
   nutrition_gear: "运动装备与营养补剂"
 };
 
+// ทะเบียนแมปหมวดย่อยของแต่ละหมวด (คีย์ -> ชื่อภาษาจีน)
+// หมายเหตุ: const ที่ประกาศระดับบนสุดไม่กลายเป็น property ของ window
+// จึงต้องมีทะเบียนนี้ให้โค้ดข้ามไฟล์ (เช่น 15-vocaboverview.js) ใช้แทน window[mapName]
+const CATEGORY_SUB_MAPS = {
+  it: IT_SUB_MAP,
+  hotel: HOTEL_SUB_MAP,
+  factory: FACTORY_SUB_MAP,
+  trade: TRADE_SUB_MAP,
+  office: OFFICE_SUB_MAP,
+  food: FOOD_SUB_MAP,
+  media: MEDIA_SUB_MAP,
+  business: BUSINESS_SUB_MAP,
+  phone: PHONE_SUB_MAP,
+  gym: GYM_SUB_MAP
+};
+
 const CATEGORIES = {
   hsk: {
     id: "hsk",
@@ -624,4 +640,5 @@ function toggleMute() {
   $("lisMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("cpMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("tcMuteBtn").textContent = muted ? "🔇" : "🔊";
+  if ($("voMuteBtn")) $("voMuteBtn").textContent = muted ? "🔇" : "🔊";
 }

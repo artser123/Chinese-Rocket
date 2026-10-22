@@ -2542,8 +2542,8 @@ button.fill-blank {
 .pod-search-wrap input::placeholder { color: var(--fg-mute); }
 .pod-source-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
   padding: 3px;
   border: 1px solid var(--line-1);
   border-radius: var(--r-md);
@@ -2556,7 +2556,7 @@ button.fill-blank {
   background: transparent;
   color: var(--fg-dim);
   font: inherit;
-  font-size: 13.5px;
+  font-size: clamp(10px, 2.8vw, 13px);
   font-weight: 700;
   cursor: pointer;
   touch-action: manipulation;
@@ -2570,6 +2570,30 @@ button.fill-blank {
 }
 .pod-hsk-filter { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .pod-hsk-filter[hidden] { display: none; }
+.pod-specialized-filter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+.pod-specialized-filter-wrap[hidden] { display: none; }
+.pod-specialized-filter-wrap select {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+.pod-specialized-filter-wrap option { background: #121838; color: var(--fg); }
 .pod-hsk-chip {
   min-width: 40px;
   min-height: 32px;
@@ -2649,6 +2673,16 @@ button.fill-blank {
 .pod-now-playing h3 { margin-top: 3px; font-size: clamp(18px, 4.8vw, 24px); line-height: 1.4; }
 .pod-now-playing p { margin-top: 3px; color: var(--fg-mute); font-size: 11px; }
 .pod-now-playing .pod-english-title { color: var(--fg-dim); font-size: 12px; line-height: 1.45; }
+.pod-now-playing .pod-intro-title {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-cool);
+  border-radius: 0 10px 10px 0;
+  background: rgba(143, 211, 255, .08);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .pod-transport { padding: 9px 12px; border: 1px solid var(--line-1); border-radius: 16px; background: var(--surface-2); }
 .pod-seek-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 8px; color: var(--fg-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 #podSeek { width: 100%; accent-color: #83b9ff; touch-action: pan-x; }
@@ -2680,6 +2714,12 @@ button.fill-blank {
   box-shadow: 0 0 12px rgba(143, 211, 255, .18);
 }
 .pod-loop-hint { min-width: 0; color: var(--fg-mute); font-size: 10px; line-height: 1.35; }
+/* ตั้งเวลาปิดเสียงอัตโนมัติ (sleep timer) — ใช้ได้ทั้งโหมดพอดแคสต์และอ่านบทความ */
+.pod-sleep-row, .reader-sleep-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.sleep-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 8px; border: 1px solid var(--line-1); border-radius: 12px; background: var(--surface-2); }
+.sleep-options[hidden] { display: none; }
+.sleep-opt { min-height: 32px; padding: 5px 11px; border: 1px solid var(--line-1); border-radius: 9px; background: rgba(143, 211, 255, .08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.sleep-opt[aria-pressed="true"] { border-color: rgba(143, 211, 255, .55); background: rgba(143, 211, 255, .2); color: #dff4ff; }
 .pod-voice-row { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
 .pod-voice-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .pod-voice-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
@@ -2699,6 +2739,7 @@ button.fill-blank {
 .pod-thai-toggle:disabled { opacity: .58; cursor: default; }
 .pod-thai-notice { padding: 9px 11px; border: 1px solid rgba(255, 215, 106, .3); border-radius: 11px; background: rgba(255, 215, 106, .08); color: #f4d98f; font-size: 11px; line-height: 1.5; }
 .pod-transcript { display: flex; flex-direction: column; gap: 10px; padding: 2px 1px 28px; }
+.pod-transcript[hidden] { display: none; }
 .pod-para { display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 10px; border: 1px solid rgba(122, 140, 255, .17); border-radius: 15px; background: rgba(16, 23, 55, .76); scroll-margin: 12px; }
 .pod-para-body { flex: 1 1 auto; min-width: 0; }
 .pod-para-controls, .reader-turn-controls { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; }
@@ -2827,4 +2868,588 @@ button.fill-blank {
   .reader-word-py { font-size: calc(13px * var(--reader-fs)); }
   .reader-thai { font-size: calc(16px * var(--reader-fs)); }
   .reader-quiz-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+
+/* ===========================================================
+   VOCABULARY OVERVIEW (เกมรวมคำศัพท์)
+   =========================================================== */
+#vocaboverview {
+  background: radial-gradient(ellipse at 50% 115%, #182352 0%, #060920 65%);
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  /* ต้องคง position: fixed จาก .screen ไว้ — เคยใส่ position: relative ทับ
+     ทำให้จอไม่สูงเท่าวิวพอร์ต (สูงตามเนื้อหา 19,000px) แต่ body เป็น overflow: hidden
+     ผลคือเลื่อนไม่ได้เลย และ infinite scroll ไม่เคยทำงาน (เห็นแค่ 50 คำแรก) */
+  overscroll-behavior: contain;
+}
+
+#vocaboverview > * {
+  flex-shrink: 0;
+}
+
+.vo-header {
+  width: min(860px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 4px;
+}
+
+.vo-title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* จอมือถือแคบ: ให้หัวข้อกับ dropdown หมวดขึ้นบรรทัดใหม่เต็มความกว้าง
+   ไม่งั้น min-content ของ <select> ดัน .vo-header กว้างเกินจอ → เลื่อนแนวนอนได้ */
+@media (max-width: 520px) {
+  .vo-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .vo-title-group {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .vo-cat-indicator {
+    max-width: 100%;
+  }
+
+  .vo-category-select {
+    max-width: min(420px, 78vw);
+  }
+}
+
+.vo-title {
+  margin: 0;
+  font-size: clamp(20px, 5.2vw, 26px);
+  font-weight: 800;
+  color: var(--fg);
+  letter-spacing: .02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vo-cat-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-1);
+  border: 1.5px solid var(--line-1);
+  border-radius: 999px;
+  padding: 3px 12px;
+  box-shadow: var(--sh-1);
+}
+
+.vo-category-select {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: clamp(12px, 3.4vw, 14px);
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  max-width: min(420px, 62vw);
+}
+
+.vo-category-select option {
+  background: #101638;
+  color: #fff;
+}
+
+.vo-controls-panel {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--line-1);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: var(--sh-2);
+}
+
+.vo-subcat-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.vo-subcat-btn {
+  white-space: nowrap;
+  padding: 6px 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--line-1);
+  background: #11183c;
+  color: var(--fg-dim);
+  font-size: clamp(12px, 3.2vw, 13.5px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s ease;
+  flex-shrink: 0;
+}
+
+.vo-subcat-btn:hover {
+  border-color: var(--line-2);
+  color: #fff;
+}
+
+.vo-subcat-btn.active {
+  background: linear-gradient(135deg, #2a4192, #1b2762);
+  border-color: var(--accent-cool);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(143, 211, 255, .35);
+}
+
+.vo-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vo-search-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.vo-search-icon {
+  position: absolute;
+  left: 12px;
+  pointer-events: none;
+  font-size: 14px;
+  opacity: .7;
+}
+
+.vo-search-input {
+  width: 100%;
+  padding: 9px 36px 9px 34px;
+  font-size: clamp(14px, 3.8vw, 16px);
+  border-radius: 12px;
+  border: 1.5px solid var(--line-1);
+  background: #0d1334;
+  color: #fff;
+  outline: none;
+  font-family: inherit;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.vo-search-input:focus {
+  border-color: var(--indigo);
+  box-shadow: 0 0 10px rgba(106, 122, 240, .35);
+}
+
+.vo-search-clear {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #ff6b6b;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.vo-stats {
+  font-size: clamp(12px, 3.2vw, 13px);
+  color: var(--fg-mute);
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.vo-toggles-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vo-toggle-btn {
+  padding: 5px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-1);
+  background: #11183c;
+  color: var(--fg-mute);
+  font-size: clamp(11.5px, 3.1vw, 13px);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all .15s ease;
+}
+
+.vo-toggle-btn.active {
+  background: rgba(60, 224, 127, .12);
+  border-color: var(--accent-green-1);
+  color: var(--accent-green-1);
+}
+
+.vo-action-btn {
+  margin-left: auto;
+  padding: 5px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: rgba(255, 215, 106, .12);
+  color: var(--accent);
+  font-size: clamp(12px, 3.2vw, 13.5px);
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .15s ease;
+}
+
+.vo-action-btn.playing {
+  background: rgba(255, 87, 34, .2);
+  border-color: var(--accent-warm-2);
+  color: #ff8a65;
+  animation: voPulse 1.2s infinite;
+}
+
+@keyframes voPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); box-shadow: 0 0 14px rgba(255, 87, 34, .4); }
+  100% { transform: scale(1); }
+}
+
+.vo-list-container {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Card Styling */
+.vo-item {
+  background: linear-gradient(180deg, #182247 0%, #101633 100%);
+  border: 1.5px solid #334185;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--sh-1);
+  transition: border-color .18s ease, transform .15s ease;
+}
+
+.vo-item:hover {
+  border-color: #5568bd;
+}
+
+.vo-item.active-speaking {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(255, 215, 106, .45);
+  transform: translateY(-2px);
+}
+
+.vo-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.vo-item-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vo-item-index {
+  color: var(--fg-mute);
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 24px;
+}
+
+.vo-item-zh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(24px, 6.5vw, 32px);
+  font-weight: 800;
+  color: #ffe0a1;
+  line-height: 1.1;
+  letter-spacing: .02em;
+}
+
+.vo-item-py {
+  font-family: var(--font-pinyin);
+  font-size: clamp(15px, 4.2vw, 19px);
+  color: var(--accent-cool);
+  font-weight: 600;
+}
+
+.vo-item-tag {
+  background: rgba(106, 122, 240, .2);
+  border: 1px solid rgba(106, 122, 240, .45);
+  color: #b7c4ff;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.vo-item-sound-btn {
+  background: #192350;
+  border: 1.5px solid #4a5db3;
+  color: #fff;
+  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: transform .12s ease, background .15s ease;
+  flex-shrink: 0;
+}
+
+.vo-item-sound-btn:active {
+  transform: scale(.9);
+}
+
+.vo-item-sound-btn.playing {
+  border-color: var(--accent);
+  background: rgba(255, 215, 106, .25);
+  animation: voPulse .8s infinite;
+}
+
+.vo-item-meaning {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: clamp(15px, 4.2vw, 17.5px);
+  color: #a2ffd3;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.vo-meaning-label {
+  color: var(--fg-mute);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Sentences Section */
+.vo-item-sentences {
+  margin-top: 4px;
+  border-top: 1px dashed rgba(122, 140, 255, .25);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vo-sentences-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vo-sentences-title {
+  color: #9bb3ff;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.vo-sentences-count {
+  color: var(--fg-mute);
+  font-size: 11.5px;
+}
+
+.vo-sentence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vo-sentence-card {
+  background: rgba(7, 11, 30, .65);
+  border: 1px solid rgba(122, 140, 255, .2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vo-sentence-zh-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vo-sent-zh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(15px, 4.2vw, 18px);
+  font-weight: 700;
+  color: #fff2c6;
+  line-height: 1.25;
+}
+
+.vo-sent-sound-btn, .vo-sent-th-sound-btn {
+  background: #141c40;
+  border: 1px solid #3d4f9b;
+  color: #cdd5ff;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform .1s ease, border-color .15s ease;
+}
+
+.vo-sent-sound-btn:active, .vo-sent-th-sound-btn:active {
+  transform: scale(.92);
+}
+
+.vo-sent-sound-btn.playing, .vo-sent-th-sound-btn.playing {
+  border-color: var(--accent);
+  background: rgba(255, 215, 106, .2);
+}
+
+.vo-sent-py {
+  font-family: var(--font-pinyin);
+  font-size: clamp(12.5px, 3.4vw, 14.5px);
+  color: #8fd3ff;
+}
+
+.vo-sent-th {
+  font-size: clamp(13.5px, 3.6vw, 15px);
+  color: #92ecc2;
+  line-height: 1.35;
+}
+
+.vo-sent-meta {
+  margin-top: 2px;
+  display: flex;
+  gap: 6px;
+}
+
+.vo-sent-topic {
+  background: rgba(255, 255, 255, .07);
+  color: #aab4e8;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.vo-no-sentence-note {
+  font-size: 12.5px;
+  color: #717da8;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Visibility Toggles */
+#voList.vo-hide-pinyin .vo-item-py,
+#voList.vo-hide-pinyin .vo-sent-py {
+  display: none !important;
+}
+
+#voList.vo-hide-thai .vo-item-meaning,
+#voList.vo-hide-thai .vo-sent-th {
+  display: none !important;
+}
+
+#voList.vo-hide-sentences .vo-item-sentences {
+  display: none !important;
+}
+
+/* Empty notice */
+.vo-empty-notice {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--fg-mute);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* .vo-empty-notice/.vo-scroll-top-btn ตั้ง display เอง จึงต้องคุม [hidden] เองด้วย
+   (ไม่งั้น UA [hidden] { display:none } แพ้ author rule → แสดงตลอดเวลา) */
+.vo-empty-notice[hidden],
+.vo-scroll-top-btn[hidden] {
+  display: none;
+}
+
+.vo-empty-icon {
+  font-size: 40px;
+  opacity: .5;
+}
+
+.vo-empty-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.vo-empty-desc {
+  font-size: 14px;
+  max-width: 380px;
+}
+
+/* Scroll top button */
+.vo-scroll-top-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b3d87, #151d45);
+  border: 1.5px solid var(--accent-cool);
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.vo-scroll-top-btn:active {
+  transform: scale(.92);
+}
+
+@media (min-width: 700px) {
+  #vocaboverview {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
 }

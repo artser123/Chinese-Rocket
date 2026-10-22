@@ -11,20 +11,239 @@ function lisSource() {
 function lisSetMediaState(state) {
   try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state; } catch (e) {}
 }
-// Shared by listen mode and podcast mode: a native foreground service + partial
-// wake lock keeps the WebView's JS running while the app is backgrounded or the
-// screen is off. Without it Android freezes the page and any JS-driven audio
-// handoff (e.g. the podcast pausing the source to play a Thai translation clip)
-// never resumes, so the audio dies on app switch / screen lock.
-function crSetNativeBackgroundAudio(active) {
+// Shared by listen mode, podcast mode and the HSK reader: a native foreground
+// service + partial wake lock keeps the WebView's JS running while the app is
+// backgrounded or the screen is off. Without it Android freezes the page and
+// any JS-driven audio handoff (e.g. the podcast pausing the source to play a
+// Thai translation clip, or the auto-advance to the next episode) never
+// resumes, so the audio dies on app switch / screen lock.
+//
+// Android 12+ (API 31) refuses to start a foreground service from the
+// background (ForegroundServiceStartNotAllowedException) and the service may
+// only be stopped from the foreground state we control. The service therefore
+// has to stay up for as long as playback is wanted: it is started while the
+// app is visible and is never stopped/restarted in the middle of a playback
+// (a stop + start from the background would silently kill the keep-alive and
+// the next episode would never start).
+let crNativeBgWanted = false;   // the service should be running
+let crNativeBgRunning = false;  // we believe the service is up
+let crNativeBgInit = false;     // the first call always reaches the native side
+
+function crNativeBackgroundCall(active) {
   try {
     const native = window.ChineseRocketAndroid
       || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
     if (!native || !native.setListenMode) return;
     const result = native.setListenMode({ active: !!active });
+    if (result && typeof result.then === "function") {
+      result.then((value) => {
+        if (value && typeof value.running === "boolean") {
+          crNativeBgRunning = value.running;
+          if (value.running) { crNativeBgRetries = 0; return; }
+          // เริ่มไม่สำเร็จ (เช่น Android 12+ ห้ามเริ่มจากเบื้องหลัง) — ลองใหม่
+          // เมื่อแอปกลับมาเห็นหน้าจอ
+          if (crNativeBgWanted) crNativeBackgroundRetrySoon();
+        }
+      }).catch(() => {});
+    } else if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch (e) {}
+}
+
+let crNativeBgRetryTimer = null;
+let crNativeBgRetries = 0;
+
+function crNativeBackgroundRetrySoon() {
+  if (crNativeBgRetryTimer !== null || crNativeBgRetries > 8) return;
+  crNativeBgRetries++;
+  crNativeBgRetryTimer = setTimeout(() => {
+    crNativeBgRetryTimer = null;
+    crNativeBackgroundRetry();
+  }, 1200);
+}
+
+function crSetNativeBackgroundAudio(active) {
+  const want = !!active;
+  if (crNativeBgInit && want === crNativeBgWanted) return; // no change → don't churn the service
+  crNativeBgInit = true;
+  crNativeBgWanted = want;
+  if (!want) {
+    crNativeBgRunning = false;
+    crNativeBgRetries = 0;
+    crNativeBackgroundCall(false);
+    return;
+  }
+  if (crNativeBgRunning) return;  // already up → leave it alone
+  if (document.hidden) {
+    // Starting it now would throw on Android 12+; the retry happens as soon
+    // as the app becomes visible again.
+    return;
+  }
+  crNativeBgRunning = true;
+  crNativeBackgroundCall(true);
+}
+
+// Retry a deferred service start once the app is in the foreground again.
+function crNativeBackgroundRetry() {
+  if (!crNativeBgWanted || crNativeBgRunning) return;
+  if (document.hidden) return;
+  crNativeBgRunning = true;
+  crNativeBackgroundCall(true);
+}
+// ข้อความบนการแจ้งเตือนตอนเล่นเบื้องหลัง (ชื่อตอน/บทความที่กำลังฟัง)
+function crSetNotificationText(title, text) {
+  try {
+    const native = window.ChineseRocketAndroid
+      || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
+    if (!native || !native.setNotificationText) return;
+    const result = native.setNotificationText({ title: title || "", text: text || "" });
     if (result && typeof result.catch === "function") result.catch(() => {});
   } catch (e) {}
 }
+
+/* ---- Session restore (พอดแคสต์ / อ่านบทความ) ------------------------
+   ถ้า Android ฆ่าแอปตอนอยู่เบื้องหลัง (บริการ foreground กันไว้เกือบทั้งหมด
+   แต่ระบบยังอาจเก็บหน่วยความจำ) หน้าเว็บจะโหลดใหม่และผู้ใช้เจอหน้าเมนู
+   จึงเก็บสถานะการเล่นไว้ใน localStorage เพื่อกลับไปที่ตอน/บทความเดิม
+   ที่ตำแหน่งเดิมได้ */
+const CR_SESSION_KEY = "cr_media_session";
+
+function crSaveMediaSession(session) {
+  try {
+    if (!session) { localStorage.removeItem(CR_SESSION_KEY); return; }
+    localStorage.setItem(CR_SESSION_KEY, JSON.stringify(session));
+  } catch (error) {
+    try { localStorage.removeItem(CR_SESSION_KEY); } catch (e) {}
+  }
+}
+
+function crLoadMediaSession() {
+  try {
+    const raw = localStorage.getItem(CR_SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    return value && typeof value === "object" ? value : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function crClearMediaSession() {
+  try { localStorage.removeItem(CR_SESSION_KEY); } catch (error) {}
+}
+
+/* ---- ตั้งเวลาปิดเสียงอัตโนมัติ (sleep timer) ---------------------------
+   ใช้ได้ทั้งโหมดพอดแคสต์และโหมดอ่านบทความ: เลือกได้ 5-60 นาที (หรือ 0 = ปิด)
+   เมื่อครบเวลาจะหยุดเสียงทันที (หยุดทั้งคลิปจีนและคลิปแปลไทย) แต่ละโหมดมี
+   ตัวจับเวลาของตัวเอง แยกกัน (view) แต่ใช้ตัวเดินนาฬิกาตัวเดียวกัน */
+const CR_SLEEP_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
+const crSleepViews = [];
+let crSleepTicker = null;
+
+function crSleepFormat(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function crSleepRemaining(view) {
+  if (!view.deadline) return 0;
+  return Math.max(0, view.deadline - Date.now());
+}
+
+function crSleepRender() {
+  for (const view of crSleepViews) {
+    const left = crSleepRemaining(view);
+    const on = left > 0;
+    // วาดใหม่เฉพาะตอนข้อความหรือสถานะเปลี่ยนจริง (เรียกได้บ่อย ๆ จาก timeupdate)
+    const stamp = `${on ? crSleepFormat(left) : ""}|${view.minutes}`;
+    if (view.stamp === stamp) continue;
+    view.stamp = stamp;
+    view.button.setAttribute("aria-pressed", String(on));
+    if (view.showTime) view.button.textContent = on ? `🌙 ${crSleepFormat(left)}` : view.idleLabel;
+    if (view.hint) view.hint.textContent = on ? `ปิดอัตโนมัติใน ${crSleepFormat(left)}` : view.idleHint;
+    for (const option of view.options.querySelectorAll(".sleep-opt")) {
+      option.setAttribute("aria-pressed", String(Number(option.dataset.minutes) === view.minutes));
+    }
+  }
+}
+
+function crSleepStopTicker() {
+  if (crSleepTicker === null) return;
+  clearInterval(crSleepTicker);
+  crSleepTicker = null;
+}
+
+function crSleepSyncTicker() {
+  const any = crSleepViews.some((view) => view.deadline > 0);
+  if (any && crSleepTicker === null) crSleepTicker = setInterval(crSleepTick, 1000);
+  else if (!any) crSleepStopTicker();
+}
+
+function crSleepTick() {
+  for (const view of crSleepViews) {
+    if (!view.deadline) continue;
+    if (crSleepRemaining(view) > 0) continue;
+    view.deadline = 0;
+    view.minutes = 0;
+    view.stamp = null;
+    try { view.onExpire(); } catch (error) { /* หยุดเสียงไม่สำเร็จก็ปล่อยไป */ }
+  }
+  crSleepRender();
+  crSleepSyncTicker();
+}
+
+function crSleepSet(view, minutes) {
+  const value = CR_SLEEP_OPTIONS.includes(Number(minutes)) ? Number(minutes) : 0;
+  view.minutes = value;
+  view.deadline = value > 0 ? Date.now() + value * 60000 : 0;
+  crSleepRender();
+  crSleepSyncTicker();
+}
+
+function crSleepCloseOptions(view) {
+  view.options.hidden = true;
+  view.button.setAttribute("aria-expanded", "false");
+}
+
+// view = { button, hint, options, showTime, idleLabel, idleHint, active, onExpire }
+function crSleepRegister(view) {
+  view.minutes = 0;
+  view.deadline = 0;
+  const box = view.options;
+  box.replaceChildren();
+  for (const minutes of CR_SLEEP_OPTIONS) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "sleep-opt";
+    option.dataset.minutes = String(minutes);
+    option.textContent = minutes === 0 ? "ปิด" : `${minutes} นาที`;
+    option.addEventListener("click", () => {
+      crSleepSet(view, minutes);
+      crSleepCloseOptions(view);
+    });
+    box.appendChild(option);
+  }
+  view.button.setAttribute("aria-expanded", "false");
+  view.button.addEventListener("click", () => {
+    const open = box.hidden;
+    box.hidden = !open;
+    view.button.setAttribute("aria-expanded", String(open));
+  });
+  crSleepViews.push(view);
+  crSleepRender();
+}
+
+// แตะที่อื่นนอกกล่องตัวเลือก = ปิดกล่อง
+document.addEventListener("pointerdown", (event) => {
+  for (const view of crSleepViews) {
+    if (view.options.hidden) continue;
+    if (view.options.contains(event.target) || view.button.contains(event.target)) continue;
+    crSleepCloseOptions(view);
+  }
+}, true);
 
 /* ---- จอไม่ดับขณะเล่นเสียง (ฝึกฟัง / พอดแคสต์ / อ่านบทความ) ----
    ผู้ใช้บางครั้งเปิดหน้าจอทิ้งไว้เพื่ออ่านข้อความ จึงขอกันจอดับตลอดที่เสียงเล่นอยู่
@@ -80,8 +299,9 @@ function crSetScreenAwake(active) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (!crScreenAwakeWanted) return;
-  crScreenAwakeApply(); // ซ่อนอยู่ → ปล่อย/ไม่ขอ; กลับมาเห็น → ขอใหม่
+  if (crScreenAwakeWanted) crScreenAwakeApply(); // ซ่อนอยู่ → ปล่อย/ไม่ขอ; กลับมาเห็น → ขอใหม่
+  // กลับมาเห็นหน้าจอแล้วจึงเริ่มบริการ foreground ได้ (Android 12+ ห้ามเริ่มจากเบื้องหลัง)
+  if (!document.hidden) crNativeBackgroundRetry();
 });
 
 // เปิด/ปิดการเล่นของโหมดฝึกฟังครั้งเดียว ครอบคลุมทั้งเสียงเบื้องหลังและจอไม่ดับ

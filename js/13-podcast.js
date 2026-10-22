@@ -41,14 +41,34 @@ const POD_FS_MAX = 1.8;
 const POD_FS_STEP = 0.1;
 let podFontScale = podLoadFontScale();
 
-// Podcast source ("maomi" = the streamed MaoMi episodes, "hsk" = the locally
-// generated HSK 1-9 articles) plus the HSK level filter (0 = all levels).
-// Both persist so the episode picker reopens the way the user left it.
+// Podcast sources and list filters persist so the picker reopens as last used.
 const POD_SRC_KEY = "cr_pod_source";
 const POD_HSK_FILTER_KEY = "cr_pod_hsk_filter";
+const POD_SPECIAL_FILTER_KEY = "cr_pod_special_filter";
 let podSource = podLoadSource();
 let podHskFilter = podLoadHskFilter();
+let podSpecialFilter = podLoadSpecialFilter();
 let podHskDataPromise = null;
+let podSpecializedDataPromise = null;
+let podIntroPlayback = null;
+
+// ---- ความทนทานของการเล่นเบื้องหลัง ------------------------------------
+// ตอนปิดหน้าจอ/สลับแอป Android อาจหยุดคลิปเอง หรือไม่ส่ง event "ended"
+// ให้ ทำให้ตอนถัดไปไม่เดิน โฟกัสต่อไปคือ (1) จับเวลาไว้แล้วยิงเหตุการณ์
+// ปลอม ๆ ถ้าเสียงจบจริง และ (2) เฝ้าดูว่าคลิปถูกหยุดเองหรือเปล่าแล้วสั่งเล่นต่อ
+let podWatchTimer = null;
+let podBusyUntil = 0;      // ช่วงที่กำลังโหลด/เลื่อนเสียง ห้ามสั่งเล่นซ้ำ
+let podSaveTimer = null;
+let podEndedFor = null;    // ตอนที่เพิ่งจัดการเหตุการณ์ "จบ" ไปแล้ว
+
+function podBusy(ms) {
+  podBusyUntil = Math.max(podBusyUntil, Date.now() + (ms || 0));
+}
+
+function podIsBusy() {
+  return Date.now() < podBusyUntil;
+}
+
 
 // The podcast dataset contains copyrighted transcript text. Keep it out of the
 // public web build; the private offline APK loads its bundled copy on demand.
@@ -118,14 +138,42 @@ function podLoadHskData() {
   return podHskDataPromise;
 }
 
+function podLoadSpecializedData() {
+  if (Array.isArray(window.PODCASTS_SPECIALIZED)) return Promise.resolve(window.PODCASTS_SPECIALIZED);
+  if (!window.CR_OFFLINE_APP && !POD_LOCAL_PREVIEW) {
+    return Promise.reject(new Error("Specialized articles are only available in the offline app"));
+  }
+  if (podSpecializedDataPromise) return podSpecializedDataPromise;
+  podSpecializedDataPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "data/podcasts_specialized.js";
+    script.onload = () => Array.isArray(window.PODCASTS_SPECIALIZED) && window.PODCASTS_SPECIALIZED.length
+      ? resolve(window.PODCASTS_SPECIALIZED)
+      : reject(new Error("Specialized podcast data is unavailable"));
+    script.onerror = () => reject(new Error("Specialized podcast data could not be loaded"));
+    document.head.appendChild(script);
+  });
+  return podSpecializedDataPromise;
+}
+
 // Episode list of the active (or given) source; each source wraps around its
 // own list when auto-advancing.
 function podEpisodesForSource(src = podSource) {
-  return src === "hsk" ? (window.PODCASTS_HSK || []) : (window.PODCASTS || []);
+  if (src === "hsk") return window.PODCASTS_HSK || [];
+  if (src === "specialized") return window.PODCASTS_SPECIALIZED || [];
+  return window.PODCASTS || [];
 }
 
 function podSourceOf(ep) {
-  return ep && ep.src === "hsk" ? "hsk" : "maomi";
+  return ep && (ep.src === "hsk" || ep.src === "specialized") ? ep.src : "maomi";
+}
+
+function podFilteredEpisodes(src = podSource) {
+  return podEpisodesForSource(src).filter((ep) => {
+    if (src === "hsk" && podHskFilter && ep.hsk !== podHskFilter) return false;
+    if (src === "specialized" && podSpecialFilter !== "all" && ep.categoryKey !== podSpecialFilter) return false;
+    return true;
+  });
 }
 
 // ---- transcript text size (A-/A+) --------------------------------------
@@ -146,7 +194,8 @@ function podLoadFontScale() {
 
 function podLoadSource() {
   try {
-    return localStorage.getItem(POD_SRC_KEY) === "hsk" ? "hsk" : "maomi";
+    const saved = localStorage.getItem(POD_SRC_KEY);
+    return ["maomi", "hsk", "specialized"].includes(saved) ? saved : "maomi";
   } catch (err) {
     return "maomi";
   }
@@ -223,14 +272,14 @@ function podApplyAutoNextToggle() {
 // wrap within their own source list.
 function podEpisodeIndex(ep) {
   if (!ep) return -1;
-  const list = podEpisodesForSource(podSourceOf(ep));
+  const list = podFilteredEpisodes(podSourceOf(ep));
   return list.findIndex((item) => item === ep ||
     (item && item.src === ep.src && item.id === ep.id) ||
     (item && item.src === ep.src && item.n === ep.n));
 }
 
 function podNextEpisode(ep) {
-  const list = podEpisodesForSource(podSourceOf(ep));
+  const list = podFilteredEpisodes(podSourceOf(ep));
   if (!list.length) return null;
   const index = podEpisodeIndex(ep);
   return list[index < 0 ? 0 : (index + 1) % list.length];
@@ -248,7 +297,7 @@ function podReplayCurrent() {
 
 function podGoToNextEpisode(manual = false) {
   if (!podcastState) return;
-  const list = podEpisodesForSource(podSourceOf(podcastState.episode));
+  const list = podFilteredEpisodes(podSourceOf(podcastState.episode));
   const next = podNextEpisode(podcastState.episode);
   if (!next) return;
   if (next === podcastState.episode && list.length <= 1) {
@@ -261,6 +310,12 @@ function podGoToNextEpisode(manual = false) {
     ? `ข้ามไปตอนที่ #${next.n}`
     : `⏭ เล่นตอนถัดไปอัตโนมัติ · #${next.n}${wrapped ? " (วนกลับตอนแรก)" : ""}`;
   $("podStatus").textContent = podStatusNote;
+}
+
+// ไฟล์เสียงของตอนนี้ (ใช้เทียบกับ element เพื่อกันเหตุการณ์ค้างจากตอนก่อน)
+function podEpisodeSrc(ep) {
+  if (!ep) return "";
+  return (window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW) && ep.mp3Local ? ep.mp3Local : (ep.mp3 || "");
 }
 
 function podThaiVoiceAvailable(ep) {
@@ -300,10 +355,19 @@ function podResetThaiVoicePosition(time) {
   });
 }
 
+function podLoadSpecialFilter() {
+  try { return localStorage.getItem(POD_SPECIAL_FILTER_KEY) || "all"; }
+  catch (err) { return "all"; }
+}
+
 // Wait until the media element has completed a seek before resuming playback.
 // Calling play() immediately after setting currentTime can make some WebViews
 // start from 0 while the requested seek is still pending.
 function podSeekAudio(target, resumeAfterSeek = false) {
+  if (podIntroPlayback) {
+    podClearIntro();
+    $("podTranscript").hidden = false;
+  }
   const audio = $("podAudio");
   if (audio.readyState < 1 && audio.src) {
     // Media metadata (duration/currentTime) is not known yet, so a seek would
@@ -336,6 +400,7 @@ function podSeekAudio(target, resumeAfterSeek = false) {
   const sequence = ++podSeekSequence;
   let timer = null;
   let finished = false;
+  podBusy(4000); // กำลังเลื่อนเสียง อย่าสั่งเล่นซ้ำระหว่างนี้
 
   audio.pause();
   if (!resumeAfterSeek) podWantPlay = false;
@@ -504,6 +569,151 @@ function podSyncNativeBackgroundAudio() {
   const active = Boolean(podcastState && podWantPlay);
   crSetNativeBackgroundAudio(active);
   crSetScreenAwake(active); // จอไม่ดับขณะฟังพอดแคสต์ ปล่อยเมื่อพัก/ออกจากตอน
+  if (active) podWatchStart();
+  else podWatchStop();
+}
+
+// ---- เฝ้าดูการเล่นเบื้องหลัง ------------------------------------------------
+// ฟังก์ชันนี้ทำให้ "เล่นตอนถัดไปอัตโนมัติ" ทำงานต่อได้แม้ปิดหน้าจอหรือสลับแอป:
+//  - ถ้า event "ended" หายไป (WebView ไม่ส่งตอนถูกหยุด) ให้ตรวจเวลาจบเองแล้วเดินต่อ
+//  - ถ้าระบบหยุดคลิปเอง (audio.paused) ให้สั่งเล่นต่อ
+function podWatchStart() {
+  if (podWatchTimer !== null) return;
+  podWatchTimer = setInterval(podWatch, 1500);
+}
+
+function podWatchStop() {
+  if (podWatchTimer === null) return;
+  clearInterval(podWatchTimer);
+  podWatchTimer = null;
+}
+
+function podWatch() {
+  if (!podcastState || !podWantPlay) { podWatchStop(); return; }
+  if (podIntroPlayback || podThaiVoicePlayback || podIsBusy()) return;
+  const audio = $("podAudio");
+  if (!audio || !audio.src) return;
+  if (audio.ended) {
+    // จบตอนแล้วแต่ event "ended" ไม่มา (เช่นตอนปิดหน้าจอ) → เดินต่อเอง
+    podHandleEnded();
+    return;
+  }
+  if (audio.paused) podResumeAudio();
+}
+
+// เดินตอนถัดไปอัตโนมัติ: คง "ตั้งใจเล่นต่อ" ไว้เสมอ เพื่อไม่ให้บริการ
+// foreground ถูกสั่งหยุดแล้วต้องเริ่มใหม่ตอนที่แอปอยู่เบื้องหลัง
+// (Android 12+ เริ่มบริการจากเบื้องหลังไม่ได้ → ตอนถัดไปจะไม่เดิน)
+// ฟังก์ชันนี้ถูกเรียกได้ทั้งจาก event "ended" และจากตัวเฝ้าดู เพื่อกันเหตุการณ์
+// ที่หายไปตอนปิดหน้าจอ/สลับแอป
+function podHandleEnded() {
+  if (!podcastState) return;
+  const audio = $("podAudio");
+  if (!audio.ended) return;                              // ยังไม่จบจริง
+  const episode = podcastState.episode;
+  if (podEndedFor === episode) return;                    // จัดการตอนนี้ไปแล้ว
+  if (audio.getAttribute("src") !== podEpisodeSrc(episode)) return; // เหตุการณ์ค้างจากตอนก่อน
+  podEndedFor = episode;
+  if (podAutoNextEnabled) {
+    podWantPlay = true;
+    podSyncNativeBackgroundAudio();
+    podSetMediaState("playing");
+    $("podPlayBtn").textContent = "⏭ ตอนถัดไป";
+    podGoToNextEpisode(false);
+    return;
+  }
+  podWantPlay = false;
+  podSyncNativeBackgroundAudio();
+  podSetMediaState("paused");
+  $("podPlayBtn").textContent = "▶ เล่นซ้ำ";
+}
+
+// ระบบอาจหยุดคลิปเองตอนแอปอยู่เบื้องหลัง — สั่งเล่นต่อแบบซ้ำได้ไม่กี่ครั้ง
+function podResumeAudio(attempt = 0) {
+  if (!podWantPlay || !podcastState) return;
+  const audio = $("podAudio");
+  if (!audio || !audio.src || !audio.paused || audio.ended) return;
+  if (podIsBusy()) return;
+  if (attempt >= 4) return;
+  setTimeout(() => {
+    if (!podWantPlay || !podcastState) return;
+    const el = $("podAudio");
+    if (!el.paused || el.ended) return;
+    el.play().catch(() => podResumeAudio(attempt + 1));
+  }, 400 + attempt * 700);
+}
+
+/* ---- บันทึก/กู้คืนตอนที่กำลังฟัง ---------------------------------------
+   ถ้า Android ฆ่าแอปตอนอยู่เบื้องหลัง หน้าเว็บจะโหลดใหม่และผู้ใช้จะเจอหน้า
+   เมนู (หน้า Index) จึงเก็บตอนที่ฟังค้างไว้ เพื่อกลับมาเปิดตอนเดิมที่ตำแหน่งเดิม */
+function podSessionKey(ep) {
+  if (!ep) return "";
+  if (ep.src === "hsk" || ep.src === "specialized") return `${ep.src}:${ep.id}`;
+  return `maomi:${ep.n}`;
+}
+
+function podSaveSession() {
+  if (!podcastState || !podcastState.episode) { crClearMediaSession(); return; }
+  const ep = podcastState.episode;
+  const audio = $("podAudio");
+  crSaveMediaSession({
+    mode: "podcast",
+    key: podSessionKey(ep),
+    src: podSourceOf(ep),
+    n: ep.n,
+    id: ep.id,
+    hsk: ep.hsk,
+    hskFilter: podHskFilter,
+    specialFilter: podSpecialFilter,
+    time: Number.isFinite(audio.currentTime) ? Math.round(audio.currentTime) : 0,
+    playing: Boolean(podWantPlay),
+  });
+}
+
+function podSaveSessionSoon() {
+  if (podSaveTimer !== null) return;
+  podSaveTimer = setTimeout(() => {
+    podSaveTimer = null;
+    podSaveSession();
+  }, 4000);
+}
+
+function podRestorePosition(time) {
+  const target = Number(time) || 0;
+  if (target <= 1) return;
+  const audio = $("podAudio");
+  const apply = () => {
+    try {
+      const max = Number.isFinite(audio.duration) ? audio.duration : target;
+      audio.currentTime = Math.min(target, Math.max(0, max - 0.5));
+    } catch (error) { /* เสียงยังโหลดไม่เสร็จ */ }
+  };
+  if (audio.readyState >= 1) apply();
+  else audio.addEventListener("loadedmetadata", apply, { once: true });
+}
+
+async function podRestoreSession(session) {
+  if (!session || !session.key) return false;
+  const src = session.src === "hsk" || session.src === "specialized" ? session.src : "maomi";
+  podSource = src;
+  if (src === "hsk" && Number.isInteger(session.hskFilter)) podHskFilter = session.hskFilter;
+  if (src === "specialized" && typeof session.specialFilter === "string") podSpecialFilter = session.specialFilter;
+  try {
+    localStorage.setItem(POD_SRC_KEY, podSource);
+    if (src === "hsk") localStorage.setItem(POD_HSK_FILTER_KEY, String(podHskFilter));
+    if (src === "specialized") localStorage.setItem(POD_SPECIAL_FILTER_KEY, podSpecialFilter);
+  } catch (error) { /* storage unavailable */ }
+  await podLoadData();
+  if (src === "hsk") await podLoadHskData();
+  if (src === "specialized") await podLoadSpecializedData();
+  const episode = podEpisodesForSource(src).find((item) => podSessionKey(item) === session.key);
+  if (!episode) return false;
+  podApplySourceUI();
+  podEpisodeList($("podSearch").value);
+  switchScreen($("podcast"));
+  podSelectEpisode(episode, { autoplay: session.playing !== false });
+  podRestorePosition(session.time);
+  return true;
 }
 
 function podSetMetadata(ep) {
@@ -513,6 +723,8 @@ function podSetMetadata(ep) {
       title: ep.zh || ep.t,
       artist: ep.src === "hsk"
         ? `Chinese Rocket · HSK ${ep.hsk}`
+        : ep.src === "specialized"
+        ? `Chinese Rocket · ${ep.cat || "บทความเฉพาะทาง"}`
         : `MaoMi Chinese · ตอนที่ ${ep.n}`,
       album: "Chinese Rocket · ฟังพอดแคสต์",
     });
@@ -524,7 +736,8 @@ function podEpisodeList(query = "") {
   const q = query.trim().toLowerCase();
   const episodes = podEpisodesForSource().filter((ep) => {
     if (podSource === "hsk" && podHskFilter && ep.hsk !== podHskFilter) return false;
-    const hay = ep.src === "hsk"
+    if (podSource === "specialized" && podSpecialFilter !== "all" && ep.categoryKey !== podSpecialFilter) return false;
+    const hay = ep.src === "hsk" || ep.src === "specialized"
       ? `${ep.id} ${ep.hsk} ${ep.cat || ""} ${ep.t} ${ep.zh}`
       : `${ep.n} ${ep.t} ${ep.zh}`;
     return !q || hay.toLowerCase().includes(q);
@@ -535,6 +748,8 @@ function podEpisodeList(query = "") {
     empty.className = "pod-empty";
     if (podSource === "hsk" && podHskFilter && !q) {
       empty.textContent = "ยังไม่มีบทความในระดับ HSK นี้";
+    } else if (podSource === "specialized" && podSpecialFilter !== "all" && !q) {
+      empty.textContent = "ไม่มีบทความในหมวดนี้";
     } else {
       empty.textContent = q ? "ไม่พบตอนที่ค้นหา" : "ยังไม่มีข้อมูลพอดแคสต์ในเครื่อง";
     }
@@ -546,7 +761,7 @@ function podEpisodeList(query = "") {
     button.className = "pod-episode";
     const n = document.createElement("span");
     n.className = "pod-episode-badge";
-    if (ep.src === "hsk") {
+    if (ep.src === "hsk" || ep.src === "specialized") {
       n.classList.add("pod-badge-hsk");
       n.textContent = `HSK ${ep.hsk}`;
     } else {
@@ -559,8 +774,9 @@ function podEpisodeList(query = "") {
     const meta = document.createElement("small");
     const date = podEpisodeDate(ep.d);
     const duration = ep.dur ? podFormatTime(ep.dur) : "";
-    const weakNote = ep.src === "hsk" && ep.weakCount ? `ไฮไลท์ ${ep.weakCount} ประโยคเป็นเวลาโดยประมาณ` : "";
-    meta.textContent = [ep.src === "hsk" ? (ep.cat || "") : date, duration, weakNote]
+    const weakNote = (ep.src === "hsk" || ep.src === "specialized") && ep.weakCount
+      ? `ไฮไลท์ ${ep.weakCount} ประโยคเป็นเวลาโดยประมาณ` : "";
+    meta.textContent = [ep.src === "maomi" ? date : (ep.cat || ""), duration, weakNote]
       .filter(Boolean).join(" · ");
     body.append(title, meta);
     const play = document.createElement("span");
@@ -574,6 +790,8 @@ function podEpisodeList(query = "") {
     $("podListStatus").textContent = `พบ ${episodes.length} ตอน`;
   } else if (podSource === "hsk") {
     $("podListStatus").textContent = `${episodes.length} บทความ HSK · เสียงและคำแปลในเครื่อง`;
+  } else if (podSource === "specialized") {
+    $("podListStatus").textContent = `${episodes.length} บทความเฉพาะทาง · เลือกหมวดด้านบน`;
   } else {
     $("podListStatus").textContent = window.CR_OFFLINE_APP
       ? `${episodes.length} ตอนฟรี · ฟังได้แบบออฟไลน์`
@@ -585,6 +803,7 @@ function podEpisodeList(query = "") {
 
 function podTranscript(ep) {
   const root = $("podTranscript");
+  root.hidden = false;
   root.replaceChildren();
   podActiveToken = null;
   const paras = Array.isArray(ep.paras) ? ep.paras : [];
@@ -707,12 +926,96 @@ function podTranscript(ep) {
   podApplyPinyinToggle();
 }
 
-function podSelectEpisode(ep) {
-  // HSK articles whose narration has not been generated yet cannot be opened.
-  if (ep.src === "hsk" && !ep.mp3Local) {
-    $("podListStatus").textContent = "บทความนี้ยังไม่มีไฟล์เสียง — สร้างเสียงก่อนด้วย tools/gen_hsk_podcast_audio.py";
+function podClearIntro() {
+  if (podIntroPlayback && podIntroPlayback.timer) clearTimeout(podIntroPlayback.timer);
+  podIntroPlayback = null;
+  const audio = $("podIntroAudio");
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }
+}
+
+function podPlayIntroClip() {
+  const state = podIntroPlayback;
+  if (!state || !podWantPlay) return;
+  const lang = state.index === 0 ? "zh" : "th";
+  const audio = $("podIntroAudio");
+  const path = state.clips[lang];
+  state.phase = "clip";
+  audio.pause();
+  audio.src = path;
+  audio.load();
+  $("podPlayBtn").textContent = "⏸ พัก";
+  $("podStatus").textContent = lang === "zh"
+    ? "กำลังอ่านชื่อเรื่องภาษาจีน…"
+    : "กำลังอ่านชื่อเรื่องภาษาไทย…";
+  podSetMediaState("playing");
+  audio.play().catch(() => {
+    if (podIntroPlayback === state) podAdvanceIntro();
+  });
+}
+
+function podAdvanceIntro() {
+  const state = podIntroPlayback;
+  if (!state || !podWantPlay) return;
+  if (state.index === 0) {
+    state.index = 1;
+    podPlayIntroClip();
     return;
   }
+  state.phase = "gap";
+  state.remaining = 2000;
+  $("podStatus").textContent = "จบการอ่านชื่อเรื่อง · เริ่มบทความในอีก 2 วินาที";
+  podScheduleIntroGap(state);
+}
+
+function podScheduleIntroGap(state) {
+  if (!state || !podWantPlay || state.phase !== "gap") return;
+  state.until = performance.now() + state.remaining;
+  state.timer = setTimeout(() => {
+    if (podIntroPlayback !== state || !podWantPlay) return;
+    podClearIntro();
+    podPlayMainAudio();
+  }, state.remaining);
+}
+
+function podStartIntro(ep) {
+  const clips = ep && ep.introAudioLocal;
+  if (!clips || !clips.zh || !clips.th || podSourceOf(ep) === "maomi") return false;
+  podIntroPlayback = { episode: ep, clips, index: 0, phase: "clip", timer: null, remaining: 0 };
+  $("podTranscript").hidden = true;
+  podWantPlay = true;
+  podSyncNativeBackgroundAudio();
+  podPlayIntroClip();
+  return true;
+}
+
+function podResumeIntro() {
+  const state = podIntroPlayback;
+  if (!state) return false;
+  podWantPlay = true;
+  podSyncNativeBackgroundAudio();
+  if (state.phase === "clip") {
+    $("podIntroAudio").play().catch(() => podAdvanceIntro());
+    $("podPlayBtn").textContent = "⏸ พัก";
+    podSetMediaState("playing");
+  } else if (state.phase === "gap") {
+    podScheduleIntroGap(state);
+    $("podPlayBtn").textContent = "⏸ พัก";
+    podSetMediaState("playing");
+  }
+  return true;
+}
+
+function podSelectEpisode(ep, options = {}) {
+  // Articles whose narration has not been generated yet cannot be opened.
+  if ((ep.src === "hsk" || ep.src === "specialized") && !ep.mp3Local) {
+    $("podListStatus").textContent = "บทความนี้ยังไม่มีไฟล์เสียง — ไฟล์เสียงยังสร้างไม่ครบ";
+    return;
+  }
+  podClearIntro();
   podSeekSequence++;
   podInterruptThaiVoice();
   podStatusNote = "";
@@ -724,32 +1027,65 @@ function podSelectEpisode(ep) {
   $("podHeading").textContent = "กำลังฟังพอดแคสต์";
   $("podEpisodeNumber").textContent = ep.src === "hsk"
     ? `HSK ${ep.hsk} · ${ep.cat || ""}`
+    : ep.src === "specialized"
+    ? `${ep.cat || "บทความเฉพาะทาง"} · HSK ${ep.hsk}`
     : `MAOMI CHINESE · EPISODE ${ep.n}`;
   $("podTitle").textContent = ep.zh || podEnglishTitle(ep.t) || ep.t;
+  const introTitle = $("podIntroTitle");
+  const hasArticleIntro = podSourceOf(ep) !== "maomi";
+  introTitle.hidden = !hasArticleIntro;
+  introTitle.textContent = hasArticleIntro ? `故事：${ep.zh || ep.t} · เรื่อง: ${ep.t || ep.zh}` : "";
   $("podEnglishTitle").textContent = ep.zh ? podEnglishTitle(ep.t) : "";
   const date = podEpisodeDate(ep.d);
   $("podMeta").textContent = [date, ep.dur ? podFormatTime(ep.dur) : "", ep.weak ? "ไฮไลท์บางส่วนเป็นเวลาโดยประมาณ" : ""].filter(Boolean).join(" · ");
   $("podStatus").textContent = window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW
-    ? "กำลังเปิดไฟล์เสียงในเครื่อง…"
+    ? "กำลังเตรียมเสียง…"
     : "กำลังเชื่อมต่อเสียงจาก Buzzsprout…";
   podTranscript(ep);
   podApplyThaiVoiceToggle(ep);
+  crSetNotificationText(
+    (window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW)
+      ? `กำลังเล่น · ${ep.zh || podEnglishTitle(ep.t) || ep.t}`
+      : "Chinese Rocket · ฟังพอดแคสต์",
+    "เล่นต่อได้แม้ปิดหน้าจอ"
+  );
   const audio = $("podAudio");
   audio.pause();
-  audio.src = (window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW) && ep.mp3Local ? ep.mp3Local : ep.mp3;
+  audio.src = podEpisodeSrc(ep);
   audio.playbackRate = Number($("podRate").value) || 1;
   audio.load();
+  podBusy(6000); // กำลังโหลดตอนใหม่ อย่าสั่งเล่นซ้ำระหว่างนี้
+  podEndedFor = null;
   podSetMetadata(ep);
   podSetMediaState("paused");
   switchScreen(screen);
-  podPlay();
+  if (options.autoplay === false) {
+    // กู้คืนเฉพาะหน้าจอ (ยังไม่เล่นต่อ)
+    podWantPlay = false;
+    podSyncNativeBackgroundAudio();
+    $("podPlayBtn").textContent = "▶ เล่น";
+  } else if (!podStartIntro(ep)) {
+    podPlay();
+  }
+  podSaveSession();
   requestAnimationFrame(() => $("podPlayer").scrollTop = 0);
 }
 
 function podPlay() {
   podSeekSequence++;
-  podWantPlay = true;
   podInterruptThaiVoice();
+  if (podIntroPlayback) {
+    podResumeIntro();
+    return;
+  }
+  podWantPlay = true;
+  podPlayMainAudio();
+}
+
+function podPlayMainAudio(attempt = 0) {
+  podWantPlay = true;
+  podEndedFor = null;
+  $("podTranscript").hidden = false;
   const audio = $("podAudio");
   if (!audio.src) return;
   podSyncNativeBackgroundAudio();
@@ -763,6 +1099,11 @@ function podPlay() {
       $("podStatus").textContent = "กำลังเล่นเสียงต้นฉบับ · แตะคำเพื่อดูความหมาย";
     }
   }).catch(() => {
+    // บางครั้ง WebView ยังไม่พร้อมเล่นเสียง (เช่น หลังสลับแอป) — ลองใหม่ได้ไม่กี่ครั้ง
+    if (attempt < 3 && podWantPlay) {
+      setTimeout(() => podPlayMainAudio(attempt + 1), 600 + attempt * 500);
+      return;
+    }
     podWantPlay = false;
     podSyncNativeBackgroundAudio();
     $("podPlayBtn").textContent = "▶ เล่น";
@@ -777,9 +1118,19 @@ function podPause() {
   podSeekSequence++;
   podWantPlay = false;
   podInterruptThaiVoice();
+  if (podIntroPlayback) {
+    const state = podIntroPlayback;
+    if (state.phase === "gap") {
+      clearTimeout(state.timer);
+      state.timer = null;
+      state.remaining = Math.max(0, state.until - performance.now());
+    }
+    $("podIntroAudio").pause();
+  }
   const audio = $("podAudio");
   audio.pause();
   $("podPlayBtn").textContent = "▶ เล่น";
+  if (podIntroPlayback) $("podStatus").textContent = "หยุดชั่วคราว · แตะเล่นเพื่ออ่านชื่อเรื่องต่อ";
   podSetMediaState("paused");
   podSyncNativeBackgroundAudio();
 }
@@ -877,7 +1228,9 @@ function podBackToList() {
   podWantPlay = false;
   podStatusNote = "";
   podPause();
+  podClearIntro();
   cpHideWordPopup();
+  crClearMediaSession();
   $("podPlayer").hidden = true;
   $("podEpisodes").hidden = false;
   $("podHeading").textContent = "เลือกตอนพอดแคสต์";
@@ -889,6 +1242,7 @@ function quitPodcastGame() {
   podSeekSequence++;
   podWantPlay = false;
   podStatusNote = "";
+  podClearIntro();
   podSyncNativeBackgroundAudio();
   const audio = $("podAudio");
   audio.pause();
@@ -896,6 +1250,7 @@ function quitPodcastGame() {
   audio.load();
   podInterruptThaiVoice();
   cpHideWordPopup();
+  crClearMediaSession();
   podcastState = null;
   podActiveToken = null;
   $("podPlayer").hidden = true;
@@ -934,12 +1289,23 @@ async function startPodcastGame() {
       podApplySourceUI();
       $("podListStatus").textContent = "โหลดบทความ HSK ไม่ได้ — ตรวจสอบว่า APK มีไฟล์ข้อมูลบทความ HSK";
     }
+  } else if (podSource === "specialized") {
+    try {
+      await podLoadSpecializedData();
+      podBuildSpecializedFilter();
+    } catch (e) {
+      podSource = "maomi";
+      podApplySourceUI();
+      $("podListStatus").textContent = "โหลดบทความเฉพาะทางไม่ได้ — ตรวจสอบว่า APK มีไฟล์ข้อมูลบทความ";
+    }
   }
   if (document.querySelector(".screen.active") !== $("podcast")) return;
   const episodes = podEpisodesForSource();
   if (!Array.isArray(episodes) || !episodes.length) {
     $("podListStatus").textContent = podSource === "hsk"
       ? "ยังไม่มีข้อมูลบทความ HSK ในเครื่อง"
+      : podSource === "specialized"
+      ? "ยังไม่มีข้อมูลบทความเฉพาะทางในเครื่อง"
       : "ยังไม่มีข้อมูลพอดแคสต์ใน APK";
     return;
   }
@@ -953,21 +1319,20 @@ $("podBackBtn").addEventListener("click", () => { sfx.click(); podBackToList(); 
 $("podQuitBtn").addEventListener("click", () => { sfx.click(); quitPodcastGame(); });
 $("podPlayBtn").addEventListener("click", () => {
   sfx.click();
-  if (podThaiVoicePlayback) podPause();
-  else if ($("podAudio").paused) podPlay();
-  else podPause();
+  if (podThaiVoicePlayback || podWantPlay) podPause();
+  else podPlay();
 });
 $("podRewindBtn").addEventListener("click", () => {
   sfx.click();
   const audio = $("podAudio");
-  const resumeAfterSeek = !audio.paused;
+  const resumeAfterSeek = podWantPlay || !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
   podSeekAudio(Math.max(0, audio.currentTime - 10), resumeAfterSeek || resumeAfterVoice);
 });
 $("podForwardBtn").addEventListener("click", () => {
   sfx.click();
   const audio = $("podAudio");
-  const resumeAfterSeek = !audio.paused;
+  const resumeAfterSeek = podWantPlay || !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
   podSeekAudio(Math.min(audio.duration || Infinity, audio.currentTime + 10), resumeAfterSeek || resumeAfterVoice);
 });
@@ -984,7 +1349,7 @@ $("podSeek").addEventListener("input", (event) => {
 });
 $("podSeek").addEventListener("change", (event) => {
   const audio = $("podAudio");
-  const resumeAfterSeek = !audio.paused;
+  const resumeAfterSeek = podWantPlay || !audio.paused;
   const resumeAfterVoice = podInterruptThaiVoice();
   podSeeking = false;
   if (Number.isFinite(audio.duration)) {
@@ -1005,6 +1370,28 @@ $("podReplayBtn").addEventListener("click", () => {
   sfx.click();
   podReplayCurrent();
 });
+/* ---- ตั้งเวลาปิดเล่นอัตโนมัติ ------------------------------------------
+   เลือกได้ 5-60 นาที เมื่อครบเวลาจะหยุดเสียงทันที (ปิดทั้งคลิปจีนและคลิปแปลไทย)
+   และหยุด "เล่นตอนถัดไปอัตโนมัติ" ด้วย เพื่อไม่ให้เดินต่อเองหลังหยุด */
+function podSleepExpire() {
+  podWantPlay = false;
+  podPause();
+  $("podStatus").textContent = "หยุดเล่นอัตโนมัติ · ครบเวลาที่ตั้งไว้";
+  podSaveSession();
+}
+
+crSleepRegister({
+  button: $("podSleepBtn"),
+  hint: $("podSleepHint"),
+  options: $("podSleepOptions"),
+  showTime: false,
+  idleLabel: "🌙",
+  idleHint: "ตั้งเวลาปิดอัตโนมัติ: ปิด",
+  active: () => document.querySelector(".screen.active") === $("podcast"),
+  onExpire: podSleepExpire,
+});
+
+// กดปุ่มตอนถัดไปด้วยมือ — ตัวจับเวลายังนับถอยหลังตามเวลาจริง ไม่เริ่มใหม่
 $("podAutoNextBtn").addEventListener("click", () => {
   sfx.click();
   podAutoNextEnabled = !podAutoNextEnabled;
@@ -1020,8 +1407,16 @@ podApplyAutoNextToggle();
 function podApplySourceUI() {
   const maoBtn = $("podSrcMaoMi");
   const hskBtn = $("podSrcHsk");
+  const specialBtn = $("podSrcSpecialized");
   if (maoBtn) maoBtn.setAttribute("aria-pressed", String(podSource === "maomi"));
   if (hskBtn) hskBtn.setAttribute("aria-pressed", String(podSource === "hsk"));
+  if (specialBtn) specialBtn.setAttribute("aria-pressed", String(podSource === "specialized"));
+  const brand = $("podcast").querySelector(".pod-brand");
+  if (brand) brand.textContent = podSource === "hsk"
+    ? "📚 HSK ARTICLES"
+    : podSource === "specialized"
+    ? "🗂 SPECIALIZED CHINESE"
+    : "🎙️ MAOMI CHINESE";
   const row = $("podHskFilter");
   if (row) {
     row.hidden = podSource !== "hsk";
@@ -1029,6 +1424,10 @@ function podApplySourceUI() {
       chip.setAttribute("aria-pressed", String(Number(chip.dataset.hsk) === podHskFilter));
     }
   }
+  const specialWrap = $("podSpecializedFilterWrap");
+  if (specialWrap) specialWrap.hidden = podSource !== "specialized";
+  const specialSelect = $("podSpecializedFilter");
+  if (specialSelect) specialSelect.value = podSpecialFilter;
 }
 
 function podBuildHskFilter() {
@@ -1053,6 +1452,22 @@ function podBuildHskFilter() {
     ...Array.from({ length: 9 }, (_, i) => chip(String(i + 1), i + 1)));
 }
 
+function podBuildSpecializedFilter() {
+  const select = $("podSpecializedFilter");
+  if (!select) return;
+  const categories = new Map();
+  for (const ep of window.PODCASTS_SPECIALIZED || []) {
+    if (ep.categoryKey && ep.cat) categories.set(ep.categoryKey, ep.cat);
+  }
+  const options = [new Option("ทุกหมวด", "all")];
+  for (const [key, label] of [...categories.entries()].sort((a, b) => a[1].localeCompare(b[1], "th"))) {
+    options.push(new Option(label, key));
+  }
+  select.replaceChildren(...options);
+  if (!["all", ...categories.keys()].includes(podSpecialFilter)) podSpecialFilter = "all";
+  select.value = podSpecialFilter;
+}
+
 function podSetSource(src) {
   if (podSource === src) return;
   podSource = src;
@@ -1068,11 +1483,27 @@ function podSetSource(src) {
       });
     return;
   }
+  if (podSource === "specialized" && !Array.isArray(window.PODCASTS_SPECIALIZED)) {
+    $("podListStatus").textContent = "กำลังโหลดบทความเฉพาะทาง…";
+    $("podEpisodeList").replaceChildren();
+    podLoadSpecializedData()
+      .then(() => { podBuildSpecializedFilter(); podApplySourceUI(); podEpisodeList($("podSearch").value); })
+      .catch(() => { $("podListStatus").textContent = "โหลดข้อมูลบทความเฉพาะทางไม่ได้"; });
+    return;
+  }
+  if (podSource === "specialized") podBuildSpecializedFilter();
   podEpisodeList($("podSearch").value);
 }
 
 $("podSrcMaoMi").addEventListener("click", () => { sfx.click(); podSetSource("maomi"); });
 $("podSrcHsk").addEventListener("click", () => { sfx.click(); podSetSource("hsk"); });
+$("podSpecializedFilter").addEventListener("change", (event) => {
+  sfx.click();
+  podSpecialFilter = event.target.value || "all";
+  try { localStorage.setItem(POD_SPECIAL_FILTER_KEY, podSpecialFilter); } catch (err) {}
+  podEpisodeList($("podSearch").value);
+});
+$("podSrcSpecialized").addEventListener("click", () => { sfx.click(); podSetSource("specialized"); });
 podBuildHskFilter();
 podApplySourceUI();
 $("podThaiToggle").addEventListener("click", () => {
@@ -1103,7 +1534,13 @@ $("podVoiceToggle").addEventListener("click", () => {
     ? "เปิดเสียงแปลไทยหลังจบแต่ละประโยค"
     : "ปิดเสียงแปลไทย · กำลังเล่นพอดแคสต์ต้นฉบับ";
 });
-$("podAudio").addEventListener("timeupdate", podUpdateHighlight);
+$("podAudio").addEventListener("timeupdate", () => {
+  podUpdateHighlight();
+  podSaveSessionSoon();
+  // ตัวจับเวลาปิดอัตโนมัติ: เช็กจาก timeupdate ด้วย เพื่อให้หยุดตรงเวลาแม้
+  // นาฬิกา JS ถูกลดความถี่ตอนแอปอยู่เบื้องหลัง
+  crSleepTick();
+});
 $("podAudio").addEventListener("loadedmetadata", () => {
   $("podDuration").textContent = podFormatTime($("podAudio").duration);
   podUpdateHighlight();
@@ -1119,23 +1556,22 @@ $("podAudio").addEventListener("pause", () => {
   }
   $("podPlayBtn").textContent = "▶ เล่น";
   if (podcastState) podSetMediaState("paused");
+  // Android อาจหยุดคลิปเองตอนปิดหน้าจอ/สลับแอป — สั่งเล่นต่อให้อัตโนมัติ
+  // (ผู้ใช้ที่กดพักเองจะตั้ง podWantPlay = false ไว้แล้ว จึงไม่กระทบ)
+  if (podWantPlay && !podIntroPlayback) podResumeAudio();
 });
-$("podAudio").addEventListener("ended", () => {
-  podWantPlay = false;
-  podSyncNativeBackgroundAudio();
-  podSetMediaState("paused");
-  // Auto-advance (wraps to the first episode after the last one).
-  if (podAutoNextEnabled && podcastState) {
-    $("podPlayBtn").textContent = "⏭ ตอนถัดไป";
-    podGoToNextEpisode(false);
-    return;
-  }
-  $("podPlayBtn").textContent = "▶ เล่นซ้ำ";
-});
+$("podAudio").addEventListener("ended", () => podHandleEnded());
 $("podAudio").addEventListener("error", () => {
   if (podcastState) $("podStatus").textContent = window.CR_OFFLINE_APP || POD_LOCAL_PREVIEW
     ? "โหลดไฟล์เสียงในเครื่องไม่สำเร็จ — ลองปิดเปิดแอปอีกครั้ง"
     : "โหลดเสียงไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต หรือเปิดหน้าตอนบน MaoMi Chinese";
+});
+$("podIntroAudio").addEventListener("ended", () => podAdvanceIntro());
+$("podIntroAudio").addEventListener("error", () => {
+  if (!podIntroPlayback) return;
+  const lang = podIntroPlayback.index === 0 ? "จีน" : "ไทย";
+  $("podStatus").textContent = `เสียงอ่านชื่อเรื่องภาษา${lang}เล่นไม่ได้ · ข้ามไปขั้นถัดไป`;
+  podAdvanceIntro();
 });
 $("podThaiAudio").addEventListener("ended", () => podFinishThaiVoice(true));
 $("podThaiAudio").addEventListener("error", () => {
@@ -1196,7 +1632,10 @@ podRegisterMediaActions();
 document.addEventListener("visibilitychange", () => {
   if (!podcastState) return;
   const audio = $("podAudio");
-  if (document.hidden) return;
+  if (document.hidden) {
+    podSaveSession(); // บันทึกตำแหน่งไว้ก่อน เผื่อระบบฆ่าแอปตอนอยู่เบื้องหลัง
+    return;
+  }
   podSyncNativeBackgroundAudio();
   if (podWantPlay && audio.paused && !podThaiVoicePlayback) {
     podPlay();

@@ -18,6 +18,23 @@ let readerQuizState = null;
 let readerBubbleOpen = false;
 let readerBubbleTap = null;
 
+// ---- ความทนทานของการเล่นเบื้องหลัง ------------------------------------
+// ตอนปิดหน้าจอ/สลับแอพ Android อาจหยุดคลิปเอง หรือไม่ส่ง event "ended"
+// ทำให้ "เล่นเรื่องถัดไปอัตโนมัติ" ไม่เดิน จึงต้องมีตัวเฝ้าดูคอยเช็ก
+let readerWatchTimer = null;
+let readerBusyUntil = 0;
+let readerSaveTimer = null;
+let readerEndedFor = null;   // เรื่องที่เพิ่งจัดการเหตุการณ์ "จบ" ไปแล้ว
+let readerKeepAlive = false; // กำลังสลับเรื่อง — อย่าปิดบริการ foreground
+
+function readerBusy(ms) {
+  readerBusyUntil = Math.max(readerBusyUntil, Date.now() + (ms || 0));
+}
+
+function readerIsBusy() {
+  return Date.now() < readerBusyUntil;
+}
+
 const READER_LOCAL_PREVIEW = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) &&
   new URLSearchParams(location.search).get("readerPreview") === "1";
 const READER_PARAMS = new URLSearchParams(location.search);
@@ -536,9 +553,107 @@ function readerRestoreMediaActions() {
 }
 
 function readerSyncBackgroundAudio() {
-  const active = Boolean(readerState && readerWantPlay);
+  const active = Boolean(readerState && (readerWantPlay || readerKeepAlive));
   crSetNativeBackgroundAudio(active);
   crSetScreenAwake(active); // จอไม่ดับขณะฟังบทความ ปล่อยเมื่อพัก/ปิดเรื่อง
+  if (active) readerWatchStart();
+  else readerWatchStop();
+}
+
+// ---- ตัวเฝ้าดูการเล่นเบื้องหลัง -------------------------------------------
+//  - ถ้า event "ended" หายไปตอนปิดหน้าจอ ให้เดินไปเรื่องถัดไปเอง
+//  - ถ้าระบบหยุดคลิปเอง ให้สั่งเล่นต่อ
+//  - การสลับจีน–ไทยอาศับ "timeupdate" ที่ถูกลดความถี่ตอนแอปอยู่เบื้องหลัง
+//    จึงตรวจซ้ำจากตัวเฝ้าดูด้วย
+function readerWatchStart() {
+  if (readerWatchTimer !== null) return;
+  readerWatchTimer = setInterval(readerWatch, 1500);
+}
+
+function readerWatchStop() {
+  if (readerWatchTimer === null) return;
+  clearInterval(readerWatchTimer);
+  readerWatchTimer = null;
+}
+
+function readerWatch() {
+  if (!readerState || !readerWantPlay) { readerWatchStop(); return; }
+  if (readerState.playback || readerIsBusy()) return;
+  const audio = $("readerAudio");
+  if (!audio || !audio.src) return;
+  if (audio.ended) {
+    readerEnded();
+    return;
+  }
+  if (audio.paused) {
+    readerResumeAudio();
+    return;
+  }
+  readerMaybePlayThai(audio.currentTime);
+}
+
+function readerResumeAudio(attempt = 0) {
+  if (!readerWantPlay || !readerState) return;
+  const audio = $("readerAudio");
+  if (!audio || !audio.src || !audio.paused || audio.ended) return;
+  if (readerIsBusy()) return;
+  if (attempt >= 4) return;
+  setTimeout(() => {
+    if (!readerWantPlay || !readerState) return;
+    const el = $("readerAudio");
+    if (!el.paused || el.ended) return;
+    el.play().catch(() => readerResumeAudio(attempt + 1));
+  }, 400 + attempt * 700);
+}
+
+/* ---- บันทึก/กู้คืนเรื่องที่กำลังอ่าน -------------------------------------
+   ถ้า Android ฆ่าแอปตอนอยู่เบื้องหลัง หน้าเว็บจะโหลดใหม่และผู้ใช้จะเจอหน้า
+   เมนู (หน้า Index) จึงเก็บเรื่องที่อ่านค้างไว้ เพื่อกลับมาเปิดเรื่องเดิมที่ตำแหน่งเดิม */
+function readerSaveSession() {
+  if (!readerState || !readerState.story) { crClearMediaSession(); return; }
+  const story = readerState.story;
+  const audio = $("readerAudio");
+  crSaveMediaSession({
+    mode: "reader",
+    id: story.id,
+    level: story.level,
+    time: Number.isFinite(audio.currentTime) ? Math.round(audio.currentTime) : 0,
+    playing: Boolean(readerWantPlay),
+  });
+}
+
+function readerSaveSessionSoon() {
+  if (readerSaveTimer !== null) return;
+  readerSaveTimer = setTimeout(() => {
+    readerSaveTimer = null;
+    readerSaveSession();
+  }, 4000);
+}
+
+function readerRestorePosition(time) {
+  const target = Number(time) || 0;
+  if (target <= 1) return;
+  const audio = $("readerAudio");
+  const apply = () => {
+    try {
+      const max = Number.isFinite(audio.duration) ? audio.duration : target;
+      audio.currentTime = Math.min(target, Math.max(0, max - 0.5));
+    } catch (error) { /* เสียงยังโหลดไม่เสร็จ */ }
+  };
+  if (audio.readyState >= 1) apply();
+  else audio.addEventListener("loadedmetadata", apply, { once: true });
+}
+
+async function readerRestoreSession(session) {
+  if (!session || !session.id) return false;
+  await readerLoadData();
+  const story = readerRuntime.stories.find((item) => item.id === session.id);
+  if (!story) return false;
+  readerLevel = [1, 2, 3].includes(story.level) ? story.level : readerLevel;
+  readerUpdateLevelButtons();
+  readerSelectStory(story, Boolean(session.playing));
+  readerRestorePosition(session.time);
+  return true;
 }
 
 function readerThaiText(turn) {
@@ -546,8 +661,13 @@ function readerThaiText(turn) {
 }
 
 function readerSelectStory(story, resume = false) {
-  readerStopCurrentAudio();
+  // สลับเรื่องตอนเล่นอัตโนมัติต้องไม่ปิดบริการ foreground คั่นระหว่างทาง
+  // (Android 12+ เริ่มบริการใหม่จากเบื้องหลังไม่ได้ → เสียงจะหยุด)
+  const wasPlaying = readerWantPlay || resume;
+  readerKeepAlive = wasPlaying;
+  readerStopCurrentAudio(true);
   readerState = { story, nextTurn: 0, activeTurn: -1, playback: null, resume };
+  readerEndedFor = null;
   $("readerLibrary").hidden = true;
   $("readerPlayer").hidden = false;
   $("readerHeading").textContent = story.title_zh;
@@ -559,23 +679,32 @@ function readerSelectStory(story, resume = false) {
   $("readerPlayer").scrollTop = 0;
   readerMakeTranscript(story);
   readerRegisterMediaActions();
+  crSetNotificationText(`กำลังอ่าน · ${story.title_zh}`, "เล่นต่อได้แม้ปิดหน้าจอ");
 
   const audio = $("readerAudio");
   audio.src = readerResolveFile(story.zh_audio);
   audio.playbackRate = Number($("readerRate").value) || 1;
   audio.load();
+  readerBusy(6000); // กำลังโหลดเรื่องใหม่ อย่าสั่งเล่นซ้ำระหว่างนี้
   $("readerPlayBtn").textContent = "▶ เล่น";
   readerSetMetadata(story);
   readerSetMediaState("paused");
   switchScreen($("reader"));
-  readerSyncBackgroundAudio();
+  readerSyncBackgroundAudio(); // ยังถือบริการไว้ตอนสลับเรื่อง
   requestAnimationFrame(() => { $("readerPlayer").scrollTop = 0; });
-  if (resume) readerPlay();
+  if (resume) {
+    readerPlay();
+  } else {
+    readerKeepAlive = false;
+    readerSyncBackgroundAudio();
+  }
+  readerSaveSession();
 }
 
-function readerPlay() {
+function readerPlay(attempt = 0) {
   if (!readerState) return;
   readerWantPlay = true;
+  readerEndedFor = null;
   readerSyncBackgroundAudio();
   const audio = $("readerAudio");
   if (!audio.src) return;
@@ -588,6 +717,11 @@ function readerPlay() {
     readerUpdateProgress();
     readerMaybePlayThai(audio.currentTime);
   }).catch(() => {
+    // บางครั้ง WebView ยังไม่พร้อมเล่นเสียง (เช่น หลังสลับแอป) — ลองใหม่ได้ไม่กี่ครั้ง
+    if (attempt < 3 && readerWantPlay && readerState) {
+      setTimeout(() => readerPlay(attempt + 1), 600 + attempt * 500);
+      return;
+    }
     readerWantPlay = false;
     readerSyncBackgroundAudio();
     $("readerPlayBtn").textContent = "▶ เล่น";
@@ -596,7 +730,7 @@ function readerPlay() {
   });
 }
 
-function readerPause() {
+function readerPause(keepAlive = false) {
   readerSeekSequence++;
   readerWantPlay = false;
   if (readerState) readerState.playback = null;
@@ -608,11 +742,11 @@ function readerPause() {
   thaiAudio.load();
   $("readerPlayBtn").textContent = "▶ เล่น";
   readerSetMediaState("paused");
-  readerSyncBackgroundAudio();
+  if (!keepAlive) readerSyncBackgroundAudio();
 }
 
-function readerStopCurrentAudio() {
-  readerPause();
+function readerStopCurrentAudio(keepAlive = false) {
+  readerPause(keepAlive);
   const audio = $("readerAudio");
   audio.removeAttribute("src");
   audio.load();
@@ -809,7 +943,16 @@ function readerOpenAdjacentStory(delta) {
   return true;
 }
 
+// จบเรื่อง: เรียกได้ทั้งจาก event "ended" และจากตัวเฝ้าดู (event อาจหายไป
+// ตอนปิดหน้าจอ/สลับแอป) จึงต้องกันการเดินซ้ำสองครั้ง
 function readerEnded() {
+  if (!readerState) return;
+  const audio = $("readerAudio");
+  if (!audio.ended) return;
+  const story = readerState.story;
+  if (readerEndedFor === story) return;
+  if (audio.getAttribute("src") !== readerResolveFile(story.zh_audio)) return; // เหตุการณ์ค้างจากเรื่องก่อน
+  readerEndedFor = story;
   if (readerAlternateEnabled && readerState && readerWantPlay) {
     readerMaybePlayThai($("readerAudio").currentTime);
     if (readerState.playback) return;
@@ -826,6 +969,7 @@ function readerEnded() {
 function readerBackToList() {
   readerStopCurrentAudio();
   readerRestoreMediaActions();
+  crClearMediaSession();
   $("readerPlayer").hidden = true;
   $("readerLibrary").hidden = false;
   $("readerHeading").textContent = "เลือกบทอ่าน";
@@ -837,6 +981,7 @@ function readerBackToList() {
 function quitReaderGame() {
   readerStopCurrentAudio();
   readerRestoreMediaActions();
+  crClearMediaSession();
   $("readerPlayer").hidden = true;
   $("readerLibrary").hidden = false;
   $("readerHeading").textContent = "เลือกบทอ่าน";
@@ -969,18 +1114,33 @@ $("readerAudio").addEventListener("timeupdate", () => {
   if (!readerState) return;
   readerUpdateProgress();
   readerMaybePlayThai($("readerAudio").currentTime);
+  readerSaveSessionSoon();
+  // ตัวจับเวลาปิดอัตโนมัติ: เช็กจาก timeupdate ด้วย เพื่อให้หยุดตรงเวลาแม้
+  // นาฬิกา JS ถูกลดความถี่ตอนแอปอยู่เบื้องหลัง
+  crSleepTick();
 });
 $("readerAudio").addEventListener("loadedmetadata", readerUpdateProgress);
 $("readerAudio").addEventListener("ended", readerEnded);
 $("readerAudio").addEventListener("pause", () => {
-  if (!readerState || readerState.playback || readerWantPlay) return;
+  if (!readerState) return;
+  if (readerState.playback) return;
+  if (readerWantPlay) {
+    // ระบบอาจหยุดคลิปเองตอนปิดหน้าจอ/สลับแอป — สั่งเล่นต่อให้อัตโนมัติ
+    // (ผู้ใช้ที่กดพักเองจะตั้ง readerWantPlay = false ไว้แล้ว จึงไม่กระทบ)
+    readerResumeAudio();
+    return;
+  }
   $("readerPlayBtn").textContent = "▶ เล่น";
   readerSetMediaState("paused");
 });
 document.addEventListener("visibilitychange", () => {
-  if (!readerState || !readerWantPlay) return;
+  if (!readerState) return;
+  if (document.hidden) {
+    readerSaveSession(); // บันทึกตำแหน่งไว้ก่อน เผื่อระบบฆ่าแอปตอนอยู่เบื้องหลัง
+    return;
+  }
+  if (!readerWantPlay) return;
   readerSyncBackgroundAudio();
-  if (document.hidden) return;
   if (readerState.playback) {
     if ($("readerThaiAudio").paused) readerPlayThaiClip();
   } else if ($("readerAudio").paused) {
@@ -1012,8 +1172,54 @@ function readerThaiAudioPause() {
   readerSyncBackgroundAudio();
 }
 
+/* ---- ตั้งเวลาปิดเล่นอัตโนมัติ ------------------------------------------
+   เลือกได้ 5-60 นาที เมื่อครบเวลาจะหยุดเสียงทันที (ปิดทั้งคลิปจีนและคลิปแปลไทย)
+   และหยุด "เล่นเรื่องถัดไปอัตโนมัติ" ด้วย เพื่อไม่ให้เดินต่อเองหลังหยุด */
+function readerSleepExpire() {
+  readerWantPlay = false;
+  readerPause();
+  $("readerStatus").textContent = "หยุดอ่านอัตโนมัติ · ครบเวลาที่ตั้งไว้";
+  readerSaveSession();
+}
+
+crSleepRegister({
+  button: $("readerSleepBtn"),
+  hint: null,
+  options: $("readerSleepOptions"),
+  showTime: true,
+  idleLabel: "🌙 ตั้งเวลาปิด: ปิด",
+  idleHint: "",
+  active: () => document.querySelector(".screen.active") === $("reader"),
+  onExpire: readerSleepExpire,
+});
+
 readerApplySettings();
 readerInstallBubbleGuard();
 if (READER_LOCAL_PREVIEW && READER_PARAMS.get("openReader") === "1") {
   queueMicrotask(() => startReaderGame());
+}
+
+/* ---- กู้คืนหน้าจอเมื่อแอปถูกระบบฆ่าแล้วเปิดใหม่ ------------------
+   ถ้า Android ฆ่าแอปตอนอยู่เบื้องหลัง หน้าเว็บจะโหลดใหม่และผู้ใช้จะเจอหน้า
+   เมนู (หน้า Index) แทนที่จะกลับไปที่ตอน/เรื่องที่กำลังฟัง จึงเก็บสถานะไว้
+   แล้วเปิดกลับไปที่เดิมพร้อมตำแหน่งเดิม */
+async function crRestoreMediaSession() {
+  if (!window.CR_OFFLINE_APP) return;
+  const session = crLoadMediaSession();
+  if (!session || !session.mode) return;
+  try {
+    if (session.mode === "podcast") {
+      if (typeof podRestoreSession === "function") await podRestoreSession(session);
+    } else if (session.mode === "reader") {
+      await readerRestoreSession(session);
+    }
+  } catch (error) {
+    // กู้คืนไม่สำเร็จก็ปล่อยให้ผู้ใช้เลือกเองจากหน้าเมนู
+  }
+}
+
+if (window.CR_OFFLINE_APP) {
+  const restore = () => setTimeout(() => { crRestoreMediaSession(); }, 400);
+  if (document.readyState === "complete") restore();
+  else window.addEventListener("load", restore, { once: true });
 }

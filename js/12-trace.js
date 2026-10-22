@@ -430,6 +430,10 @@ $("cards").addEventListener("click", (e) => {
     startReaderGame();
     return;
   }
+  if (gameMode === "vocaboverview") {
+    startVocabOverview();
+    return;
+  }
   const hasSentenceData = currentCategory === "hsk"
     ? SENT_OK
     : currentCategory === "it"
@@ -687,7 +691,8 @@ $("quitBtn").addEventListener("click", () => {
   switchScreen(menuEl);
   updateBestLine();
 });
-$("muteBtn").addEventListener("click", toggleMute);
+
+$("muteBtn").addEventListener("click", toggleMute);
 
 $("againBtn").addEventListener("click", () => { sfx.click(); if (lastStarter) lastStarter(); });
 $("menuBtn").addEventListener("click", () => { sfx.click(); switchScreen(menuEl); updateBestLine(); });
@@ -788,6 +793,7 @@ window.__handleAndroidBack = function () {
     listen: "lisQuitBtn",
     podcast: "podQuitBtn",
     reader: "readerQuitBtn",
+    vocaboverview: "voBackBtn",
     copy: "cpQuitBtn",
     trace: "tcQuitBtn",
   };
