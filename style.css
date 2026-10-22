@@ -2875,11 +2875,14 @@ button.fill-blank {
    VOCABULARY OVERVIEW (เกมรวมคำศัพท์)
    =========================================================== */
 #vocaboverview {
+  --vo-pad: 14px;
   background: radial-gradient(ellipse at 50% 115%, #182352 0%, #060920 65%);
   justify-content: flex-start;
   align-items: center;
   gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom));
+  /* ไม่ใส่ padding-top ที่นี่ — .vo-topbar (sticky) จัดการระยะขอบบนเอง
+     เพื่อให้แถบค้นหาติดขอบจอด้านบนได้สนิทตอนเลื่อน */
+  padding: 0 var(--vo-pad) calc(30px + env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
@@ -2891,6 +2894,25 @@ button.fill-blank {
 
 #vocaboverview > * {
   flex-shrink: 0;
+}
+
+/* แถบบน (หัวจอ + ค้นหา + ตัวกรอง) ติดบนตลอดเวลาเลื่อนรายการ
+   กว้างเกิน content box ด้านละ 14px เพื่อให้พื้นหลังทึบปิดช่องว่างข้างจอ
+   ไม่งั้นการ์ดจะโผล่ข้างแถบตอนเลื่อนผ่าน */
+.vo-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: calc(100% + var(--vo-pad) * 2);
+  margin: 0 calc(-1 * var(--vo-pad));
+  padding: calc(10px + env(safe-area-inset-top)) var(--vo-pad) 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, #070b22 0%, #0a1236 100%);
+  border-bottom: 1px solid rgba(122, 140, 255, .16);
+  box-shadow: 0 12px 20px -16px rgba(0, 0, 0, .95);
 }
 
 .vo-header {
@@ -2912,25 +2934,43 @@ button.fill-blank {
   min-width: 0;
 }
 
-/* จอมือถือแคบ: ให้หัวข้อกับ dropdown หมวดขึ้นบรรทัดใหม่เต็มความกว้าง
-   ไม่งั้น min-content ของ <select> ดัน .vo-header กว้างเกินจอ → เลื่อนแนวนอนได้ */
+/* จอมือถือ: ย่อแถบบนให้เตี้ย เพราะแถบนี้ sticky อยู่บนตลอดเวลาทำงาน
+   - ซ่อนชื่อโหมดแบบอ่านออกเสียงได้ (เหลือ 🔙 + หมวดหมู่ + 🔊 บรรทัดเดียว)
+   - ย่อ padding ของแผงควบคุมเพื่อให้เหลือพื้นที่รายการมากขึ้น */
 @media (max-width: 520px) {
-  .vo-header {
-    flex-wrap: wrap;
-    row-gap: 8px;
+  .vo-topbar {
+    gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top)) var(--vo-pad) 8px;
   }
 
-  .vo-title-group {
-    order: 3;
-    flex: 1 1 100%;
+  .vo-header {
+    gap: 8px;
+  }
+
+  .vo-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .vo-cat-indicator {
     max-width: 100%;
+    overflow: hidden;
   }
 
   .vo-category-select {
-    max-width: min(420px, 78vw);
+    max-width: min(420px, 52vw);
+  }
+
+  .vo-controls-panel {
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 14px;
   }
 }
 
@@ -3105,8 +3145,17 @@ button.fill-blank {
   color: var(--accent-green-1);
 }
 
-.vo-action-btn {
+/* กลุ่มปุ่มเล่นเสียง (วนตามลำดับ / สุ่ม) ชิดขวาของแถว toggles */
+.vo-audio-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.vo-action-btn {
   padding: 5px 14px;
   border-radius: 10px;
   border: 1.5px solid var(--accent);
@@ -3126,6 +3175,47 @@ button.fill-blank {
   border-color: var(--accent-warm-2);
   color: #ff8a65;
   animation: voPulse 1.2s infinite;
+}
+
+/* บอกคำที่กำลังเล่น (โหมดเล่นวน/สุ่ม) — อยู่ในแถบ sticky จึงเห็นตลอด */
+.vo-now-playing {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 215, 106, .1);
+  border: 1px solid rgba(255, 215, 106, .3);
+  font-size: clamp(12px, 3.2vw, 13.5px);
+  line-height: 1.35;
+}
+
+.vo-now-playing[hidden] {
+  display: none;
+}
+
+.vo-np-label {
+  font-size: 12px;
+  opacity: .85;
+}
+
+.vo-np-zh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(16px, 4.4vw, 19px);
+  font-weight: 700;
+  color: #ffe0a1;
+}
+
+.vo-np-py {
+  font-family: var(--font-pinyin);
+  color: var(--accent-cool);
+  font-weight: 600;
+}
+
+.vo-np-th {
+  color: #a2ffd3;
+  font-weight: 600;
 }
 
 @keyframes voPulse {
@@ -3449,7 +3539,6 @@ button.fill-blank {
 
 @media (min-width: 700px) {
   #vocaboverview {
-    padding-left: 24px;
-    padding-right: 24px;
+    --vo-pad: 24px;
   }
 }

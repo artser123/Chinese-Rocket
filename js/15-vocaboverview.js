@@ -39,10 +39,13 @@ const voSentCache = new Map();
 // Sentence cache per category: Map<catId, { tokenMap: Map<string, Array>, allSents: Array }>
 const voSentenceCache = new Map();
 
-// Play all state
+// Play all / random state
 let voPlayAllActive = false;
 let voPlayAllIndex = 0;
 let voPlayAllTimeout = null;
+let voPlayMode = "order";     // "order" = ตามลำดับ, "shuffle" = สุ่ม
+let voPlayQueue = null;       // ลำดับ index แบบสุ่ม (null = เล่นตามลำดับในกอง)
+let voLastPlayedIndex = -1;   // กันไม่ให้รอบใหม่เริ่มด้วยคำเดียวกับคำสุดท้ายของรอบก่อน
 
 // Initialize on document ready / first call
 let voInitialized = false;
@@ -144,6 +147,14 @@ function initVocabOverview() {
     playAllBtn.addEventListener("click", () => {
       sfx.click();
       voTogglePlayAll();
+    });
+  }
+
+  const playRandomBtn = $("voPlayRandomBtn");
+  if (playRandomBtn) {
+    playRandomBtn.addEventListener("click", () => {
+      sfx.click();
+      voTogglePlayRandom();
     });
   }
 
@@ -875,71 +886,159 @@ function voPlaySentence(sent, isThai, btn) {
   }
 }
 
-// Auto-play hands-free review
+// Auto-play hands-free review (ตามลำดับในกอง)
 function voTogglePlayAll() {
-  if (voPlayAllActive) {
+  if (voPlayAllActive && voPlayMode === "order") {
     voStopPlayAll();
   } else {
-    voStartPlayAll();
+    voStartPlayAll("order");
   }
 }
 
-function voStartPlayAll() {
+// เล่นเสียงแบบสุ่ม ไม่เรียงตามลำดับคำในหมวด
+function voTogglePlayRandom() {
+  if (voPlayAllActive && voPlayMode === "shuffle") {
+    voStopPlayAll();
+  } else {
+    voStartPlayAll("shuffle");
+  }
+}
+
+function voStartPlayAll(mode) {
   if (voFilteredItems.length === 0) return;
+  voPlayMode = mode === "shuffle" ? "shuffle" : "order";
   voPlayAllActive = true;
   voPlayAllIndex = 0;
+  voPlayQueue = voPlayMode === "shuffle" ? voBuildShuffleQueue() : null;
   voSetPlayingBtn(null);
-
-  const btn = $("voPlayAllBtn");
-  if (btn) {
-    btn.textContent = "⏹ หยุดเล่นเสียง";
-    btn.classList.add("playing");
-  }
-
+  voSyncPlayButtons();
   voPlayNextItem();
+}
+
+// สลับลำดับทั้งกองแบบ Fisher–Yates (ไม่ซ้ำจนครบ แล้วค่อยเริ่มรอบใหม่)
+function voBuildShuffleQueue() {
+  const n = voFilteredItems.length;
+  const order = new Array(n);
+  for (let i = 0; i < n; i++) order[i] = i;
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  // อย่าเริ่มรอบใหม่ด้วยคำเดียวกับคำสุดท้ายของรอบก่อน
+  if (n > 1 && order[0] === voLastPlayedIndex) {
+    const tmp = order[0];
+    order[0] = order[1];
+    order[1] = tmp;
+  }
+  return order;
+}
+
+function voSyncPlayButtons() {
+  const allBtn = $("voPlayAllBtn");
+  if (allBtn) {
+    const on = voPlayAllActive && voPlayMode === "order";
+    allBtn.textContent = on ? "⏹ หยุดเล่นเสียง" : "▶ เล่นเสียงวน";
+    allBtn.classList.toggle("playing", on);
+    allBtn.setAttribute("aria-pressed", String(on));
+  }
+  const rndBtn = $("voPlayRandomBtn");
+  if (rndBtn) {
+    const on = voPlayAllActive && voPlayMode === "shuffle";
+    rndBtn.textContent = on ? "⏹ หยุดสุ่ม" : "🔀 เล่นเสียงสุ่มคำ";
+    rndBtn.classList.toggle("playing", on);
+    rndBtn.setAttribute("aria-pressed", String(on));
+  }
+}
+
+function voShowNowPlaying(item) {
+  const box = $("voNowPlaying");
+  if (!box || !item) return;
+  const zh = $("voNpZh");
+  const py = $("voNpPy");
+  const th = $("voNpTh");
+  if (zh) zh.textContent = String(item.zh || "").split(/[｜|]/)[0].trim();
+  if (py) py.textContent = item.py || "";
+  if (th) th.textContent = item.th || "";
+  box.hidden = false;
+}
+
+function voHideNowPlaying() {
+  const box = $("voNowPlaying");
+  if (box) box.hidden = true;
 }
 
 function voStopPlayAll() {
   voPlayAllActive = false;
   clearTimeout(voPlayAllTimeout);
   voPlayAllTimeout = null;
-
-  const btn = $("voPlayAllBtn");
-  if (btn) {
-    btn.textContent = "▶ เล่นเสียงวน";
-    btn.classList.remove("playing");
-  }
+  voPlayQueue = null;
+  voSyncPlayButtons();
+  voHideNowPlaying();
 
   // Remove active highlight
   const activeEl = document.querySelector(".vo-item.active-speaking");
   if (activeEl) activeEl.classList.remove("active-speaking");
 }
 
+// เลื่อนการ์ดที่กำลังเล่นมาไว้ "ใต้แถบ sticky" — scrollIntoView ไม่รู้จักแถบที่ทับอยู่
+// (ถ้าใช้ scrollIntoView การ์ดจะไปอยู่ใต้แถบค้นหา มองไม่เห็น)
+function voScrollCardUnderBar(card) {
+  const screen = $("vocaboverview");
+  if (!screen || !card) return;
+  const bar = document.querySelector(".vo-topbar");
+  const barH = (bar ? bar.offsetHeight : 0) + 10;
+  const sRect = screen.getBoundingClientRect();
+  const cRect = card.getBoundingClientRect();
+  const top = cRect.top - sRect.top;
+  const bottom = cRect.bottom - sRect.top;
+  const viewH = screen.clientHeight;
+
+  if (top < barH) {
+    screen.scrollTop -= (barH - top);
+  } else if (bottom > viewH - 10) {
+    let delta = bottom - (viewH - 10);
+    const roomDown = top - barH;   // เลื่อนลงได้อีกแค่ไหนก่อนหัวการ์ดจะมุดใต้แถบ
+    if (roomDown > 0) delta = Math.min(delta, roomDown);
+    screen.scrollTop += delta;
+  }
+}
+
 function voPlayNextItem() {
   if (!voPlayAllActive) return;
 
-  if (voPlayAllIndex >= voFilteredItems.length) {
-    // Finished all items
+  const total = voPlayQueue ? voPlayQueue.length : voFilteredItems.length;
+  if (voPlayAllIndex >= total) {
+    // เล่นครบทุกคำในกองแล้ว
     voStopPlayAll();
     return;
   }
 
-  // Make sure item is rendered
-  while (voPlayAllIndex >= voRenderedCount && voRenderedCount < voFilteredItems.length) {
-    voRenderNextChunk();
+  const itemIndex = voPlayQueue ? voPlayQueue[voPlayAllIndex] : voPlayAllIndex;
+  const item = voFilteredItems[itemIndex];
+  if (!item) {
+    voStopPlayAll();
+    return;
   }
+  voLastPlayedIndex = itemIndex;
 
-  const item = voFilteredItems[voPlayAllIndex];
-  const list = $("voList");
-  const card = list ? list.querySelector(`.vo-item[data-index="${voPlayAllIndex}"]`) : null;
+  voShowNowPlaying(item);
 
-  // Highlight card
-  const prevActive = document.querySelector(".vo-item.active-speaking");
-  if (prevActive) prevActive.classList.remove("active-speaking");
-
-  if (card) {
-    card.classList.add("active-speaking");
-    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // ไฮไลต์/เลื่อนจอเฉพาะโหมดตามลำดับ — โหมดสุ่มห้าม render กองเพิ่ม
+  // ไม่งั้นการ์ดทั้ง 11,000 ใบจะถูกสร้างจนเปลืองหน่วยความจำ
+  if (voPlayMode === "order") {
+    while (itemIndex >= voRenderedCount && voRenderedCount < voFilteredItems.length) {
+      voRenderNextChunk();
+    }
+    const list = $("voList");
+    const card = list ? list.querySelector(`.vo-item[data-index="${itemIndex}"]`) : null;
+    const prevActive = document.querySelector(".vo-item.active-speaking");
+    if (prevActive) prevActive.classList.remove("active-speaking");
+    if (card) {
+      card.classList.add("active-speaking");
+      voScrollCardUnderBar(card);
+    }
   }
 
   const zh = item.zh.split(/[｜|]/)[0].trim();

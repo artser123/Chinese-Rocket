@@ -938,47 +938,74 @@
 
 <!-- VOCABULARY OVERVIEW SCREEN — เกมรวมคำศัพท์และประโยคตามหมวดหมู่ -->
 <div id="vocaboverview" class="screen">
-  <div class="vo-header">
-    <button id="voBackBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">🔙</button>
-    <div class="vo-title-group">
-      <h2 class="vo-title">📑 เกมรวมคำศัพท์</h2>
-      <div class="vo-cat-indicator" id="voCatIndicator">
-        <span class="vo-cat-icon" id="voCatIcon">📂</span>
-        <select id="voCategorySelect" class="vo-category-select" aria-label="สลับหมวดหมู่คำศัพท์"></select>
+  <!-- แถบบนแบบ sticky: หัวจอ + ค้นหา + ตัวกรอง อยู่บนตลอดเวลาเลื่อนดูรายการ -->
+  <div class="vo-topbar">
+    <div class="vo-header">
+      <button id="voBackBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">🔙</button>
+      <div class="vo-title-group">
+        <h2 class="vo-title">📑 เกมรวมคำศัพท์</h2>
+        <div class="vo-cat-indicator" id="voCatIndicator">
+          <span class="vo-cat-icon" id="voCatIcon">📂</span>
+          <select id="voCategorySelect" class="vo-category-select" aria-label="สลับหมวดหมู่คำศัพท์"></select>
+        </div>
+      </div>
+      <button id="voMuteBtn" class="icon-btn" title="เปิด/ปิดเสียง" aria-label="เปิด/ปิดเสียง">🔊</button>
+    </div>
+
+    <div class="vo-controls-panel">
+      <div class="vo-subcat-bar" id="voSubcatBar" role="tablist" aria-label="หมวดย่อยคำศัพท์">
+        <!-- Subcategory / Level filter buttons generated dynamically -->
+      </div>
+
+      <div class="vo-search-row">
+        <div class="vo-search-wrap">
+          <span class="vo-search-icon" aria-hidden="true">🔍</span>
+          <input id="voSearchInput" type="search" class="vo-search-input" placeholder="ค้นหาตัวจีน, พินอิน หรือคำแปล..." autocomplete="off">
+          <button id="voSearchClear" class="vo-search-clear" title="ล้างการค้นหา" aria-label="ล้างการค้นหา" hidden>✕</button>
+        </div>
+        <div class="vo-stats" id="voStatsBadge">กำลังโหลดคำศัพท์...</div>
+      </div>
+
+      <div class="vo-toggles-row">
+        <button id="voTogglePy" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงพินอิน">
+          <span class="vo-toggle-check">✓</span> พินอิน
+        </button>
+        <button id="voToggleTh" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงคำแปลไทย">
+          <span class="vo-toggle-check">✓</span> คำแปลไทย
+        </button>
+        <button id="voToggleSent" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงประโยคตัวอย่าง">
+          <span class="vo-toggle-check">✓</span> ประโยคตัวอย่าง
+        </button>
+        <div class="vo-audio-actions">
+          <button id="voPlayAllBtn" class="vo-action-btn" type="button" title="เล่นเสียงคำศัพท์อัตโนมัติตามลำดับ">
+            ▶ เล่นเสียงวน
+          </button>
+          <button id="voPlayRandomBtn" class="vo-action-btn" type="button" title="สุ่มเล่นเสียงคำศัพท์ (ไม่ตามลำดับในกอง)">
+            🔀 เล่นเสียงสุ่มคำ
+          </button>
+        </div>
+      </div>
+
+      <div class="vo-now-playing" id="voNowPlaying" hidden>
+        <span class="vo-np-label" aria-hidden="true">🔊</span>
+        <span class="vo-np-zh" id="voNpZh" lang="zh"></span>
+        <span class="vo-np-py" id="voNpPy"></span>
+        <span class="vo-np-th" id="voNpTh"></span>
       </div>
     </div>
-    <button id="voMuteBtn" class="icon-btn" title="เปิด/ปิดเสียง" aria-label="เปิด/ปิดเสียง">🔊</button>
   </div>
 
-  <div class="vo-controls-panel">
-    <div class="vo-subcat-bar" id="voSubcatBar" role="tablist" aria-label="หมวดย่อยคำศัพท์">
-      <!-- Subcategory / Level filter buttons generated dynamically -->
-    </div>
-
-    <div class="vo-search-row">
-      <div class="vo-search-wrap">
-        <span class="vo-search-icon" aria-hidden="true">🔍</span>
-        <input id="voSearchInput" type="search" class="vo-search-input" placeholder="ค้นหาตัวจีน, พินอิน หรือคำแปล..." autocomplete="off">
-        <button id="voSearchClear" class="vo-search-clear" title="ล้างการค้นหา" aria-label="ล้างการค้นหา" hidden>✕</button>
-      </div>
-      <div class="vo-stats" id="voStatsBadge">กำลังโหลดคำศัพท์...</div>
-    </div>
-
-    <div class="vo-toggles-row">
-      <button id="voTogglePy" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงพินอิน">
-        <span class="vo-toggle-check">✓</span> พินอิน
-      </button>
-      <button id="voToggleTh" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงคำแปลไทย">
-        <span class="vo-toggle-check">✓</span> คำแปลไทย
-      </button>
-      <button id="voToggleSent" class="vo-toggle-btn active" type="button" aria-pressed="true" title="สลับการแสดงประโยคตัวอย่าง">
-        <span class="vo-toggle-check">✓</span> ประโยคตัวอย่าง
-      </button>
-      <button id="voPlayAllBtn" class="vo-action-btn" type="button" title="เล่นเสียงคำศัพท์อัตโนมัติ">
-        ▶ เล่นเสียงวน
-      </button>
+  <div id="voListContainer" class="vo-list-container">
+    <div id="voList" class="vo-list"></div>
+    <div id="voEmptyNotice" class="vo-empty-notice" hidden>
+      <div class="vo-empty-icon">🔍</div>
+      <div class="vo-empty-title" id="voEmptyTitle">ไม่พบคำศัพท์ที่ตรงกับการค้นหา</div>
+      <div class="vo-empty-desc" id="voEmptyDesc">ลองค้นหาด้วยคำอื่น หรือกด "ทั้งหมด" เพื่อดูคำศัพท์ทั้งหมดในหมวดนี้</div>
     </div>
   </div>
+
+  <button id="voScrollTopBtn" class="vo-scroll-top-btn" title="ขึ้นด้านบน" aria-label="ขึ้นด้านบน" hidden>⬆</button>
+</div>
 
   <div id="voListContainer" class="vo-list-container">
     <div id="voList" class="vo-list"></div>
