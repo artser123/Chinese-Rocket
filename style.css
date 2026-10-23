@@ -2713,7 +2713,7 @@ button.fill-blank {
   color: #cfe9ff;
   box-shadow: 0 0 12px rgba(143, 211, 255, .18);
 }
-.pod-loop-hint { min-width: 0; color: var(--fg-mute); font-size: 10px; line-height: 1.35; }
+.pod-loop-hint { min-width: 0; margin-left: auto; color: var(--fg-mute); font-size: 10px; line-height: 1.35; text-align: right; }
 /* ตั้งเวลาปิดเสียงอัตโนมัติ (sleep timer) — ใช้ได้ทั้งโหมดพอดแคสต์และอ่านบทความ */
 .pod-sleep-row, .reader-sleep-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .sleep-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 8px; border: 1px solid var(--line-1); border-radius: 12px; background: var(--surface-2); }
@@ -2724,12 +2724,21 @@ button.fill-blank {
 .pod-voice-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .pod-voice-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
 .pod-voice-toggle[hidden] { display: none; }
-.pod-voice-hint { color: var(--fg-mute); font-size: 10px; line-height: 1.35; }
+.pod-voice-hint { margin-left: auto; color: var(--fg-mute); font-size: 10px; line-height: 1.35; text-align: right; }
+/* ถ้ายังไม่มีปุ่มเสียงแปล (ตอนที่ไม่มีคลิปไทย) ให้คำอธิบายเริ่มจากซ้ายตามปกติ */
+.pod-voice-toggle[hidden] + .pod-voice-hint { margin-left: 0; text-align: left; }
 #podRate, #readerRate { min-height: 42px; padding: 0 9px; border: 1px solid var(--line-1); border-radius: 10px; background: #171e45; color: var(--fg); color-scheme: dark; font: inherit; font-size: 12px; }
 #readerRate { flex: 0 0 auto; min-width: 70px; }
 .pod-transcript-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--fg-dim); font-size: 13px; font-weight: 700; }
 .pod-transcript-label { min-width: 0; }
-.pod-heading-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 6px; }
+/* แถวควบคุมการแสดงผลของบทอ่าน (ขนาดตัวอักษร / พินอิน / คำแปล) — อยู่ในแถบ
+   ตัวเล่นบนสุดที่เป็น position: sticky ทั้งในพอดแคสต์และบทอ่าน HSK
+   เพื่อให้ยังกดได้อยู่แม้เลื่อนอ่านลงไปไกล ๆ */
+.pod-display-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pod-display-row .pod-font-size { flex: 0 0 auto; }
+/* ชุดปุ่มพินอิน/คำแปลชิดขวาของแถว (ขนาดตัวอักษรอยู่ซ้าย) — margin-left:auto
+   ทำให้ยังชิดขวาได้แม้แถวตัดขึ้นบรรทัดใหม่บนจอแคบ */
+.pod-display-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .pod-font-size { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-1); border-radius: 11px; background: var(--surface-2); }
 .pod-font-btn { width: 36px; min-height: 32px; border: 0; border-radius: 9px; background: rgba(143, 211, 255, .12); color: var(--fg-dim); font: inherit; font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer; touch-action: manipulation; }
 .pod-font-btn:active { background: rgba(143, 211, 255, .26); color: #fff; }
@@ -2798,7 +2807,7 @@ button.fill-blank {
 .reader-sticky-controls { position: sticky; top: 0; z-index: 8; width: 100%; display: flex; flex-direction: column; gap: 7px; margin-top: -5px; padding: 5px 0 9px; border-bottom: 1px solid rgba(122, 140, 255, .22); background: #080d28; }
 .reader-transport { padding: 9px 12px; border: 1px solid var(--line-1); border-radius: 16px; background: var(--surface-2); }
 #readerSeek { width: 100%; accent-color: #83b9ff; touch-action: pan-x; }
-.reader-playback-options { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.reader-playback-options { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px; margin-top: 8px; }
 .reader-option-btn, .reader-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .reader-option-btn[aria-pressed="true"], .reader-toggle[aria-pressed="true"] { border-color: rgba(143, 211, 255, .55); background: rgba(143, 211, 255, .2); color: #dff4ff; }
 .reader-option-btn[aria-pressed="false"], .reader-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
@@ -2808,7 +2817,6 @@ button.fill-blank {
 .reader-title-pinyin { color: #8fd3ff !important; font-family: var(--font-pinyin); }
 .reader-now-playing p { margin-top: 3px; color: var(--fg-mute); font-size: 11px; }
 .reader-transcript-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--fg-dim); font-size: 13px; font-weight: 700; }
-.reader-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .reader-transcript { display: flex; flex-direction: column; gap: 8px; padding: 2px 1px 18px; }
 .reader-turn { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid rgba(122, 140, 255, .17); border-radius: 14px; background: rgba(16, 23, 55, .76); scroll-margin: 110px; transition: border-color .16s, background .16s, box-shadow .16s; }
 .reader-turn-body { flex: 1 1 auto; min-width: 0; }

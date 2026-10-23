@@ -18,6 +18,13 @@ let readerQuizState = null;
 let readerBubbleOpen = false;
 let readerBubbleTap = null;
 
+// ---- เสียงอ่านชื่อเรื่อง (จีน → ไทย → พัก 2 วินาที → เนื้อเรื่อง) ---------
+// เหมือนบทความในโหมดพอดแคสต์: ไฟล์แยกจากเสียงเนื้อเรื่อง
+// (reader_data/intro_zh/<id>.mp3 กับ intro_th/<id>.mp3)
+let readerIntroPlayback = null;
+let readerIntroUnavailable = false;
+let readerIntroCounter = 0;
+
 // ---- ความทนทานของการเล่นเบื้องหลัง ------------------------------------
 // ตอนปิดหน้าจอ/สลับแอพ Android อาจหยุดคลิปเอง หรือไม่ส่ง event "ended"
 // ทำให้ "เล่นเรื่องถัดไปอัตโนมัติ" ไม่เดิน จึงต้องมีตัวเฝ้าดูคอยเช็ก
@@ -35,7 +42,12 @@ function readerIsBusy() {
   return Date.now() < readerBusyUntil;
 }
 
-const READER_LOCAL_PREVIEW = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) &&
+// Local preview (APK-only mode in the real index.html). Private LAN addresses
+// are allowed too so a phone can open it while `python serve.py --host 0.0.0.0`
+// runs; the explicit ?readerPreview=1 flag is still required.
+const READER_LOCAL_HOST =
+  /^(localhost|127\.0\.0\.1|\[::1\]|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
+const READER_LOCAL_PREVIEW = READER_LOCAL_HOST.test(location.hostname) &&
   new URLSearchParams(location.search).get("readerPreview") === "1";
 const READER_PARAMS = new URLSearchParams(location.search);
 const READER_DATA_ROOT = READER_LOCAL_PREVIEW
@@ -578,6 +590,14 @@ function readerWatchStop() {
 
 function readerWatch() {
   if (!readerState || !readerWantPlay) { readerWatchStop(); return; }
+  if (readerIntroPlayback) {
+    // ระหว่างอ่านชื่อเรื่อง ไฟล์เนื้อหายังไม่เริ่ม อย่าสั่งเล่นซ้ำ
+    if (readerIntroPlayback.phase === "clip") {
+      const introAudio = $("readerIntroAudio");
+      if (introAudio && introAudio.paused && !introAudio.ended && !readerIsBusy()) readerResumeIntro();
+    }
+    return;
+  }
   if (readerState.playback || readerIsBusy()) return;
   const audio = $("readerAudio");
   if (!audio || !audio.src) return;
@@ -593,7 +613,7 @@ function readerWatch() {
 }
 
 function readerResumeAudio(attempt = 0) {
-  if (!readerWantPlay || !readerState) return;
+  if (!readerWantPlay || !readerState || readerIntroPlayback) return;
   const audio = $("readerAudio");
   if (!audio || !audio.src || !audio.paused || audio.ended) return;
   if (readerIsBusy()) return;
@@ -651,7 +671,7 @@ async function readerRestoreSession(session) {
   if (!story) return false;
   readerLevel = [1, 2, 3].includes(story.level) ? story.level : readerLevel;
   readerUpdateLevelButtons();
-  readerSelectStory(story, Boolean(session.playing));
+  readerSelectStory(story, Boolean(session.playing), false);
   readerRestorePosition(session.time);
   return true;
 }
@@ -660,7 +680,109 @@ function readerThaiText(turn) {
   return (turn.thai || []).map((item) => item.text).filter(Boolean).join(" ");
 }
 
-function readerSelectStory(story, resume = false) {
+/* ---- เสียงอ่านชื่อเรื่องก่อนเนื้อหา --------------------------------------
+   ลำดับ: ชื่อเรื่องภาษาจีน → ชื่อเรื่องภาษาไทย → พัก 2 วินาที → บทอ่าน
+   ไฟล์เสียงแยกจากตัวเรื่อง จึงไม่กระทบตำแหน่งคาราโอเกะของเนื้อหา */
+function readerIntroClips(story) {
+  if (!story || !story.id) return null;
+  return {
+    zh: readerAssetUrl(`intro_zh/${story.id}.mp3`),
+    th: readerAssetUrl(`intro_th/${story.id}.mp3`),
+  };
+}
+
+function readerClearIntro() {
+  const state = readerIntroPlayback;
+  if (state && state.timer) clearTimeout(state.timer);
+  readerIntroPlayback = null;
+  const audio = $("readerIntroAudio");
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }
+}
+
+function readerIntroActive() {
+  return Boolean(readerIntroPlayback);
+}
+
+function readerPlayIntroClip() {
+  const state = readerIntroPlayback;
+  if (!state || !readerWantPlay) return;
+  const lang = state.index === 0 ? "zh" : "th";
+  const audio = $("readerIntroAudio");
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  state.phase = "clip";
+  state.token = ++readerIntroCounter;
+  audio.pause();
+  audio.src = state.clips[lang];
+  audio.playbackRate = Number($("readerRate").value) || 1;
+  audio.load();
+  $("readerPlayBtn").textContent = "⏸ พัก";
+  readerSetMediaState("playing");
+  $("readerStatus").textContent = lang === "zh"
+    ? `🎧 ชื่อเรื่องภาษาจีน · ${state.story.title_zh}`
+    : `🎧 ชื่อเรื่องภาษาไทย · ${state.story.title_th || ""}`;
+  audio.play().catch(() => {
+    if (readerIntroPlayback === state) readerAdvanceIntro(state.token);
+  });
+}
+
+function readerAdvanceIntro(token) {
+  const state = readerIntroPlayback;
+  if (!state || !readerWantPlay) return;
+  if (token !== undefined && token !== state.token) return; // เหตุการณ์ค้างจากคลิปก่อน
+  if (state.index === 0) {
+    state.index = 1;
+    readerPlayIntroClip();
+    return;
+  }
+  state.phase = "gap";
+  state.remaining = 2000;
+  $("readerStatus").textContent = "จบการอ่านชื่อเรื่อง · เริ่มบทอ่านในอีก 2 วินาที";
+  readerScheduleIntroGap();
+}
+
+function readerScheduleIntroGap() {
+  const state = readerIntroPlayback;
+  if (!state || !readerWantPlay || state.phase !== "gap") return;
+  if (state.timer) clearTimeout(state.timer);
+  const token = state.token;
+  state.timer = setTimeout(() => {
+    if (readerIntroPlayback !== state || token !== state.token || !readerWantPlay) return;
+    readerClearIntro();
+    readerPlay();
+  }, Math.max(0, state.remaining));
+}
+
+function readerStartIntro(story) {
+  if (readerIntroUnavailable) return false;
+  const clips = readerIntroClips(story);
+  if (!clips) return false;
+  readerClearIntro();
+  readerIntroPlayback = { story, clips, index: 0, phase: "clip", timer: null, token: ++readerIntroCounter };
+  readerWantPlay = true;
+  readerSyncBackgroundAudio();
+  readerPlayIntroClip();
+  return true;
+}
+
+function readerResumeIntro() {
+  const state = readerIntroPlayback;
+  if (!state) return false;
+  readerWantPlay = true;
+  readerSyncBackgroundAudio();
+  $("readerPlayBtn").textContent = "⏸ พัก";
+  readerSetMediaState("playing");
+  if (state.phase === "gap") readerScheduleIntroGap();
+  else $("readerIntroAudio").play().catch(() => {
+    if (readerIntroPlayback === state) readerAdvanceIntro(state.token);
+  });
+  return true;
+}
+
+function readerSelectStory(story, resume = false, withIntro = true) {
   // สลับเรื่องตอนเล่นอัตโนมัติต้องไม่ปิดบริการ foreground คั่นระหว่างทาง
   // (Android 12+ เริ่มบริการใหม่จากเบื้องหลังไม่ได้ → เสียงจะหยุด)
   const wasPlaying = readerWantPlay || resume;
@@ -693,7 +815,8 @@ function readerSelectStory(story, resume = false) {
   readerSyncBackgroundAudio(); // ยังถือบริการไว้ตอนสลับเรื่อง
   requestAnimationFrame(() => { $("readerPlayer").scrollTop = 0; });
   if (resume) {
-    readerPlay();
+    // เปิดเรื่องใหม่ → อ่านชื่อเรื่องจีน/ไทยก่อน แล้วค่อยเข้าบทอ่าน
+    if (!(withIntro && readerStartIntro(story))) readerPlay();
   } else {
     readerKeepAlive = false;
     readerSyncBackgroundAudio();
@@ -706,6 +829,7 @@ function readerPlay(attempt = 0) {
   readerWantPlay = true;
   readerEndedFor = null;
   readerSyncBackgroundAudio();
+  if (readerResumeIntro()) return; // กำลังอ่านชื่อเรื่องอยู่ → เล่นชื่อเรื่องต่อ
   const audio = $("readerAudio");
   if (!audio.src) return;
   audio.play().then(() => {
@@ -738,6 +862,9 @@ function readerPause(keepAlive = false) {
   const thaiAudio = $("readerThaiAudio");
   audio.pause();
   thaiAudio.pause();
+  // หยุดเสียงชื่อเรื่องไว้ชั่วคราว (กด ▶ อีกครั้งจะอ่านชื่อเรื่องต่อ)
+  const introAudio = $("readerIntroAudio");
+  if (introAudio && readerIntroPlayback) introAudio.pause();
   thaiAudio.removeAttribute("src");
   thaiAudio.load();
   $("readerPlayBtn").textContent = "▶ เล่น";
@@ -746,6 +873,7 @@ function readerPause(keepAlive = false) {
 }
 
 function readerStopCurrentAudio(keepAlive = false) {
+  readerClearIntro();
   readerPause(keepAlive);
   const audio = $("readerAudio");
   audio.removeAttribute("src");
@@ -798,6 +926,7 @@ function readerPlayFromTurn(index) {
   const turn = readerState.story.turns[index];
   if (!turn) return;
   readerPause();
+  readerClearIntro();
   readerState.activeTurn = index;
   readerState.nextTurn = index;
   readerRenderActiveTurn();
@@ -898,6 +1027,7 @@ let readerSeeking = false;
 function readerSeekTo(time, resume = false, turnIndex = null) {
   if (!readerState) return;
   readerPause();
+  readerClearIntro(); // ข้ามเสียงชื่อเรื่องเมื่อผู้ใช้เลือกตำแหน่งเอง
   const audio = $("readerAudio");
   const target = Math.max(0, Math.min(Number.isFinite(audio.duration) ? audio.duration : time, Number(time) || 0));
   if (turnIndex !== null) {
@@ -1077,6 +1207,7 @@ $("readerRate").addEventListener("change", () => {
   const rate = Number($("readerRate").value) || 1;
   $("readerAudio").playbackRate = rate;
   $("readerThaiAudio").playbackRate = rate;
+  $("readerIntroAudio").playbackRate = rate;
 });
 $("readerAlternateBtn").addEventListener("click", () => {
   readerAlternateEnabled = !readerAlternateEnabled;
@@ -1110,6 +1241,19 @@ $("readerThaiToggle").addEventListener("click", () => {
 $("readerFontMinus").addEventListener("click", () => readerSetFontScale(readerFontScale - 0.1));
 $("readerFontPlus").addEventListener("click", () => readerSetFontScale(readerFontScale + 0.1));
 $("readerThaiAudio").addEventListener("ended", readerHandleThaiEnded);
+$("readerIntroAudio").addEventListener("ended", () => {
+  const state = readerIntroPlayback;
+  if (!state || state.phase !== "clip") return;
+  readerAdvanceIntro(state.token);
+});
+$("readerIntroAudio").addEventListener("error", () => {
+  const state = readerIntroPlayback;
+  if (!state || state.phase !== "clip") return;
+  // ไฟล์เสียงชื่อเรื่องหาย (เช่น APK รุ่นเก่าที่ยังไม่มี) → ข้ามไปเล่นบทอ่าน
+  state.failed = (state.failed || 0) + 1;
+  if (state.failed >= 2) readerIntroUnavailable = true;
+  readerAdvanceIntro(state.token);
+});
 $("readerAudio").addEventListener("timeupdate", () => {
   if (!readerState) return;
   readerUpdateProgress();

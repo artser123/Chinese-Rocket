@@ -17,7 +17,12 @@ let podPinyinVisible = podLoadPinyinVisible();
 let podDataPromise = null;
 // Private localhost-only path for testing the APK-only podcast feature in the
 // real index.html without exposing its generated data in public web builds.
-const POD_LOCAL_PREVIEW = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) &&
+// Private LAN addresses are allowed too so the same preview can be opened from
+// a phone while `python serve.py --host 0.0.0.0` is running (still requires the
+// explicit ?podcastPreview=1 flag, and never matches a public host).
+const POD_PREVIEW_HOST =
+  /^(localhost|127\.0\.0\.1|\[::1\]|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
+const POD_LOCAL_PREVIEW = POD_PREVIEW_HOST.test(location.hostname) &&
   new URLSearchParams(location.search).get("podcastPreview") === "1";
 const POD_THAI_VOICE_KEY = "cr_pod_thai_voice";
 let podThaiVoiceEnabled = podLoadThaiVoiceEnabled();
@@ -334,13 +339,34 @@ function podApplyThaiVoiceToggle(ep = podcastState && podcastState.episode) {
 }
 
 function podSentenceIntervals(ep) {
-  return (ep.paras || []).map((para) => {
+  const paras = ep.paras || [];
+  const countChars = (para) => (para.tk || []).reduce((total, row) =>
+    total + ([...(row[0] || "")].filter((ch) => /[\u3400-\u9fff\uf900-\ufaff]/.test(ch)).length), 0);
+  const totalChars = Math.max(1, paras.reduce((total, para) => total + countChars(para), 0));
+  const span = Math.max(1, (ep.dur || 300) - 10);
+  let charOffset = 0;
+  return paras.map((para) => {
     const rows = (para.tk || []).filter((row) => Number.isFinite(row[2]) && Number.isFinite(row[3]));
-    if (!rows.length) return null;
-    return {
-      start: Math.min(...rows.map((row) => row[2])),
-      end: Math.max(...rows.map((row) => row[3])),
-    };
+    const chars = countChars(para);
+    let interval = null;
+    if (rows.length) {
+      interval = {
+        start: Math.min(...rows.map((row) => row[2])),
+        end: Math.max(...rows.map((row) => row[3])),
+      };
+    } else if (Number.isFinite(para.start) && Number.isFinite(para.end) && para.end > para.start) {
+      // TTS article datasets have exact sentence clip offsets even if ASR could
+      // not align a token (e.g. a model pronounces a phrase unusually).
+      interval = { start: para.start, end: para.end };
+    } else if (chars > 0) {
+      // Legacy/MaoMi fallback mirrors podTranscript's proportional karaoke.
+      interval = {
+        start: 8 + span * charOffset / totalChars,
+        end: 8 + span * (charOffset + chars) / totalChars,
+      };
+    }
+    charOffset += chars;
+    return interval;
   });
 }
 

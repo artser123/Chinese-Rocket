@@ -679,6 +679,17 @@
             <option value="1.25">1.25×</option>
           </select>
         </div>
+        <div class="pod-display-row">
+          <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทถอดเสียง">
+            <button id="podFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
+            <span id="podFontLabel" class="pod-font-label" aria-live="polite">100%</span>
+            <button id="podFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
+          </div>
+          <div class="pod-display-actions">
+            <button id="podPinyinToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🔤 ซ่อนพินอิน</button>
+            <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
+          </div>
+        </div>
         <div class="pod-loop-row">
           <button id="podReplayBtn" class="pod-icon-btn" type="button" title="เล่นซ้ำเรื่องนี้" aria-label="เล่นซ้ำเรื่องนี้">🔁</button>
           <button id="podAutoNextBtn" class="pod-icon-btn" type="button" aria-pressed="false" title="เล่นเรื่องถัดไปอัตโนมัติ (วนลูปทั้งหมด)" aria-label="เล่นเรื่องถัดไปอัตโนมัติ">⏭</button>
@@ -707,15 +718,6 @@
     <audio id="podIntroAudio" preload="none" playsinline aria-hidden="true"></audio>
     <div class="pod-transcript-heading">
       <span class="pod-transcript-label">📝 Transcript ภาษาจีน</span>
-      <div class="pod-heading-actions">
-        <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทถอดเสียง">
-          <button id="podFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
-          <span id="podFontLabel" class="pod-font-label" aria-live="polite">100%</span>
-          <button id="podFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
-        </div>
-        <button id="podPinyinToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🔤 ซ่อนพินอิน</button>
-        <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
-      </div>
     </div>
     <div id="podThaiNotice" class="pod-thai-notice" hidden>คำแปลไทยของตอนนี้ยังไม่ได้สร้าง — ตั้งค่า BING_TRANSLATE_KEY แล้วรัน tools/build_podcast_data.py อีกครั้ง</div>
     <div id="podTranscript" class="pod-transcript" lang="zh-CN"></div>
@@ -763,6 +765,17 @@
             <option value="1.25">1.25×</option>
           </select>
         </div>
+        <div class="pod-display-row">
+          <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทอ่าน">
+            <button id="readerFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
+            <span id="readerFontLabel" class="pod-font-label" aria-live="polite">100%</span>
+            <button id="readerFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
+          </div>
+          <div class="pod-display-actions">
+            <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true">พินอิน: เปิด</button>
+            <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true">ไทย: เปิด</button>
+          </div>
+        </div>
         <div class="reader-playback-options">
           <button id="readerAlternateBtn" class="reader-option-btn" type="button" aria-pressed="false">🇨🇳↔🇹🇭 สลับจีน–ไทย: ปิด</button>
           <button id="readerAutoNextBtn" class="reader-option-btn" type="button" aria-pressed="false">⏭ เล่นเรื่องถัดไป: ปิด</button>
@@ -781,17 +794,9 @@
     </div>
     <audio id="readerAudio" preload="metadata" playsinline></audio>
     <audio id="readerThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
+    <audio id="readerIntroAudio" preload="none" playsinline aria-hidden="true"></audio>
     <div class="reader-transcript-heading">
       <span>📝 บทอ่านภาษาจีน</span>
-      <div class="reader-heading-actions">
-        <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทอ่าน">
-          <button id="readerFontMinus" class="pod-font-btn" type="button" aria-label="ย่อตัวหนังสือ">A−</button>
-          <span id="readerFontLabel" class="pod-font-label" aria-live="polite">100%</span>
-          <button id="readerFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
-        </div>
-        <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true">พินอิน: เปิด</button>
-        <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true">ไทย: เปิด</button>
-      </div>
     </div>
     <p id="readerAlignmentNote" class="reader-alignment-note" hidden></p>
     <div id="readerTranscript" class="reader-transcript" lang="zh-CN"></div>
