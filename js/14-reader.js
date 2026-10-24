@@ -279,6 +279,10 @@ function readerStoryList() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "reader-story-card";
+    const thumb = document.createElement("img");
+    thumb.className = "reader-story-thumb";
+    thumb.alt = "";
+    thumb.decoding = "async";
     const number = document.createElement("span");
     number.className = "reader-story-number-badge";
     number.textContent = String(story.story_number).padStart(2, "0");
@@ -293,9 +297,10 @@ function readerStoryList() {
     const play = document.createElement("span");
     play.className = "reader-story-play";
     play.textContent = "▶";
-    button.append(number, copy, play);
-    button.addEventListener("click", () => readerSelectStory(story, true));
+    button.append(thumb, number, copy, play);
     list.appendChild(button);
+    crCoverImage(thumb, readerCoverUrl(story));
+    button.addEventListener("click", () => readerSelectStory(story, true));
   }
   $("readerListStatus").textContent = query
     ? `HSK ${readerLevel} · พบ ${stories.length} เรื่อง`
@@ -1042,6 +1047,32 @@ function readerUpdateProgress() {
   readerRenderActiveWord();
 }
 
+function readerKeepTurnVisible(active, word) {
+  if (!active) return;
+  const player = $("readerPlayer");
+  const viewport = player.getBoundingClientRect();
+  const sticky = $("reader").querySelector(".reader-sticky-controls");
+  const safeTop = Math.max(viewport.top + 4, sticky ? sticky.getBoundingClientRect().bottom + 8 : viewport.top);
+  const safeBottom = viewport.bottom - 8;
+  const available = safeBottom - safeTop;
+  if (available <= 0) return;
+  const rect = active.getBoundingClientRect();
+  let delta;
+  if (rect.height <= available) {
+    // ประโยคที่กำลังเล่นปักไว้ที่ขอบบนของพื้นที่อ่าน (แบบ teleprompter)
+    delta = rect.top - safeTop;
+  } else {
+    // ประโยคยาวเกินหนึ่งหน้าจอ: ตามคำที่กำลังไฮไลต์แทน
+    const focus = word ? word.getBoundingClientRect() : rect;
+    if (focus.top < safeTop) delta = focus.top - safeTop;
+    else if (focus.bottom > safeBottom) delta = focus.bottom - safeBottom;
+    else return;
+  }
+  if (Math.abs(delta) > 2) {
+    player.scrollBy({ top: delta, behavior: Math.abs(delta) > available * 0.8 ? "auto" : "smooth" });
+  }
+}
+
 function readerRenderActiveTurn() {
   if (!readerState) return;
   const index = readerState.activeTurn;
@@ -1051,15 +1082,7 @@ function readerRenderActiveTurn() {
   if (current) current.classList.remove("reader-current");
   if (!active) return;
   active.classList.add("reader-current");
-  const player = $("readerPlayer");
-  const viewport = player.getBoundingClientRect();
-  const sticky = $("reader").querySelector(".reader-sticky-controls");
-  const safeTop = Math.max(viewport.top + 4, sticky ? sticky.getBoundingClientRect().bottom + 8 : viewport.top);
-  const rect = active.getBoundingClientRect();
-  if (rect.top < safeTop || rect.bottom > viewport.bottom - 8) {
-    const delta = rect.top < safeTop ? rect.top - safeTop : rect.bottom - (viewport.bottom - 8);
-    player.scrollBy({ top: delta, behavior: Math.abs(delta) > player.clientHeight * 0.8 ? "auto" : "smooth" });
-  }
+  readerKeepTurnVisible(active, active.querySelector(".reader-word-current"));
 }
 
 function readerRenderActiveWord() {
@@ -1074,6 +1097,8 @@ function readerRenderActiveWord() {
     const start = Number(word.dataset.start), end = Number(word.dataset.end);
     if (time >= start && time <= end) {
       word.classList.add("reader-word-current");
+      // ประโยคที่ยาวเกินหน้าจอ: เลื่อนตามคำที่กำลังออกเสียง
+      readerKeepTurnVisible(row, word);
       return;
     }
   }

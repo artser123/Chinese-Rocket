@@ -1373,22 +1373,22 @@ function podKeepSentenceAndThaiVisible(word) {
   const available = safeBottom - safeTop;
   if (available <= 0) return;
 
+  const sentenceRect = sentence.getBoundingClientRect();
   const wordRect = word.getBoundingClientRect();
-  const thai = sentence.querySelector(".pod-thai");
-  const thaiRect = thai ? thai.getBoundingClientRect() : null;
-  const thaiVisible = thaiRect && thaiRect.height > 0;
-  const focusTop = thaiVisible ? Math.min(wordRect.top, thaiRect.top) : wordRect.top;
-  const focusBottom = thaiVisible ? Math.max(wordRect.bottom, thaiRect.bottom) : wordRect.bottom;
-  const focusHeight = focusBottom - focusTop;
 
-  let delta = 0;
-  if (focusHeight <= available) {
-    if (focusTop < safeTop) delta = focusTop - safeTop;
-    else if (focusBottom > safeBottom) delta = focusBottom - safeBottom;
+  let delta;
+  if (sentenceRect.height <= available) {
+    // ประโยคที่กำลังเล่นปักไว้ที่ขอบบนของพื้นที่อ่าน (แบบ teleprompter):
+    // บรรทัดจีน + คำแปลไทยของประโยคปัจจุบันอยู่ใต้แถบควบคุมเสมอ
+    // แล้วประโยคถัดไปจะไหลขึ้นมาอยู่ด้านล่างให้อ่านล่วงหน้าได้
+    delta = sentenceRect.top - safeTop;
+  } else if (wordRect.top < safeTop) {
+    // ประโยคยาวเกินหนึ่งหน้าจอ: ตามคำที่กำลังออกเสียงแทนการปักหัวประโยค
+    delta = wordRect.top - safeTop;
+  } else if (wordRect.bottom > safeBottom) {
+    delta = wordRect.bottom - safeBottom;
   } else {
-    // Very long sentences may not fit as a whole; center the active word and
-    // its Thai line together as closely as the available viewport permits.
-    delta = (focusTop + focusBottom) / 2 - (safeTop + safeBottom) / 2;
+    return;
   }
   if (Math.abs(delta) > 2) {
     // Long hops (a seek, or the intro skip) feel broken as a slow glide, so
