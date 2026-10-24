@@ -662,7 +662,13 @@
   </section>
   <section id="podPlayer" class="pod-player" hidden>
     <div class="pod-sticky-controls">
-      <button id="podBackBtn" class="pod-back" type="button">← เลือกตอนอื่น</button>
+      <div class="pod-bar-head">
+        <button id="podBackBtn" class="pod-back" type="button">← เลือกตอนอื่น</button>
+        <div class="pod-bar-tools">
+          <span id="podSleepHint" class="pod-sleep-badge"></span>
+          <button id="podMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="podExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
+        </div>
+      </div>
       <div class="pod-transport">
         <div class="pod-seek-row">
           <span id="podCurrentTime">0:00</span>
@@ -670,14 +676,11 @@
           <span id="podDuration">0:00</span>
         </div>
         <div class="pod-player-buttons">
-          <button id="podRewindBtn" class="big-btn secondary" type="button">↶ 10 วิ</button>
+          <button id="podPrevBtn" class="pod-nav-btn" type="button" title="ตอนก่อนหน้า" aria-label="ตอนก่อนหน้า">⏮</button>
+          <button id="podRewindBtn" class="big-btn secondary" type="button" title="ย้อนกลับ 10 วินาที" aria-label="ย้อนกลับ 10 วินาที">↶10</button>
           <button id="podPlayBtn" class="lis-play" type="button">▶ เล่น</button>
-          <button id="podForwardBtn" class="big-btn secondary" type="button">10 วิ ↷</button>
-          <select id="podRate" aria-label="ความเร็วเสียง">
-            <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
-            <option value="1" selected>1×</option><option value="1.1">1.1×</option>
-            <option value="1.25">1.25×</option>
-          </select>
+          <button id="podForwardBtn" class="big-btn secondary" type="button" title="ไปข้างหน้า 10 วินาที" aria-label="ไปข้างหน้า 10 วินาที">10↷</button>
+          <button id="podNextBtn" class="pod-nav-btn" type="button" title="ตอนถัดไป" aria-label="ตอนถัดไป">⏭</button>
         </div>
         <div class="pod-display-row">
           <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทถอดเสียง">
@@ -686,32 +689,37 @@
             <button id="podFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
           </div>
           <div class="pod-display-actions">
-            <button id="podPinyinToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🔤 ซ่อนพินอิน</button>
-            <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true">🇹🇭 ซ่อนคำแปล</button>
+            <button id="podPinyinToggle" class="pod-thai-toggle" type="button" aria-pressed="true" title="ซ่อนพินอิน">拼音</button>
+            <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true" title="ซ่อนคำแปล">ไทย</button>
           </div>
         </div>
-        <div class="pod-loop-row">
-          <button id="podReplayBtn" class="pod-icon-btn" type="button" title="เล่นซ้ำเรื่องนี้" aria-label="เล่นซ้ำเรื่องนี้">🔁</button>
-          <button id="podAutoNextBtn" class="pod-icon-btn" type="button" aria-pressed="false" title="เล่นเรื่องถัดไปอัตโนมัติ (วนลูปทั้งหมด)" aria-label="เล่นเรื่องถัดไปอัตโนมัติ">⏭</button>
-          <span id="podAutoNextHint" class="pod-loop-hint">เล่นตอนถัดไปอัตโนมัติ: ปิด</span>
-        </div>
-        <div class="pod-sleep-row">
-          <button id="podSleepBtn" class="pod-icon-btn" type="button" aria-pressed="false" aria-expanded="false" title="ตั้งเวลาหยุดเล่นอัตโนมัติ" aria-label="ตั้งเวลาหยุดเล่นอัตโนมัติ">🌙</button>
-          <span id="podSleepHint" class="pod-loop-hint">ตั้งเวลาปิดอัตโนมัติ: ปิด</span>
-        </div>
-        <div id="podSleepOptions" class="sleep-options" hidden></div>
-        <div class="pod-voice-row">
-          <button id="podVoiceToggle" class="pod-voice-toggle" type="button" aria-pressed="true" hidden>🇹🇭 เสียงแปล: เปิด</button>
-          <span id="podVoiceHint" class="pod-voice-hint">เสียงแปลไทยจะเล่นหลังจบแต่ละประโยค</span>
+        <div id="podExtra" class="pod-extra" hidden>
+          <div class="pod-extra-row">
+            <select id="podRate" aria-label="ความเร็วเสียง">
+              <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
+              <option value="1" selected>1×</option><option value="1.1">1.1×</option>
+              <option value="1.25">1.25×</option>
+            </select>
+            <button id="podReplayBtn" class="pod-icon-btn" type="button" title="เล่นซ้ำตอนนี้" aria-label="เล่นซ้ำตอนนี้">🔁</button>
+            <button id="podAutoNextBtn" class="pod-icon-btn" type="button" aria-pressed="false" title="เล่นตอนถัดไปอัตโนมัติ" aria-label="เล่นตอนถัดไปอัตโนมัติ">⏭</button>
+            <button id="podSleepBtn" class="pod-icon-btn" type="button" aria-pressed="false" aria-expanded="false" title="ตั้งเวลาหยุดเล่นอัตโนมัติ" aria-label="ตั้งเวลาหยุดเล่นอัตโนมัติ">🌙</button>
+            <button id="podVoiceToggle" class="pod-voice-toggle" type="button" aria-pressed="true" hidden>🇹🇭 เสียงแปล: เปิด</button>
+          </div>
+          <div id="podSleepOptions" class="sleep-options" hidden></div>
         </div>
       </div>
     </div>
     <div class="pod-now-playing">
-      <div class="pod-ep-number" id="podEpisodeNumber"></div>
-      <h3 id="podTitle"></h3>
-      <p id="podIntroTitle" class="pod-intro-title" hidden></p>
-      <p id="podEnglishTitle" class="pod-english-title"></p>
-      <p id="podMeta"></p>
+      <button id="podCoverBtn" class="cover-btn" type="button" hidden title="ดูรูปขนาดเต็ม" aria-label="ดูรูปขนาดเต็ม">
+        <img id="podCover" class="pod-cover" alt="" hidden>
+      </button>
+      <div class="pod-now-playing-copy">
+        <div class="pod-ep-number" id="podEpisodeNumber"></div>
+        <h3 id="podTitle"></h3>
+        <p id="podIntroTitle" class="pod-intro-title" hidden></p>
+        <p id="podEnglishTitle" class="pod-english-title"></p>
+        <p id="podMeta"></p>
+      </div>
     </div>
     <audio id="podAudio" preload="metadata" playsinline></audio>
     <audio id="podThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
@@ -748,7 +756,13 @@
   </section>
   <section id="readerPlayer" class="reader-player" hidden>
     <div class="reader-sticky-controls">
-      <button id="readerBackBtn" class="pod-back" type="button">← เลือกบทอ่าน</button>
+      <div class="pod-bar-head">
+        <button id="readerBackBtn" class="pod-back" type="button">← เลือกบทอ่าน</button>
+        <div class="pod-bar-tools">
+          <span id="readerSleepHint" class="pod-sleep-badge"></span>
+          <button id="readerMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="readerExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
+        </div>
+      </div>
       <div class="reader-transport">
         <div class="pod-seek-row">
           <span id="readerCurrentTime">0:00</span>
@@ -756,14 +770,11 @@
           <span id="readerDuration">0:00</span>
         </div>
         <div class="pod-player-buttons">
-          <button id="readerRewindBtn" class="big-btn secondary" type="button">↶ 10 วิ</button>
+          <button id="readerPrevBtn" class="pod-nav-btn" type="button" title="บทอ่านก่อนหน้า" aria-label="บทอ่านก่อนหน้า">⏮</button>
+          <button id="readerRewindBtn" class="big-btn secondary" type="button" title="ย้อนกลับ 10 วินาที" aria-label="ย้อนกลับ 10 วินาที">↶10</button>
           <button id="readerPlayBtn" class="lis-play" type="button">▶ เล่น</button>
-          <button id="readerForwardBtn" class="big-btn secondary" type="button">10 วิ ↷</button>
-          <select id="readerRate" aria-label="ความเร็วเสียงบทอ่าน">
-            <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
-            <option value="1" selected>1×</option><option value="1.1">1.1×</option>
-            <option value="1.25">1.25×</option>
-          </select>
+          <button id="readerForwardBtn" class="big-btn secondary" type="button" title="ไปข้างหน้า 10 วินาที" aria-label="ไปข้างหน้า 10 วินาที">10↷</button>
+          <button id="readerNextBtn" class="pod-nav-btn" type="button" title="บทอ่านถัดไป" aria-label="บทอ่านถัดไป">⏭</button>
         </div>
         <div class="pod-display-row">
           <div class="pod-font-size" role="group" aria-label="ขนาดตัวหนังสือบทอ่าน">
@@ -772,25 +783,35 @@
             <button id="readerFontPlus" class="pod-font-btn" type="button" aria-label="ขยายตัวหนังสือ">A+</button>
           </div>
           <div class="pod-display-actions">
-            <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true">พินอิน: เปิด</button>
-            <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true">ไทย: เปิด</button>
+            <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true" title="ซ่อนพินอิน">拼音</button>
+            <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true" title="ซ่อนคำแปล">ไทย</button>
           </div>
         </div>
-        <div class="reader-playback-options">
-          <button id="readerAlternateBtn" class="reader-option-btn" type="button" aria-pressed="false">🇨🇳↔🇹🇭 สลับจีน–ไทย: ปิด</button>
-          <button id="readerAutoNextBtn" class="reader-option-btn" type="button" aria-pressed="false">⏭ เล่นเรื่องถัดไป: ปิด</button>
+        <div id="readerExtra" class="pod-extra" hidden>
+          <div class="pod-extra-row">
+            <select id="readerRate" aria-label="ความเร็วเสียงบทอ่าน">
+              <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
+              <option value="1" selected>1×</option><option value="1.1">1.1×</option>
+              <option value="1.25">1.25×</option>
+            </select>
+            <button id="readerAlternateBtn" class="reader-option-btn" type="button" aria-pressed="false">🇨🇳↔🇹🇭 สลับจีน–ไทย: ปิด</button>
+            <button id="readerAutoNextBtn" class="reader-option-btn" type="button" aria-pressed="false">⏭ เล่นเรื่องถัดไป: ปิด</button>
+            <button id="readerSleepBtn" class="reader-option-btn" type="button" aria-pressed="false" aria-expanded="false">🌙 ตั้งเวลาปิด: ปิด</button>
+          </div>
+          <div id="readerSleepOptions" class="sleep-options" hidden></div>
         </div>
-        <div class="reader-sleep-row">
-          <button id="readerSleepBtn" class="reader-option-btn" type="button" aria-pressed="false" aria-expanded="false">🌙 ตั้งเวลาปิด: ปิด</button>
-        </div>
-        <div id="readerSleepOptions" class="sleep-options" hidden></div>
       </div>
     </div>
     <div class="reader-now-playing">
-      <div id="readerStoryNumber" class="reader-story-number"></div>
-      <h3 id="readerTitle"></h3>
-      <p id="readerTitlePinyin" class="reader-title-pinyin"></p>
-      <p id="readerMeta"></p>
+      <button id="readerCoverBtn" class="cover-btn" type="button" hidden title="ดูรูปขนาดเต็ม" aria-label="ดูรูปขนาดเต็ม">
+        <img id="readerCover" class="pod-cover" alt="" hidden>
+      </button>
+      <div class="reader-now-playing-copy">
+        <div id="readerStoryNumber" class="reader-story-number"></div>
+        <h3 id="readerTitle"></h3>
+        <p id="readerTitlePinyin" class="reader-title-pinyin"></p>
+        <p id="readerMeta"></p>
+      </div>
     </div>
     <audio id="readerAudio" preload="metadata" playsinline></audio>
     <audio id="readerThaiAudio" preload="none" playsinline aria-hidden="true"></audio>
@@ -1035,6 +1056,12 @@
   <div class="cpw-actions">
     <button id="cpWordSpeakBtn" class="cpw-btn" type="button">🔊 ฟังเสียงคำนี้</button>
   </div>
+</div>
+
+<!-- FULLSCREEN IMAGE VIEWER — แตะรูปปก (พอดแคสต์ / เกมอ่านบทความ HSK) แล้วเปิดรูปเต็มจอ -->
+<div id="imgLightbox" class="img-lightbox" role="dialog" aria-modal="true" aria-label="รูปขนาดเต็ม" hidden>
+  <button id="imgLightboxClose" class="img-lightbox-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
+  <img id="imgLightboxImg" alt="">
 </div>
 
 <script src="data/vocab.js"></script>

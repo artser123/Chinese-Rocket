@@ -511,6 +511,15 @@ const MUSIC_THEMES = {
   ],
 };
 // ปริมาณส่ง FX ของแต่ละ layer (โครงสร้างคงที่ — ตั้งครั้งเดียว ไม่ต้องแก้รายเพลง)
+// วิ — ลำโพงมือถือเล่นเสียงต่ำกว่า ~90 Hz ไม่ได้: เบสมี sub ครึ่งความถี่ (~55 Hz) ทุกจังหวะ
+// และ kick ไล่ลงถึง 44 Hz → ลำโพงไม่สามารถขยับตามได้ จะ "คราง/แตกรั่ว" ออกมาเป็นเสียง noise
+// ตลอดทั้งเพลง (ทุกโหมด ฟังไม่เจอใน Chrome บนคอมเพราะลำโพง/หูฟังใหญ่กว่า)
+// จึงตัดความถี่ต่ำทิ้งก่อนเข้า limiter ด้วย highpass 2 ตัวต่อกัน (24 dB/oct)
+// เบสจริง (110 Hz) แทบไม่ลด (~-2.7 dB) แต่ sub/kick ที่ทำให้เกิด noise หายไป >16 dB
+const MUSIC_HP = 78;
+// วิ — เมื่อตัด rumble ออก เพลงจะดังขึ้น ~1.2 dB (limiter ทำงานน้อยลง) จึงชดเชยด้วย trim
+// เพื่อให้ระดับเสียง/พีคใกล้เคียงของเดิม (ไม่ให้ผู้เล่นรู้สึกว่าเพลงเปลี่ยนความดัง)
+const MUSIC_TRIM = 0.85;
 const LAYER_FX = {
   drums: { rev: 0.06, dly: 0 }, bass: { rev: 0.03, dly: 0 }, pad: { rev: 0.55, dly: 0.05 },
   arp: { rev: 0.3, dly: 0.45 }, lead: { rev: 0.22, dly: 0.32 }, perc: { rev: 0.16, dly: 0 },
@@ -543,7 +552,13 @@ const music = {
     this.limiter = ac.createDynamicsCompressor();
     this.limiter.threshold.value = -12; this.limiter.knee.value = 6; this.limiter.ratio.value = 5;
     this.limiter.attack.value = 0.004; this.limiter.release.value = 0.22;
-    this.master.connect(this.limiter);
+    // highpass 2 ชั้น: ตัด rumble ที่ลำโพงมือถือทำไม่ได้ (ต้นเหตุเสียง noise ตลอดเพลง)
+    this.hp1 = ac.createBiquadFilter(); this.hp1.type = "highpass"; this.hp1.Q.value = 0.7;
+    this.hp2 = ac.createBiquadFilter(); this.hp2.type = "highpass"; this.hp2.Q.value = 0.7;
+    this.hp1.frequency.value = MUSIC_HP; this.hp2.frequency.value = MUSIC_HP;
+    this.trim = ac.createGain(); this.trim.gain.value = MUSIC_TRIM;
+    this.master.connect(this.hp1); this.hp1.connect(this.hp2);
+    this.hp2.connect(this.trim); this.trim.connect(this.limiter);
     this.limiter.connect(ac.destination);
 
     this.rev = ac.createConvolver();

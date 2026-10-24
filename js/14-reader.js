@@ -13,6 +13,7 @@ let readerPinyinVisible = true;
 let readerFontScale = 1;
 let readerAlternateEnabled = true;
 let readerAutoNextEnabled = false;
+let readerExtraOpen = false;
 let readerWordTrie = null;
 let readerQuizState = null;
 let readerBubbleOpen = false;
@@ -198,12 +199,18 @@ function readerApplySettings() {
   const pinyinButton = $("readerPinyinToggle");
   if (pinyinButton) {
     pinyinButton.setAttribute("aria-pressed", String(readerPinyinVisible));
-    pinyinButton.textContent = readerPinyinVisible ? "拼音 พินอิน: เปิด" : "拼音 พินอิน: ปิด";
+    pinyinButton.textContent = "拼音";
+    const label = readerPinyinVisible ? "ซ่อนพินอิน" : "แสดงพินอิน";
+    pinyinButton.title = label;
+    pinyinButton.setAttribute("aria-label", label);
   }
   const thaiButton = $("readerThaiToggle");
   if (thaiButton) {
     thaiButton.setAttribute("aria-pressed", String(readerThaiVisible));
-    thaiButton.textContent = readerThaiVisible ? "🇹🇭 ไทย: เปิด" : "🇹🇭 ไทย: ซ่อน";
+    thaiButton.textContent = "ไทย";
+    const label = readerThaiVisible ? "ซ่อนคำแปลไทย" : "แสดงคำแปลไทย";
+    thaiButton.title = label;
+    thaiButton.setAttribute("aria-label", label);
   }
   const altButton = $("readerAlternateBtn");
   if (altButton) {
@@ -221,10 +228,38 @@ function readerApplySettings() {
   const plus = $("readerFontPlus");
   if (minus) minus.disabled = readerFontScale <= READER_FS_MIN + 0.001;
   if (plus) plus.disabled = readerFontScale >= READER_FS_MAX - 0.001;
+  readerSyncMoreBtn();
 }
 
 function readerPersist(key, value) {
   try { localStorage.setItem(key, value); } catch (error) {}
+}
+
+/* ---- กล่องตัวเลือกเพิ่มเติมของแถบตัวเล่น (⋯) ----------------------------
+   แถบตัวเล่นต้องเตี้ยที่สุดเพื่อคืนพื้นที่ให้บทอ่าน ปุ่มที่ใช้เป็นครั้งคราว
+   (ความเร็ว / สลับจีน–ไทย / เล่นเรื่องถัดไป / ตั้งเวลาปิด) จึงซ่อนไว้ในกล่องนี้ */
+function readerApplyExtraOpen() {
+  const box = $("readerExtra");
+  const button = $("readerMoreBtn");
+  if (!box || !button) return;
+  box.hidden = !readerExtraOpen;
+  button.setAttribute("aria-expanded", String(readerExtraOpen));
+  const label = readerExtraOpen ? "ซ่อนตัวเลือกเพิ่มเติม" : "ตัวเลือกเพิ่มเติม";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+}
+
+function readerToggleExtra() {
+  readerExtraOpen = !readerExtraOpen;
+  readerApplyExtraOpen();
+}
+
+// จุดสีบนปุ่ม "⋯" เมื่อ "เล่นเรื่องถัดไปอัตโนมัติ" เปิดค้างอยู่ (สถานะอื่นดูจากปุ่ม
+// ในกล่อง และป้าย ⏱ บนแถบหัว)
+function readerSyncMoreBtn() {
+  const button = $("readerMoreBtn");
+  if (!button) return;
+  button.classList.toggle("has-active", readerAutoNextEnabled);
 }
 
 function readerStoryList() {
@@ -404,6 +439,12 @@ function readerResolveFile(path) {
   return readerAssetUrl(path);
 }
 
+// รูปประกอบเรื่อง (ไม่บังคับ) — <reader data root>/img/<id>.webp
+// สร้างด้วย tools/gen_podcast_images.py --source reader; ถ้าไม่มีไฟล์ รูป/ปุ่มจะซ่อน
+function readerCoverUrl(story) {
+  return readerAssetUrl(`img/${story.id}.webp`);
+}
+
 // While the word bubble is open, the next tap outside it only dismisses the
 // bubble: the tap is swallowed so it cannot start playback or open another
 // word at the same time.
@@ -536,6 +577,10 @@ function readerSetMetadata(story) {
 }
 
 function readerRegisterMediaActions() {
+  // ในแอป Android ปุ่มหูฟังบลูทูธ/ล็อกสกรีนมาทาง MediaSession ฝั่งเนทีฟ
+  // (NativeListenPlugin.setMediaSession) จึงไม่ลงทะเบียนซ้ำทาง JS —
+  // ไม่งั้นปุ่ม "เรื่องถัดไป" อาจถูกสั่งสองครั้ง
+  if (window.CR_OFFLINE_APP) return;
   try {
     if (!("mediaSession" in navigator)) return;
     navigator.mediaSession.setActionHandler("play", () => {
@@ -553,8 +598,9 @@ function readerRegisterMediaActions() {
       const offset = details && details.seekOffset ? details.seekOffset : 10;
       readerSeekTo($("readerAudio").currentTime + offset, readerWantPlay);
     });
-    navigator.mediaSession.setActionHandler("previoustrack", () => readerSeekTo(0, readerWantPlay, 0));
-    navigator.mediaSession.setActionHandler("nexttrack", () => readerOpenAdjacentStory(1));
+    // ปุ่มก่อนหน้า/ถัดไป บนหูฟัง = เรื่องก่อนหน้า/เรื่องถัดไป (ไม่ใช่กรอกลับ)
+    navigator.mediaSession.setActionHandler("previoustrack", () => readerGoToAdjacentStory(-1));
+    navigator.mediaSession.setActionHandler("nexttrack", () => readerGoToAdjacentStory(1));
   } catch (error) {}
 }
 
@@ -570,6 +616,15 @@ function readerSyncBackgroundAudio() {
   crSetScreenAwake(active); // จอไม่ดับขณะฟังบทความ ปล่อยเมื่อพัก/ปิดเรื่อง
   if (active) readerWatchStart();
   else readerWatchStop();
+  readerSyncMediaButtons();
+}
+
+// ปุ่มบนหูฟังบลูทูธ / หน้าจอล็อก (แอป Android): บอกฝั่งเนทีฟว่ากำลังอ่านเรื่องไหน
+// เพื่อให้ play/pause/previous/next ส่งกลับมาที่ window.crNativeMediaAction
+function readerSyncMediaButtons() {
+  const open = Boolean(readerState) && !$("readerPlayer").hidden;
+  const title = open ? (readerState.story.title_zh || "") : "";
+  crSetMediaButtons(open, open && readerWantPlay, title, "Chinese Rocket · บทอ่าน HSK");
 }
 
 // ---- ตัวเฝ้าดูการเล่นเบื้องหลัง -------------------------------------------
@@ -797,6 +852,7 @@ function readerSelectStory(story, resume = false, withIntro = true) {
   $("readerTitle").textContent = story.title_zh;
   $("readerTitlePinyin").textContent = story.title_pinyin || "";
   $("readerMeta").textContent = `${story.title_th || ""} · ${readerFormatTime(story.duration)} · ${story.turns.length} ช่วงบทพูด`;
+  crCoverImage($("readerCover"), readerCoverUrl(story));
   $("readerStatus").textContent = "แตะประโยคเพื่อเริ่มฟังจากช่วงนั้น";
   $("readerPlayer").scrollTop = 0;
   readerMakeTranscript(story);
@@ -1073,6 +1129,27 @@ function readerOpenAdjacentStory(delta) {
   return true;
 }
 
+// ปุ่มในตัวเล่น / ปุ่มหูฟังบลูทูธ: เปลี่ยนเรื่องก่อนหน้า–ถัดไป (วนเมื่อสุดทาง)
+// พร้อมบอกว่าไปเรื่องไหน (ถ้าตอนนั้นหยุดพักอยู่ — ถ้าเล่นอยู่ ข้อความของ
+// readerSelectStory/readerPlay จะเป็นตัวบอกสถานะแทน)
+function readerGoToAdjacentStory(delta) {
+  if (!readerState) return false;
+  const stories = readerRuntime.stories.filter((story) => story.level === readerLevel);
+  const index = stories.findIndex((story) => story.id === readerState.story.id);
+  const target = stories.length
+    ? stories[(index + delta + stories.length) % stories.length]
+    : null;
+  const wasPlaying = readerWantPlay;
+  if (!readerOpenAdjacentStory(delta)) return false;
+  if (target && !wasPlaying) {
+    const wrapped = stories.length > 1 && (delta < 0 ? index === 0 : index === stories.length - 1);
+    const label = delta < 0 ? "⏮ เรื่องก่อนหน้า" : "⏭ เรื่องถัดไป";
+    const loop = wrapped ? (delta < 0 ? " (วนกลับเรื่องสุดท้าย)" : " (วนกลับเรื่องแรก)") : "";
+    $("readerStatus").textContent = `${label} · ${target.title_zh}${loop}`;
+  }
+  return true;
+}
+
 // จบเรื่อง: เรียกได้ทั้งจาก event "ended" และจากตัวเฝ้าดู (event อาจหายไป
 // ตอนปิดหน้าจอ/สลับแอป) จึงต้องกันการเดินซ้ำสองครั้ง
 function readerEnded() {
@@ -1104,6 +1181,7 @@ function readerBackToList() {
   $("readerLibrary").hidden = false;
   $("readerHeading").textContent = "เลือกบทอ่าน";
   readerSetMediaState("none");
+  readerSyncMediaButtons();
   try { if ("mediaSession" in navigator) navigator.mediaSession.metadata = null; } catch (error) {}
   readerStoryList();
 }
@@ -1116,6 +1194,7 @@ function quitReaderGame() {
   $("readerLibrary").hidden = false;
   $("readerHeading").textContent = "เลือกบทอ่าน";
   readerSetMediaState("none");
+  readerSyncMediaButtons();
   try { if ("mediaSession" in navigator) navigator.mediaSession.metadata = null; } catch (error) {}
   switchScreen(menuEl);
 }
@@ -1174,6 +1253,9 @@ function readerHandleThaiEnded() {
 // ---- interface wiring ---------------------------------------------------
 $("readerQuitBtn").addEventListener("click", () => { sfx.click(); quitReaderGame(); });
 $("readerBackBtn").addEventListener("click", () => { sfx.click(); readerBackToList(); });
+$("readerMoreBtn").addEventListener("click", () => { sfx.click(); readerToggleExtra(); });
+readerApplyExtraOpen();
+readerSyncMoreBtn();
 $("readerSearch").addEventListener("input", readerStoryList);
 $("readerLevelTabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-reader-level]");
@@ -1191,6 +1273,15 @@ $("readerPlayBtn").addEventListener("click", () => {
 });
 $("readerRewindBtn").addEventListener("click", () => readerSeekTo($("readerAudio").currentTime - 10, readerWantPlay));
 $("readerForwardBtn").addEventListener("click", () => readerSeekTo($("readerAudio").currentTime + 10, readerWantPlay));
+// ปุ่มเรื่องก่อนหน้า / เรื่องถัดไป ในแถบตัวเล่น
+$("readerPrevBtn").addEventListener("click", () => {
+  sfx.click();
+  readerGoToAdjacentStory(-1);
+});
+$("readerNextBtn").addEventListener("click", () => {
+  sfx.click();
+  readerGoToAdjacentStory(1);
+});
 $("readerSeek").addEventListener("input", () => {
   if (!readerState || !Number.isFinite($("readerAudio").duration)) return;
   readerSeeking = true;
@@ -1328,7 +1419,7 @@ function readerSleepExpire() {
 
 crSleepRegister({
   button: $("readerSleepBtn"),
-  hint: null,
+  hint: $("readerSleepHint"),
   options: $("readerSleepOptions"),
   showTime: true,
   idleLabel: "🌙 ตั้งเวลาปิด: ปิด",
@@ -1367,3 +1458,36 @@ if (window.CR_OFFLINE_APP) {
   if (document.readyState === "complete") restore();
   else window.addEventListener("load", restore, { once: true });
 }
+
+/* ---- ปุ่มหูฟังบลูทูธ (แอป Android) ------------------------------------
+   MediaSession ฝั่งเนทีฟ (NativeListenPlugin.setMediaSession) เรียกฟังก์ชันนี้
+   เมื่อผู้ใช้กด play/pause/เรื่องก่อนหน้า/เรื่องถัดไป/หยุด บนหูฟัง การแจ้งเตือน
+   หรือหน้าจอล็อก — เลือกโหมดที่กำลังเปิดอยู่ (พอดแคสต์หรือบทอ่าน) ให้เอง
+   ทำซ้ำได้ปลอดภัย (กด play ตอนเล่นอยู่แล้ว = ไม่ทำอะไร) */
+window.crNativeMediaAction = function crNativeMediaAction(action) {
+  const name = String(action || "");
+  if (!name) return;
+  try {
+    if (typeof podcastState !== "undefined" && podcastState) {
+      if (name === "play") { if (!podWantPlay) podPlay(); return; }
+      if (name === "pause" || name === "stop") { if (podWantPlay || podThaiVoicePlayback) podPause(); return; }
+      if (name === "nexttrack") { podGoToNextEpisode(true); return; }
+      if (name === "previoustrack") { podGoToPreviousEpisode(true); return; }
+      return;
+    }
+    if (typeof readerState !== "undefined" && readerState) {
+      if (name === "play") {
+        if (readerWantPlay) return;
+        if ($("readerAudio").ended) readerSeekTo(0, true, 0);
+        else readerPlay();
+        return;
+      }
+      if (name === "pause" || name === "stop") { if (readerWantPlay) readerPause(); return; }
+      if (name === "nexttrack") { readerGoToAdjacentStory(1); return; }
+      if (name === "previoustrack") { readerGoToAdjacentStory(-1); return; }
+    }
+  } catch (error) {}
+};
+
+// แตะรูปปกเรื่อง -> เปิดรูปเต็มจอ (overlay เดียวกับโหมดพอดแคสต์)
+crWireCoverButton("readerCover");

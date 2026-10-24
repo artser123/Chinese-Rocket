@@ -2619,7 +2619,7 @@ button.fill-blank {
 .pod-episode {
   width: 100%;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 32px;
+  grid-template-columns: 58px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 11px;
   min-height: 72px;
@@ -2634,6 +2634,27 @@ button.fill-blank {
   touch-action: manipulation;
 }
 .pod-episode:active { transform: scale(.99); border-color: var(--line-2); }
+.pod-episode-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(140deg, rgba(86, 132, 255, .18), rgba(18, 26, 60, .9));
+}
+.pod-episode-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pod-episode-thumb img[hidden] { display: none; }
+.pod-episode-thumb.has-image { box-shadow: inset 0 0 0 1px var(--line-1); }
+.pod-episode-thumb.has-image .pod-episode-badge { display: none; }
 .pod-episode-badge { color: var(--accent); font-size: 15px; font-weight: 800; text-align: center; }
 .pod-episode-badge.pod-badge-hsk { font-size: 12px; line-height: 1.35; }
 .pod-episode-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -2649,11 +2670,53 @@ button.fill-blank {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
   margin-top: -5px;
-  padding: 5px 0 9px;
+  padding: 3px 0 6px;
   border-bottom: 1px solid rgba(122, 140, 255, .22);
   background: #080d28;
+}
+/* แถวหัวของตัวเล่น: ปุ่มย้อนกลับ (ซ้าย) + เวลาปิดอัตโนมัติ + ปุ่มตัวเลือกเพิ่มเติม (ขวา)
+   เป็นแถวเดียวเตี้ย ๆ เพื่อคืนพื้นที่ให้บทความ — ตัวเลือกที่ใช้นาน ๆ ครั้ง
+   (ความเร็ว / เล่นซ้ำ / อัตโนมัติ / ตั้งเวลาปิด / เสียงแปล) ย้ายไปอยู่ใน #podExtra */
+.pod-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pod-bar-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pod-sleep-badge { color: #ffe0a1; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pod-sleep-badge:empty { display: none; }
+.pod-more-btn {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-1);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pod-more-btn[aria-expanded="true"] {
+  border-color: rgba(143, 211, 255, .55);
+  background: rgba(143, 211, 255, .18);
+  color: #dff4ff;
+}
+.pod-more-btn.has-active::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffc46f;
+  box-shadow: 0 0 6px rgba(255, 196, 111, .75);
 }
 .pod-back, .pod-thai-toggle {
   align-self: flex-start;
@@ -2668,7 +2731,83 @@ button.fill-blank {
   cursor: pointer;
   touch-action: manipulation;
 }
-.pod-now-playing { padding: 2px 2px 0; }
+.pod-back { min-height: 27px; padding: 3px 9px; font-size: 11.5px; }
+.pod-now-playing {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 2px 2px 0;
+}
+.pod-now-playing-copy { min-width: 0; flex: 1 1 auto; }
+.pod-cover {
+  flex: 0 0 auto;
+  width: 112px;
+  height: 112px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid var(--line-1);
+  box-shadow: var(--sh-1);
+}
+.pod-cover[hidden] { display: none; }
+/* ปุ่มครอบรูปปก (พอดแคสต์ + เกมอ่านบทความ): แตะแล้วเปิดรูปเต็มจอ */
+.cover-btn {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  line-height: 0;
+  cursor: zoom-in;
+  touch-action: manipulation;
+  transition: transform var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.cover-btn[hidden] { display: none; }
+.cover-btn:active { transform: scale(.96); }
+.cover-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* FULLSCREEN IMAGE VIEWER — ภาพเต็มจอ + ปุ่มกากบาทปิด (ใช้ร่วมกันทั้ง 2 โหมด) */
+.img-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 54px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  background: rgba(4, 7, 20, .94);
+  animation: imgLightboxIn .16s var(--ease-out, ease) both;
+}
+.img-lightbox[hidden] { display: none; }
+.img-lightbox img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+  border: 1px solid rgba(143, 211, 255, .26);
+  background: #05070f;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .66);
+}
+.img-lightbox-close {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 10px);
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 50%;
+  background: rgba(12, 18, 38, .92);
+  color: #fff;
+  font: 600 20px/1 "Noto Sans Thai", sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.img-lightbox-close:active { transform: scale(.94); }
+@keyframes imgLightboxIn { from { opacity: 0 } to { opacity: 1 } }
 .pod-ep-number { color: var(--accent-cool); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 .pod-now-playing h3 { margin-top: 3px; font-size: clamp(18px, 4.8vw, 24px); line-height: 1.4; }
 .pod-now-playing p { margin-top: 3px; color: var(--fg-mute); font-size: 11px; }
@@ -2683,25 +2822,46 @@ button.fill-blank {
   font-size: 13px;
   line-height: 1.5;
 }
-.pod-transport { padding: 9px 12px; border: 1px solid var(--line-1); border-radius: 16px; background: var(--surface-2); }
+.pod-transport { padding: 6px 9px 7px; border: 1px solid var(--line-1); border-radius: 13px; background: var(--surface-2); }
 .pod-seek-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 8px; color: var(--fg-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 #podSeek { width: 100%; accent-color: #83b9ff; touch-action: pan-x; }
-.pod-player-buttons { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 5px; }
-.pod-player-buttons .big-btn { min-width: 0; flex: 1; padding: 10px 7px; font-size: clamp(12px, 3.5vw, 15px); }
-.pod-player-buttons .lis-play { min-width: 86px; flex: 1.2; padding: 10px 8px; font-size: 16px; }
-.pod-loop-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.pod-icon-btn {
-  width: 42px;
+/* ปุ่ม "ตอน/เรื่องก่อนหน้า · ถัดไป" (⏮ ⏭) — เป็นไอคอนล้วนในแถวเดียวกับปุ่มเล่น/กรอ
+   เพราะแถบตัวเล่นเคยสูงจนบังบทความ (ดู .pod-player-buttons) */
+.pod-nav-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 0;
   min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: rgba(143, 211, 255, .08);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pod-nav-btn:active { transform: scale(.95); background: rgba(143, 211, 255, .2); color: #fff; }
+.pod-nav-btn:disabled { opacity: .42; cursor: default; }
+.pod-player-buttons { display: flex; align-items: stretch; justify-content: center; gap: 6px; margin-top: 4px; }
+.pod-player-buttons .big-btn { min-width: 0; flex: 1; padding: 8px 4px; font-size: 12.5px; }
+.pod-player-buttons .lis-play { min-width: 74px; flex: 1.25; padding: 8px 6px; font-size: 15px; }
+.pod-icon-btn {
+  width: 38px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line-1);
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--surface-2);
   color: var(--fg-dim);
   font: inherit;
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1;
   cursor: pointer;
   touch-action: manipulation;
@@ -2713,38 +2873,47 @@ button.fill-blank {
   color: #cfe9ff;
   box-shadow: 0 0 12px rgba(143, 211, 255, .18);
 }
-.pod-loop-hint { min-width: 0; margin-left: auto; color: var(--fg-mute); font-size: 10px; line-height: 1.35; text-align: right; }
+/* ⏭ / 🔀 ตอนถัดไปอัตโนมัติ: ปุ่มเดิมวน 3 สถานะ (ปิด → ตามรายการ → สุ่ม) */
+.pod-icon-btn[data-mode="random"] {
+  border-color: rgba(255, 196, 112, .5);
+  background: rgba(255, 176, 64, .18);
+  color: #ffe2b4;
+  box-shadow: 0 0 12px rgba(255, 176, 64, .22);
+}
+/* กล่องตัวเลือกเพิ่มเติมของตัวเล่น (ความเร็ว / เล่นซ้ำ / อัตโนมัติ / ตั้งเวลาปิด /
+   เสียงแปลไทย) — ซ่อนไว้ก่อนเพื่อไม่ให้แถบตัวเล่นกินพื้นที่อ่านบทความ */
+.pod-extra { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.pod-extra[hidden] { display: none; }
+.pod-extra-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 /* ตั้งเวลาปิดเสียงอัตโนมัติ (sleep timer) — ใช้ได้ทั้งโหมดพอดแคสต์และอ่านบทความ */
-.pod-sleep-row, .reader-sleep-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.sleep-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 8px; border: 1px solid var(--line-1); border-radius: 12px; background: var(--surface-2); }
+.sleep-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding: 6px; border: 1px solid var(--line-1); border-radius: 12px; background: var(--surface-2); }
 .sleep-options[hidden] { display: none; }
-.sleep-opt { min-height: 32px; padding: 5px 11px; border: 1px solid var(--line-1); border-radius: 9px; background: rgba(143, 211, 255, .08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.sleep-opt { min-height: 30px; padding: 4px 10px; border: 1px solid var(--line-1); border-radius: 9px; background: rgba(143, 211, 255, .08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .sleep-opt[aria-pressed="true"] { border-color: rgba(143, 211, 255, .55); background: rgba(143, 211, 255, .2); color: #dff4ff; }
-.pod-voice-row { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
-.pod-voice-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.pod-voice-toggle { min-height: 32px; padding: 5px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .pod-voice-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
 .pod-voice-toggle[hidden] { display: none; }
-.pod-voice-hint { margin-left: auto; color: var(--fg-mute); font-size: 10px; line-height: 1.35; text-align: right; }
-/* ถ้ายังไม่มีปุ่มเสียงแปล (ตอนที่ไม่มีคลิปไทย) ให้คำอธิบายเริ่มจากซ้ายตามปกติ */
-.pod-voice-toggle[hidden] + .pod-voice-hint { margin-left: 0; text-align: left; }
-#podRate, #readerRate { min-height: 42px; padding: 0 9px; border: 1px solid var(--line-1); border-radius: 10px; background: #171e45; color: var(--fg); color-scheme: dark; font: inherit; font-size: 12px; }
-#readerRate { flex: 0 0 auto; min-width: 70px; }
+#podRate, #readerRate { min-height: 32px; padding: 0 8px; border: 1px solid var(--line-1); border-radius: 10px; background: #171e45; color: var(--fg); color-scheme: dark; font: inherit; font-size: 12px; }
+#readerRate { flex: 0 0 auto; min-width: 66px; }
 .pod-transcript-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--fg-dim); font-size: 13px; font-weight: 700; }
 .pod-transcript-label { min-width: 0; }
 /* แถวควบคุมการแสดงผลของบทอ่าน (ขนาดตัวอักษร / พินอิน / คำแปล) — อยู่ในแถบ
    ตัวเล่นบนสุดที่เป็น position: sticky ทั้งในพอดแคสต์และบทอ่าน HSK
    เพื่อให้ยังกดได้อยู่แม้เลื่อนอ่านลงไปไกล ๆ */
-.pod-display-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pod-display-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .pod-display-row .pod-font-size { flex: 0 0 auto; }
 /* ชุดปุ่มพินอิน/คำแปลชิดขวาของแถว (ขนาดตัวอักษรอยู่ซ้าย) — margin-left:auto
    ทำให้ยังชิดขวาได้แม้แถวตัดขึ้นบรรทัดใหม่บนจอแคบ */
-.pod-display-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
-.pod-font-size { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-1); border-radius: 11px; background: var(--surface-2); }
-.pod-font-btn { width: 36px; min-height: 32px; border: 0; border-radius: 9px; background: rgba(143, 211, 255, .12); color: var(--fg-dim); font: inherit; font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer; touch-action: manipulation; }
+.pod-display-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-left: auto; }
+.pod-font-size { display: inline-flex; align-items: center; gap: 1px; padding: 1px; border: 1px solid var(--line-1); border-radius: 9px; background: var(--surface-2); }
+.pod-font-btn { width: 29px; min-height: 26px; border: 0; border-radius: 7px; background: rgba(143, 211, 255, .12); color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 800; line-height: 1; cursor: pointer; touch-action: manipulation; }
 .pod-font-btn:active { background: rgba(143, 211, 255, .26); color: #fff; }
 .pod-font-btn:disabled { opacity: .38; cursor: default; }
-.pod-font-label { min-width: 42px; color: var(--fg-mute); font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
-.pod-thai-toggle { flex: 0 0 auto; align-self: auto; min-height: 32px; padding: 5px 9px; font-size: 11px; }
+.pod-font-label { min-width: 34px; color: var(--fg-mute); font-size: 10px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+/* ปุ่ม 拼音 / ไทย — ใช้ไอคอนตัวอักษรแทนข้อความยาว ๆ (เปิด/ปิดดูจากสีของปุ่ม) */
+.pod-thai-toggle { flex: 0 0 auto; align-self: auto; min-height: 28px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+.pod-thai-toggle[aria-pressed="true"] { border-color: rgba(143, 211, 255, .55); background: rgba(143, 211, 255, .18); color: #dff4ff; }
+.pod-thai-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
 .pod-thai-toggle:disabled { opacity: .58; cursor: default; }
 .pod-thai-notice { padding: 9px 11px; border: 1px solid rgba(255, 215, 106, .3); border-radius: 11px; background: rgba(255, 215, 106, .08); color: #f4d98f; font-size: 11px; line-height: 1.5; }
 .pod-transcript { display: flex; flex-direction: column; gap: 10px; padding: 2px 1px 28px; }
@@ -2804,14 +2973,19 @@ button.fill-blank {
 .reader-story-copy small { color: var(--fg-mute); font-size: 11px; line-height: 1.4; }
 .reader-story-play { color: var(--accent-cool); font-size: 17px; text-align: center; }
 .reader-player { display: flex; flex-direction: column; gap: 9px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
-.reader-sticky-controls { position: sticky; top: 0; z-index: 8; width: 100%; display: flex; flex-direction: column; gap: 7px; margin-top: -5px; padding: 5px 0 9px; border-bottom: 1px solid rgba(122, 140, 255, .22); background: #080d28; }
-.reader-transport { padding: 9px 12px; border: 1px solid var(--line-1); border-radius: 16px; background: var(--surface-2); }
+.reader-sticky-controls { position: sticky; top: 0; z-index: 8; width: 100%; display: flex; flex-direction: column; gap: 4px; margin-top: -5px; padding: 3px 0 6px; border-bottom: 1px solid rgba(122, 140, 255, .22); background: #080d28; }
+.reader-transport { padding: 6px 9px 7px; border: 1px solid var(--line-1); border-radius: 13px; background: var(--surface-2); }
 #readerSeek { width: 100%; accent-color: #83b9ff; touch-action: pan-x; }
-.reader-playback-options { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px; margin-top: 8px; }
-.reader-option-btn, .reader-toggle { min-height: 34px; padding: 6px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.reader-option-btn, .reader-toggle { min-height: 32px; padding: 5px 10px; border: 1px solid rgba(143, 211, 255, .28); border-radius: 10px; background: rgba(143, 211, 255, .1); color: var(--fg); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .reader-option-btn[aria-pressed="true"], .reader-toggle[aria-pressed="true"] { border-color: rgba(143, 211, 255, .55); background: rgba(143, 211, 255, .2); color: #dff4ff; }
 .reader-option-btn[aria-pressed="false"], .reader-toggle[aria-pressed="false"] { color: var(--fg-mute); background: rgba(255, 255, 255, .035); border-color: var(--line-1); }
-.reader-now-playing { padding: 2px 2px 0; }
+.reader-now-playing {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 2px 2px 0;
+}
+.reader-now-playing-copy { min-width: 0; flex: 1 1 auto; }
 .reader-story-number { color: var(--accent-cool); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 .reader-now-playing h3 { margin-top: 3px; font-size: clamp(19px, 5vw, 25px); line-height: 1.4; }
 .reader-title-pinyin { color: #8fd3ff !important; font-family: var(--font-pinyin); }

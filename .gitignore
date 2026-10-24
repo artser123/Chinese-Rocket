@@ -63,3 +63,11 @@ podcast_cache/
 audio/zh/Backup/
 
 audio/zh/Backup_gym/
+
+# AI cover images for podcast articles (APK-only data, like podcast_cache/)
+podcast_img/
+podcast_img_preview/
+podcast_img_pro/
+
+# Exported image briefs (regenerate with tools/export_podcast_image_briefs.py)
+podcast_img_briefs/

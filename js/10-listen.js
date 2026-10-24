@@ -102,6 +102,26 @@ function crSetNotificationText(title, text) {
   } catch (e) {}
 }
 
+// ปุ่มบนหูฟังบลูทูธ / หน้าจอล็อก / การแจ้งเตือน (แอป Android เท่านั้น)
+// WebView ไม่ผูก navigator.mediaSession เข้ากับระบบ จึงต้องมี MediaSession
+// ฝั่งเนทีฟ (NativeListenPlugin.setMediaSession). ฝั่ง JS บอกสถานะว่ากำลัง
+// เปิดโหมดไหนและเล่นอยู่หรือพัก ส่วนฝั่งเนทีฟส่งเหตุการณ์กลับมาที่
+// window.crNativeMediaAction("play" | "pause" | "nexttrack" | "previoustrack" | "stop")
+function crSetMediaButtons(active, playing, title, text) {
+  try {
+    const native = window.ChineseRocketAndroid
+      || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeListen);
+    if (!native || !native.setMediaSession) return;
+    const result = native.setMediaSession({
+      active: !!active,
+      playing: !!playing,
+      title: title || "",
+      text: text || "",
+    });
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch (e) {}
+}
+
 /* ---- Session restore (พอดแคสต์ / อ่านบทความ) ------------------------
    ถ้า Android ฆ่าแอปตอนอยู่เบื้องหลัง (บริการ foreground กันไว้เกือบทั้งหมด
    แต่ระบบยังอาจเก็บหน่วยความจำ) หน้าเว็บจะโหลดใหม่และผู้ใช้เจอหน้าเมนู
@@ -163,7 +183,7 @@ function crSleepRender() {
     view.stamp = stamp;
     view.button.setAttribute("aria-pressed", String(on));
     if (view.showTime) view.button.textContent = on ? `🌙 ${crSleepFormat(left)}` : view.idleLabel;
-    if (view.hint) view.hint.textContent = on ? `ปิดอัตโนมัติใน ${crSleepFormat(left)}` : view.idleHint;
+    if (view.hint) view.hint.textContent = on ? `⏱ ${crSleepFormat(left)}` : (view.idleHint || "");
     for (const option of view.options.querySelectorAll(".sleep-opt")) {
       option.setAttribute("aria-pressed", String(Number(option.dataset.minutes) === view.minutes));
     }

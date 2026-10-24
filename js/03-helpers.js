@@ -154,3 +154,78 @@ function showGameOver(title, scoreVal, statsText, bestKeyStr) {
   switchScreen(overEl);
 }
 
+/* ================= Fullscreen cover viewer ================= */
+// รูปปกของโหมดพอดแคสต์และเกมอ่านบทความ: แตะแล้วเปิดรูปเต็มจอใน overlay
+// ตัวเดียว (#imgLightbox ใน index.html) ปิดได้ 3 ทาง — ปุ่มกากบาท, แตะพื้นหลัง,
+// กด Escape. overlay อยู่นอก .screen ทุกตัว จึงไม่ผูกกับ switchScreen()
+let imgLightboxBack = null;
+
+function crOpenImageLightbox(src, alt) {
+  const box = $("imgLightbox");
+  const img = $("imgLightboxImg");
+  if (!box || !img || !src) return;
+  imgLightboxBack = document.activeElement;
+  img.alt = alt || "";
+  img.src = src;
+  box.hidden = false;
+  const close = $("imgLightboxClose");
+  if (close) close.focus({ preventScroll: true });
+}
+
+function crCloseImageLightbox() {
+  const box = $("imgLightbox");
+  const img = $("imgLightboxImg");
+  if (!box || box.hidden) return;
+  box.hidden = true;
+  if (img) img.removeAttribute("src");
+  const back = imgLightboxBack;
+  imgLightboxBack = null;
+  if (back && typeof back.focus === "function") back.focus({ preventScroll: true });
+}
+
+// รูปปกในปุ่ม .cover-btn: ซ่อนไว้จนไฟล์โหลดสำเร็จจริง เพื่อไม่ให้บทความที่ยังไม่มี
+// รูปเหลือช่องว่างหรือไอคอนรูปแตก และไม่ทำให้ลิสต์เลื่อน
+// ระวัง: การตั้ง img.src เป็นค่าเดิมที่โหลดอยู่แล้ว "ไม่ยิง load event อีก" จึงต้อง
+// เช็ค complete/naturalWidth ด้วย ไม่งั้นรูปจะค้างซ่อนเมื่อฟังก์ชันถูกเรียกซ้ำ
+function crCoverImage(img, url, onShown) {
+  if (!img) return;
+  const button = img.closest(".cover-btn");
+  const show = (on) => {
+    img.hidden = !on;
+    if (button) button.hidden = !on;
+  };
+  const shown = () => { show(true); if (onShown) onShown(); };
+  if (img.getAttribute("src") === url && img.complete && img.naturalWidth > 0) {
+    shown();
+    return;
+  }
+  show(false);
+  img.alt = "";
+  img.decoding = "async";
+  img.onload = shown;
+  img.onerror = () => { img.removeAttribute("src"); show(false); };
+  img.src = url;
+  if (img.complete && img.naturalWidth > 0) shown(); // แคชแล้ว: load อาจไม่ยิง
+}
+
+// ปุ่มครอบรูป -> เปิด overlay ด้วยรูปที่โหลดอยู่จริง (currentSrc ให้ Chrome เลือก
+// จาก srcset เอง, fallback เป็น src)
+function crWireCoverButton(imgId) {
+  const img = $(imgId);
+  const button = img && img.closest(".cover-btn");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    if (!img || img.hidden) return;
+    crOpenImageLightbox(img.currentSrc || img.src, img.alt);
+  });
+}
+
+if ($("imgLightbox")) {
+  $("imgLightboxClose").addEventListener("click", crCloseImageLightbox);
+  $("imgLightbox").addEventListener("click", (event) => {
+    if (event.target === $("imgLightbox")) crCloseImageLightbox();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") crCloseImageLightbox();
+  });
+}
