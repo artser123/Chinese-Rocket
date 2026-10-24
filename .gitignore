@@ -63,6 +63,7 @@ podcast_cache/
 audio/zh/Backup/
 
 audio/zh/Backup_gym/
+audio/zh/Backup_car/
 
 # AI cover images for podcast articles (APK-only data, like podcast_cache/)
 podcast_img/

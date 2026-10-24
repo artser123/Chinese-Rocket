@@ -2659,6 +2659,29 @@ button.fill-blank {
 .pod-episode-badge.pod-badge-hsk { font-size: 12px; line-height: 1.35; }
 .pod-episode-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .pod-episode-copy strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+/* กรอบระดับ HSK ท้ายชื่อบทความเฉพาะทาง — ระดับละสี (ดู podLevelTag ใน 13-podcast.js) */
+.pod-level-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: .02em;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.pod-level-tag[data-level="1"] { color: #7ee787; }
+.pod-level-tag[data-level="2"] { color: #5ad1ff; }
+.pod-level-tag[data-level="3"] { color: #7fa7ff; }
+.pod-level-tag[data-level="4"] { color: #b98cff; }
+.pod-level-tag[data-level="5"] { color: #ff9bd2; }
+.pod-level-tag[data-level="6"] { color: #ffb86c; }
+.pod-level-tag[data-level="7"] { color: #ffd166; }
+.pod-level-tag[data-level="8"] { color: #4fd1c5; }
+.pod-level-tag[data-level="9"] { color: #ff7b72; }
 .pod-episode-copy small { color: var(--fg-mute); font-size: 11px; }
 .pod-episode-play { color: var(--accent-cool); font-size: 17px; text-align: center; }
 .pod-empty { padding: 30px 10px; color: var(--fg-mute); text-align: center; }

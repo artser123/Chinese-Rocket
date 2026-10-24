@@ -155,6 +155,14 @@ const GYM_SUB_MAP = {
   nutrition_gear: "运动装备与营养补剂"
 };
 
+const CAR_SUB_MAP = {
+  ev_types: "车型与新能源电车",
+  interior: "内饰配件与车机配置",
+  mechanical: "核心机械与外观部件",
+  driving: "驾驶操作与交通规则",
+  maintenance: "充电保养与应急救援"
+};
+
 // ทะเบียนแมปหมวดย่อยของแต่ละหมวด (คีย์ -> ชื่อภาษาจีน)
 // หมายเหตุ: const ที่ประกาศระดับบนสุดไม่กลายเป็น property ของ window
 // จึงต้องมีทะเบียนนี้ให้โค้ดข้ามไฟล์ (เช่น 15-vocaboverview.js) ใช้แทน window[mapName]
@@ -168,7 +176,8 @@ const CATEGORY_SUB_MAPS = {
   media: MEDIA_SUB_MAP,
   business: BUSINESS_SUB_MAP,
   phone: PHONE_SUB_MAP,
-  gym: GYM_SUB_MAP
+  gym: GYM_SUB_MAP,
+  car: CAR_SUB_MAP
 };
 
 const CATEGORIES = {
@@ -527,6 +536,39 @@ const CATEGORIES = {
       const filtered = SENTENCES_GYM.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
       return filtered.length ? filtered : SENTENCES_GYM;
     }
+  },
+  car: {
+    id: "car",
+    name: "ยานยนต์ รถยนต์ EV และการขับขี่ (Automotive, EV & Driving)",
+    icon: "🚗",
+    badge: "🚗 Automotive & EV",
+    levelLabel: "หมวดย่อยยานยนต์",
+    levels: [
+      { id: "all", label: "🌐 ทั้งหมด (194 คำ)" },
+      { id: "ev_types", label: "⚡ รุ่นรถ & รถยนต์ EV (37 คำ)" },
+      { id: "interior", label: "💺 อุปกรณ์ภายใน & หน้าจอรถ (40 คำ)" },
+      { id: "mechanical", label: "⚙️ ชิ้นส่วนเครื่องยนต์ & ภายนอก (39 คำ)" },
+      { id: "driving", label: "🚦 การขับขี่ & กฎจราจร (40 คำ)" },
+      { id: "maintenance", label: "🔌 ชาร์จไฟ บำรุงรักษา & กู้ภัย (38 คำ)" }
+    ],
+    defaultLevel: "all",
+    getVocabPool: (level) => {
+      if (typeof VOCAB_CAR === "undefined") return [];
+      if (!level || level === "all") return VOCAB_CAR;
+      const cat = CAR_SUB_MAP[level];
+      if (!cat) return VOCAB_CAR;
+      const filtered = VOCAB_CAR.filter((w) => w[3] === cat);
+      return filtered.length ? filtered : VOCAB_CAR;
+    },
+    getSentencePool: (level) => {
+      if (typeof SENTENCES_CAR === "undefined") return [];
+      if (!level || level === "all") return SENTENCES_CAR;
+      const cat = CAR_SUB_MAP[level];
+      if (!cat) return SENTENCES_CAR;
+      const words = typeof VOCAB_CAR !== "undefined" ? VOCAB_CAR.filter((w) => w[3] === cat).map((w) => w[0]) : [];
+      const filtered = SENTENCES_CAR.filter((s) => s[3] === cat || words.some((w) => s[0].includes(w)));
+      return filtered.length ? filtered : SENTENCES_CAR;
+    }
   }
 };
 
@@ -538,6 +580,32 @@ function getVocabPool(level) {
 function getSentencePool(level) {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
   return cat.getSentencePool(level || selectedLevel || currentLevel);
+}
+
+// ทะเบียนคลังคำศัพท์ของทุกหมวดที่ไม่ใช่ HSK (ใช้ร่วมกันในพจนานุกรม 08-dict.js
+// และโหมดเขียนประโยค 11-copy.js). เพิ่มหมวดใหม่ = เพิ่มบรรทัดที่นี่ที่เดียว
+// หมายเหตุ: const ระดับบนสุดไม่กลายเป็น property ของ window จึงต้องอ้างชื่อตรงๆ
+function categoryVocabSources() {
+  const list = [];
+  if (typeof VOCAB_IT !== "undefined") list.push({ id: "it", lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
+  if (typeof VOCAB_HOTEL !== "undefined") list.push({ id: "hotel", lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
+  if (typeof VOCAB_FACTORY !== "undefined") list.push({ id: "factory", lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
+  if (typeof VOCAB_TRADE !== "undefined") list.push({ id: "trade", lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
+  if (typeof VOCAB_OFFICE !== "undefined") list.push({ id: "office", lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
+  if (typeof VOCAB_FOOD !== "undefined") list.push({ id: "food", lvl: "FOOD", badge: "🥢 Food", words: VOCAB_FOOD });
+  if (typeof VOCAB_MEDIA !== "undefined") list.push({ id: "media", lvl: "MEDIA", badge: "📸 Media", words: VOCAB_MEDIA });
+  if (typeof VOCAB_BUSINESS !== "undefined") list.push({ id: "business", lvl: "BUSINESS", badge: "💼 Business", words: VOCAB_BUSINESS });
+  if (typeof VOCAB_PHONE !== "undefined") list.push({ id: "phone", lvl: "PHONE", badge: "📱 Phone", words: VOCAB_PHONE });
+  if (typeof VOCAB_GYM !== "undefined") list.push({ id: "gym", lvl: "GYM", badge: "🏋️ Gym", words: VOCAB_GYM });
+  if (typeof VOCAB_CAR !== "undefined") list.push({ id: "car", lvl: "CAR", badge: "🚗 Car", words: VOCAB_CAR });
+  return list;
+}
+
+// หมวดที่เลือกอยู่มีข้อมูลประโยคให้เล่นหรือไม่ (แทนเชน if ของแต่ละหมวด)
+function categoryHasSentences(level) {
+  if (currentCategory === "hsk") return !!SENT_OK;
+  const pool = getSentencePool(level || selectedLevel || currentLevel);
+  return !!(pool && pool.length);
 }
 
 function levelDisplayName(level) {

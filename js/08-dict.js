@@ -79,54 +79,14 @@ function dictSearch(query) {
   // e.g. "ni hao" -> ["ni","hao"] ; "nihao" -> ["nihao"]
   const qSyls = isChinese || isThai ? [] : normPinyin(q).split(/\s+/).filter(Boolean);
   const vocabSources = [];
-  if (currentCategory === "it" && typeof VOCAB_IT !== "undefined") {
-    vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
-  } else if (currentCategory === "hotel" && typeof VOCAB_HOTEL !== "undefined") {
-    vocabSources.push({ lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
-  } else if (currentCategory === "factory" && typeof VOCAB_FACTORY !== "undefined") {
-    vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
-  } else if (currentCategory === "trade" && typeof VOCAB_TRADE !== "undefined") {
-    vocabSources.push({ lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
-  } else if (currentCategory === "office" && typeof VOCAB_OFFICE !== "undefined") {
-    vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
-  } else if (currentCategory === "food" && typeof VOCAB_FOOD !== "undefined") {
-    vocabSources.push({ lvl: "FOOD", badge: "🥢 Food", words: VOCAB_FOOD });
-  } else if (currentCategory === "media" && typeof VOCAB_MEDIA !== "undefined") {
-    vocabSources.push({ lvl: "MEDIA", badge: "📸 Media", words: VOCAB_MEDIA });
-  } else if (currentCategory === "business" && typeof VOCAB_BUSINESS !== "undefined") {
-    vocabSources.push({ lvl: "BUSINESS", badge: "💼 Business", words: VOCAB_BUSINESS });
-  } else if (currentCategory === "phone" && typeof VOCAB_PHONE !== "undefined") {
-    vocabSources.push({ lvl: "PHONE", badge: "📱 Phone", words: VOCAB_PHONE });
+  for (const src of categoryVocabSources()) {
+    if (src.id === currentCategory) vocabSources.push(src);
   }
   for (const lvl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
     vocabSources.push({ lvl, badge: `HSK ${lvl}`, words: (typeof VOCAB !== "undefined" && VOCAB[lvl]) || [] });
   }
-  if (currentCategory !== "it" && typeof VOCAB_IT !== "undefined") {
-    vocabSources.push({ lvl: "IT", badge: "💻 IT", words: VOCAB_IT });
-  }
-  if (currentCategory !== "hotel" && typeof VOCAB_HOTEL !== "undefined") {
-    vocabSources.push({ lvl: "HOTEL", badge: "🏨 Hotel", words: VOCAB_HOTEL });
-  }
-  if (currentCategory !== "factory" && typeof VOCAB_FACTORY !== "undefined") {
-    vocabSources.push({ lvl: "FACTORY", badge: "🏭 Factory", words: VOCAB_FACTORY });
-  }
-  if (currentCategory !== "trade" && typeof VOCAB_TRADE !== "undefined") {
-    vocabSources.push({ lvl: "TRADE", badge: "🚢 Trade", words: VOCAB_TRADE });
-  }
-  if (currentCategory !== "office" && typeof VOCAB_OFFICE !== "undefined") {
-    vocabSources.push({ lvl: "OFFICE", badge: "🏢 Office", words: VOCAB_OFFICE });
-  }
-  if (currentCategory !== "food" && typeof VOCAB_FOOD !== "undefined") {
-    vocabSources.push({ lvl: "FOOD", badge: "🥢 Food", words: VOCAB_FOOD });
-  }
-  if (currentCategory !== "media" && typeof VOCAB_MEDIA !== "undefined") {
-    vocabSources.push({ lvl: "MEDIA", badge: "📸 Media", words: VOCAB_MEDIA });
-  }
-  if (currentCategory !== "business" && typeof VOCAB_BUSINESS !== "undefined") {
-    vocabSources.push({ lvl: "BUSINESS", badge: "💼 Business", words: VOCAB_BUSINESS });
-  }
-  if (currentCategory !== "phone" && typeof VOCAB_PHONE !== "undefined") {
-    vocabSources.push({ lvl: "PHONE", badge: "📱 Phone", words: VOCAB_PHONE });
+  for (const src of categoryVocabSources()) {
+    if (src.id !== currentCategory) vocabSources.push(src);
   }
 
   for (const src of vocabSources) {
@@ -163,16 +123,10 @@ function dictSearch(query) {
     }
   }
   // sort: exact match first, then shorter chinese, then category preference
+  const catLvl = {};
+  for (const src of categoryVocabSources()) catLvl[src.lvl] = src.id;
   const scoreLvl = (lvl) => {
-    if (lvl === "IT") return currentCategory === "it" ? 0 : 99;
-    if (lvl === "HOTEL") return currentCategory === "hotel" ? 0 : 99;
-    if (lvl === "FACTORY") return currentCategory === "factory" ? 0 : 99;
-    if (lvl === "TRADE") return currentCategory === "trade" ? 0 : 99;
-    if (lvl === "OFFICE") return currentCategory === "office" ? 0 : 99;
-    if (lvl === "FOOD") return currentCategory === "food" ? 0 : 99;
-    if (lvl === "MEDIA") return currentCategory === "media" ? 0 : 99;
-    if (lvl === "BUSINESS") return currentCategory === "business" ? 0 : 99;
-    if (lvl === "PHONE") return currentCategory === "phone" ? 0 : 99;
+    if (catLvl[lvl]) return catLvl[lvl] === currentCategory ? 0 : 99;
     return Number(lvl === "7-9" ? 9 : lvl);
   };
   results.sort((a, b) => (a.zh === q ? -1 : b.zh === q ? 1 : 0) || a.zh.length - b.zh.length || scoreLvl(a.lvl) - scoreLvl(b.lvl));
@@ -237,96 +191,8 @@ function dictPinyinIndex() {
       }
     }
   }
-  if (typeof VOCAB_IT !== "undefined") {
-    for (const w of VOCAB_IT) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_HOTEL !== "undefined") {
-    for (const w of VOCAB_HOTEL) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_FACTORY !== "undefined") {
-    for (const w of VOCAB_FACTORY) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_TRADE !== "undefined") {
-    for (const w of VOCAB_TRADE) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_OFFICE !== "undefined") {
-    for (const w of VOCAB_OFFICE) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_FOOD !== "undefined") {
-    for (const w of VOCAB_FOOD) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_MEDIA !== "undefined") {
-    for (const w of VOCAB_MEDIA) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_BUSINESS !== "undefined") {
-    for (const w of VOCAB_BUSINESS) {
-      const zh = w[0], py = w[1];
-      if (!zh || !py) continue;
-      if (!wordPy.has(zh)) wordPy.set(zh, py);
-      const syls = py.trim().split(/\s+/);
-      if (syls.length === zh.length) {
-        for (let i = 0; i < zh.length; i++) if (!charPy.has(zh[i])) charPy.set(zh[i], syls[i]);
-      }
-    }
-  }
-  if (typeof VOCAB_PHONE !== "undefined") {
-    for (const w of VOCAB_PHONE) {
+  for (const src of categoryVocabSources()) {
+    for (const w of src.words) {
       const zh = w[0], py = w[1];
       if (!zh || !py) continue;
       if (!wordPy.has(zh)) wordPy.set(zh, py);
@@ -654,89 +520,11 @@ function dictFindExamples(zh, lvl) {
       }
     }
   }
-  // 1.5) SENTENCES_IT (IT category sentences)
-  if (typeof SENTENCES_IT !== "undefined") {
-    for (const s of SENTENCES_IT) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.6) SENTENCES_HOTEL (Hotel category sentences)
-  if (typeof SENTENCES_HOTEL !== "undefined") {
-    for (const s of SENTENCES_HOTEL) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.7) SENTENCES_FACTORY (Factory category sentences)
-  if (typeof SENTENCES_FACTORY !== "undefined") {
-    for (const s of SENTENCES_FACTORY) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.8) SENTENCES_TRADE (Trade category sentences)
-  if (typeof SENTENCES_TRADE !== "undefined") {
-    for (const s of SENTENCES_TRADE) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.9) SENTENCES_OFFICE (Office category sentences)
-  if (typeof SENTENCES_OFFICE !== "undefined") {
-    for (const s of SENTENCES_OFFICE) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.10) SENTENCES_FOOD (Food category sentences)
-  if (typeof SENTENCES_FOOD !== "undefined") {
-    for (const s of SENTENCES_FOOD) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.11) SENTENCES_MEDIA (Media category sentences)
-  if (typeof SENTENCES_MEDIA !== "undefined") {
-    for (const s of SENTENCES_MEDIA) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.12) SENTENCES_BUSINESS (Business category sentences)
-  if (typeof SENTENCES_BUSINESS !== "undefined") {
-    for (const s of SENTENCES_BUSINESS) {
-      const tokens = s[4] || [];
-      if (tokens.includes(zh) || s[0].includes(zh)) {
-        examples.push(s);
-        if (examples.length >= 3) return examples;
-      }
-    }
-  }
-  // 1.13) SENTENCES_PHONE (Phone category sentences)
-  if (typeof SENTENCES_PHONE !== "undefined") {
-    for (const s of SENTENCES_PHONE) {
+  // 1.5) sentence packs of every non-HSK category (IT, hotel, factory, trade,
+  //      office, food, media, business, phone, gym, car)
+  for (const cat of Object.values(CATEGORIES)) {
+    if (cat.id === "hsk" || typeof cat.getSentencePool !== "function") continue;
+    for (const s of cat.getSentencePool("all") || []) {
       const tokens = s[4] || [];
       if (tokens.includes(zh) || s[0].includes(zh)) {
         examples.push(s);
@@ -760,6 +548,18 @@ function dictStartMic() {
   const micBtn = $("dictMicBtn");
   if (dictRecognition) { dictRecognition.stop(); return; }
   if (dictWRecord) { dictStopMicWhisper(); return; }
+  // APK: ใช้ระบบจดจำเสียงของ Android (Google) ผ่าน NativeSpeech เป็นตัวหลัก
+  // (Whisper เดิมต้องผ่าน getUserMedia ซึ่ง WebView จะบล็อกจนกว่าแอปจะได้สิทธิ์
+  // RECORD_AUDIO — สิทธิ์นั้นถูกขอเฉพาะใน NativeSpeech) — กด 🎤 ซ้ำเพื่อหยุดฟัง
+  if (window.CR_OFFLINE_APP) {
+    if (dictNativeActive) {
+      dictResults.innerHTML = '<p class="dict-placeholder">⏳ กำลังประมวลผลเสียง…</p>';
+      dictNativeStopListening();
+      return;
+    }
+    dictStartMicNative();
+    return;
+  }
   if (!SR) {
     if (dictMicEngine === "google") {
       dictResults.innerHTML = '<p class="dict-placeholder">🌐 เบราว์เซอร์นี้ไม่มี Google Speech — แตะปุ่มข้างไมค์สลับเป็น 🤖 Whisper หรือ 🔀 Auto</p>';
@@ -835,6 +635,113 @@ function dictStartMic() {
   micBtn.classList.add("listening");
   dictResults.innerHTML = `<p class="dict-placeholder">🎤 กำลังฟัง… พูด${dictLangName()}ได้เลย ข้อความจะขึ้นในช่องค้นหา</p>`;
   try { rec.start(); } catch (err) { stopUi(); }
+}
+
+/* ---------- Native ASR (APK): ระบบจดจำเสียงของ Android/Google ผ่าน NativeSpeech ---------- */
+// WebView ไม่มี Web Speech API และ getUserMedia จะโดนบล็อกจนกว่าแอปจะได้สิทธิ์ไมค์
+// (สิทธิ์ถูกขอภายใน NativeSpeech.startListening เท่านั้น) — จึงให้ Google recognition
+// ของเครื่องเป็นตัวหลัก แล้วค่อย fallback เป็น Whisper เมื่อระบบเสียงใช้ไม่ได้
+let dictNativeActive = false;
+let dictNativeRequestId = null;
+let dictNativeSeq = 0;
+let dictNativeListenersReady = null;
+
+function dictNativePlugin() {
+  return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeSpeech;
+}
+
+function dictNativeLang() { return dictMicLang === "th" ? "th-TH" : "zh-CN"; }
+
+// กด 🎤 ซ้ำ = หยุดฟังแล้วรอผลจดจำ (onResults จะยิง event "result" ตามมา)
+function dictNativeStopListening() {
+  const native = dictNativePlugin();
+  dictNativeActive = false;
+  dictNativeRequestId = null;
+  $("dictMicBtn").classList.remove("listening");
+  if (native) native.stopListening().catch(() => {});
+}
+
+// ยกเลิกโดยไม่ต้องผล (ตอนออกจากโหมด / เปิดแผงเขียน)
+function dictNativeCancel() {
+  const native = dictNativePlugin();
+  dictNativeActive = false;
+  dictNativeRequestId = null;
+  $("dictMicBtn").classList.remove("listening");
+  if (native) native.cancelListening().catch(() => {});
+}
+
+function dictEnsureNativeListeners() {
+  const native = dictNativePlugin();
+  if (!native) return Promise.resolve(false);
+  if (!dictNativeListenersReady) {
+    dictNativeListenersReady = Promise.all([
+      native.addListener("partial", ({ requestId, text }) => {
+        if (!dictNativeActive || requestId !== dictNativeRequestId || !text) return;
+        dictInput.value = text;
+        dictUpdateClearBtn();
+      }),
+      native.addListener("result", ({ requestId, text }) => {
+        if (!dictNativeActive || requestId !== dictNativeRequestId) return;
+        dictNativeActive = false;
+        dictNativeRequestId = null;
+        $("dictMicBtn").classList.remove("listening");
+        const heard = (text || "").trim();
+        if (heard) {
+          dictInput.value = heard;
+          dictUpdateClearBtn();
+          dictSearch(heard);
+        } else {
+          dictResults.innerHTML = `<p class="dict-placeholder">🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูด${dictLangName()}อีกครั้ง</p>`;
+        }
+      }),
+      native.addListener("error", ({ requestId, code }) => {
+        if (!dictNativeActive || requestId !== dictNativeRequestId) return;
+        dictNativeActive = false;
+        dictNativeRequestId = null;
+        $("dictMicBtn").classList.remove("listening");
+        if (code === "NO_MATCH" || code === "NO_SPEECH") {
+          dictResults.innerHTML = `<p class="dict-placeholder">🤔 ไม่ได้ยินเสียงพูด ลองกด 🎤 แล้วพูด${dictLangName()}อีกครั้ง</p>`;
+        } else if (code === "CANCELLED") {
+          // ถูกยกเลิก (เช่นออกจากโหมด) — ไม่ต้องแจ้ง
+        } else if (code === "PERMISSION_DENIED") {
+          dictResults.innerHTML = '<p class="dict-placeholder">🚫 ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน</p>';
+        } else {
+          // ไม่มีบริการจดจำ / ไม่รองรับภาษา -> โมเดล Whisper ที่แถบมากับ APK
+          dictStartMicWhisper();
+        }
+      }),
+    ]).then(() => true).catch(() => false);
+  }
+  return dictNativeListenersReady;
+}
+
+async function dictStartMicNative() {
+  const native = dictNativePlugin();
+  if (!native) { dictStartMicWhisper(); return; }
+  const micBtn = $("dictMicBtn");
+  const requestId = String(++dictNativeSeq);
+  dictNativeRequestId = requestId;
+  dictNativeActive = true;
+  micBtn.classList.add("listening");
+  dictResults.innerHTML = `<p class="dict-placeholder">🎤 กำลังฟังด้วยระบบเสียงของ Android… พูด${dictLangName()}ได้เลย ข้อความจะขึ้นในช่องค้นหา</p>`;
+  try {
+    if (!await dictEnsureNativeListeners()) throw new Error("native speech listener unavailable");
+    if (dictNativeRequestId !== requestId) return;
+    const availability = await native.isAvailable();
+    if (dictNativeRequestId !== requestId) return;
+    if (!availability || !availability.available) throw new Error("recognition unavailable");
+    await native.startListening({ language: dictNativeLang(), requestId, online: true });
+  } catch (error) {
+    if (dictNativeRequestId !== requestId) return;
+    dictNativeRequestId = null;
+    dictNativeActive = false;
+    micBtn.classList.remove("listening");
+    if (error && error.code === "PERMISSION_DENIED") {
+      dictResults.innerHTML = '<p class="dict-placeholder">🚫 ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน</p>';
+      return;
+    }
+    dictStartMicWhisper();
+  }
 }
 
 /* ---------- Whisper on-device ASR fallback (works where Google speech is blocked) ---------- */
@@ -1012,15 +919,16 @@ function loadDictLookup() {
 function dictStartWrite() {
   if (dictRecognition) dictRecognition.stop();
   if (dictWRecord) dictStopMicWhisper(true);
+  if (dictNativeActive) dictNativeCancel();
   if (!dictWritePanel.hidden) { dictWritePanel.hidden = true; return; }
   dictWritePanel.hidden = false;
   dictInitCanvas();
 }
 
-function dictInitCanvas() {
-  dictCanvas = $("dictWriter");
-  // size the canvas backing store to its real displayed size (× dpr) so
-  // strokes stay crisp; ctx transform maps CSS px -> device px
+// วัดขนาดกล่องจริงแล้ว set backing store (× dpr) + transform ให้ตรง — เรียกซ้ำได้ตอน resize
+// (บนแท็บเล็ต CSS `aspect-ratio: 1; max-height: 55vh` ทำให้กล่องเปลี่ยนขนาดตอนหมุนจอ/
+// คีย์บอร์ดเด้ง ถ้าไม่วัดใหม่เส้นจะคมน้อยลงและพิกัดอ้างอิงเก่า)
+function dictRefitCanvas() {
   const dpr = window.devicePixelRatio || 1;
   dictW = dictCanvas.clientWidth;
   dictH = dictCanvas.clientHeight;
@@ -1030,8 +938,14 @@ function dictInitCanvas() {
   dictCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   dictCtx.lineCap = "round"; dictCtx.lineJoin = "round";
   dictCtx.strokeStyle = "#ff5722"; dictCtx.lineWidth = 10;
-  dictStrokes = []; dictCurrentStroke = []; dictDrawing = false;
   dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictW, dictH);
+}
+
+function dictInitCanvas() {
+  dictCanvas = $("dictWriter");
+  dictStrokes = []; dictCurrentStroke = []; dictDrawing = false;
+  dictRecogSeq++; // cancel any recognition still in flight
+  dictRefitCanvas();
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
   // wire pointer events
   dictCanvas.onpointerdown = dictPointerDown;
@@ -1041,8 +955,18 @@ function dictInitCanvas() {
 }
 
 function dictCanvasPos(e) {
+  // แมพผ่านขนาดกล่องจริงเสมอ: ถ้า canvas ถูกย่อ/ยืดต่างจากตอนเปิดแผง (หมุนจอ,
+  // คีย์บอร์ด, max-height บนแท็บเล็ต) สัดส่วน rect จะพาเส้นกลับมาใต้นิ้ว และเวลา
+  // หน้าถูก pinch-zoom clientX/Y เป็นพิกัด visual viewport แต่ rect เป็น layout
+  // viewport — บวก visualViewport.offset คืนก่อน (เฉพาะตอนซูมเกิน 1 จึงจำเป็น)
   const r = dictCanvas.getBoundingClientRect();
-  return [Math.round(e.clientX - r.left), Math.round(e.clientY - r.top)];
+  const vv = window.visualViewport;
+  const zoomed = !!(vv && vv.scale > 1.01);
+  const vx = e.clientX + (zoomed ? vv.offsetLeft : 0);
+  const vy = e.clientY + (zoomed ? vv.offsetTop : 0);
+  const sx = r.width > 0 ? dictW / r.width : 1;
+  const sy = r.height > 0 ? dictH / r.height : 1;
+  return [Math.round((vx - r.left) * sx), Math.round((vy - r.top) * sy)];
 }
 
 function dictPointerDown(e) {
@@ -1165,6 +1089,7 @@ $("dictQuitBtn").addEventListener("click", () => {
   sfx.click();
   if (dictRecognition) { dictRecognition.stop(); dictRecognition = null; }
   if (dictWRecord) dictStopMicWhisper(true);
+  if (dictNativeActive) dictNativeCancel();
   switchScreen(menuEl);
 });
 $("dictMuteBtn").addEventListener("click", toggleMute);
@@ -1206,6 +1131,12 @@ $("dictMicEngBtn").addEventListener("click", () => {
   dictResults.innerHTML = `<p class="dict-placeholder">ตัวจดจำเสียง: ${MIC_ENGINES[dictMicEngine].label}</p>`;
 });
 $("dictWriteBtn").addEventListener("click", () => { sfx.click(); dictStartWrite(); });
+// ขนาดจอเปลี่ยนระหว่างเปิดแผงเขียน (หมุนจอ/คีย์บอร์ด) — วัด backing store ใหม่
+// เฉพาะตอนยังไม่มีลายมือ (มีลายแล้วคงพิกัดเดิมไว้ — การแมพผ่าน rect ใน dictCanvasPos ยังจับใต้นิ้ว)
+window.addEventListener("resize", () => {
+  if (dictCtx && !dictStrokes.length && !dictCurrentStroke.length &&
+      dictWritePanel && !dictWritePanel.hidden) dictRefitCanvas();
+});
 $("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
 $("dictWriteClearBtn").addEventListener("click", () => { sfx.click(); dictClearCanvas(); });
 $("dictWriteClearTextBtn").addEventListener("click", () => {

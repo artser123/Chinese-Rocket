@@ -75,6 +75,8 @@ const sfx = {
 
 /* ================= Chinese speech (TTS) ================= */
 function speak(text) {
+  // APK: WebView ไม่มี speechSynthesis — ใช้ Google TTS ในตัวเครื่องผ่าน speakSeq แทน
+  if (window.CR_OFFLINE_APP) { speakSeq([[text, "zh-CN"]]); return; }
   if (!("speechSynthesis" in window)) return;
   try {
     stopSpeech();
@@ -88,6 +90,108 @@ function speak(text) {
 }
 
 const FEMALE_TH_VOICE = /premwadee|achara|kanya|female|google/i;
+
+/* ================= Native device TTS (APK only) ================= */
+// Android WebView ไม่มี speechSynthesis ทั้งหมด — speakSeq/speak บน APK จึง route มาที่นี่
+// แล้วให้ TextToSpeech ของเครื่อง (พยายาม engine com.google.android.tts ก่อน) อ่านแทน
+// ผ่าน NativeSpeech.ttsSpeak/ttsStop + event ttsdone/ttserror/ttsrange จากฝั่ง Java
+function crNativeTts() {
+  return window.CR_OFFLINE_APP && window.Capacitor && window.Capacitor.Plugins
+    ? window.Capacitor.Plugins.NativeSpeech : null;
+}
+const crTtsPending = new Map(); // utteranceId -> { onEnd, onRange, len, timer }
+let crTtsListenersReady = null;
+
+function crTtsEnsureListeners() {
+  const native = crNativeTts();
+  if (!native) return Promise.resolve(false);
+  if (!crTtsListenersReady) {
+    crTtsListenersReady = Promise.all([
+      native.addListener("ttsdone", ({ utteranceId }) => {
+        const p = crTtsPending.get(utteranceId);
+        if (p) { crTtsPending.delete(utteranceId); clearTimeout(p.timer); p.onEnd(); }
+      }),
+      native.addListener("ttserror", ({ utteranceId }) => {
+        const p = crTtsPending.get(utteranceId);
+        if (p) { crTtsPending.delete(utteranceId); clearTimeout(p.timer); p.onEnd(); }
+      }),
+      native.addListener("ttsrange", ({ utteranceId, start }) => {
+        const p = crTtsPending.get(utteranceId);
+        if (p && p.onRange) p.onRange(Math.min(1, Math.max(0, start / Math.max(1, p.len))));
+      }),
+    ]).then(() => true).catch(() => false);
+  }
+  return crTtsListenersReady;
+}
+
+// หยุดเสียงทุกประโยคค้างของ TTS เครื่อง (ใช้จาก stopSpeech — token ใหม่ทำให้ onEnd เก่าเดินต่อไม่ได้อยู่แล้ว)
+function crTtsCancelAll() {
+  const native = crNativeTts();
+  if (!native) return;
+  crTtsPending.forEach((p) => clearTimeout(p.timer));
+  crTtsPending.clear();
+  native.ttsStop().catch(() => {});
+}
+
+function speakSeqNative(parts, onDone, duckAll = false, onProgress) {
+  const native = crNativeTts();
+  if (!native || !parts.length) {
+    if (duckAll) duckMusic(false);
+    if (onDone) setTimeout(onDone, 0);
+    return;
+  }
+  try { stopSpeech(); } catch (e) {}
+  crTtsEnsureListeners();
+  const sid = speechSeqId;
+  let fired = false;
+  const finish = () => {
+    if (fired || sid !== speechSeqId) return;
+    fired = true;
+    if (duckAll) duckMusic(false);
+    if (onDone) onDone();
+  };
+  const next = (idx) => {
+    if (sid !== speechSeqId) return;
+    if (idx >= parts.length) { finish(); return; }
+    const [text, lang] = parts[idx];
+    if (!text || !String(text).trim()) { next(idx + 1); return; }
+    const isLast = idx === parts.length - 1;
+    const shouldDuck = duckAll || (lang || "").startsWith("th");
+    const uid = `crTts-${sid}-${idx}`;
+    const settle = () => {
+      const p = crTtsPending.get(uid);
+      if (!p) return false;
+      crTtsPending.delete(uid);
+      clearTimeout(p.timer);
+      return true;
+    };
+    const advance = () => {
+      if (sid !== speechSeqId) return;
+      if (shouldDuck && !duckAll) duckMusic(false);
+      if (isLast) finish(); else next(idx + 1);
+    };
+    crTtsPending.set(uid, {
+      len: String(text).length,
+      onRange: onProgress && (lang || "").startsWith("zh") ? (f) => onProgress(f) : null,
+      onEnd: advance,
+      // กัน event หล่น: เล่นนานผิดปกติ = ถือว่าจบแล้วไปประโยคถัดไป (ttsdone ที่มาทีหลังจะถูกข้าม)
+      timer: setTimeout(() => {
+        if (!settle()) return;
+        native.ttsStop().catch(() => {});
+        advance();
+      }, Math.max(6000, String(text).length * 400 + 8000)),
+    });
+    native.speakText({ text, lang: lang || "zh-CN", rate: 0.85, utteranceId: uid })
+      .then((res) => {
+        if (sid !== speechSeqId) { crTtsCancelAll(); return; }
+        if (!res || !res.started) { if (settle()) advance(); return; }
+        if (shouldDuck) duckMusic(true, duckAll ? 120000 : 6000);
+      })
+      .catch(() => { if (settle()) advance(); });
+  };
+  next(0);
+}
+
 const MALE_TH_VOICE = /pattara|niwat|\bmale\b/i;
 let speechDuckTimer = null;
 
@@ -113,6 +217,10 @@ function duckMusic(on, safetyMs = 6000) {
 // ทำให้ onDone ของ utterance ที่ถูก cancel ไม่ทำงานต่อ (เช่นตอนกดข้าม/ออก)
 let speechSeqId = 0;
 function speakSeq(parts, onDone, duckAll = false, onProgress) {
+  // APK: WebView ไม่มี speechSynthesis เลย ถ้าปล่อยไปตามเว็บเสียงจะเงียบสนิท
+  // (โหมดฝึกพูดและ fallback เมื่อ mp3 หายจึงไม่มีเสียงอ่าน) — เลี่ยงไปใช้
+  // TextToSpeech ของเครื่อง (engine Google) ผ่าน NativeSpeech plugin แทน
+  if (window.CR_OFFLINE_APP) { speakSeqNative(parts, onDone, duckAll, onProgress); return; }
   if (!("speechSynthesis" in window) || !parts.length) {
     if (duckAll) duckMusic(false);
     if (onDone) setTimeout(onDone, 0);
@@ -257,6 +365,8 @@ function stopSpeech() {
   speechSeqId++;
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   wordAudio.stop();
+  // APK: WebView ไม่มี speechSynthesis — ต้องหยุด TTS ของเครื่องด้วย (เช่นตอนกดข้าม/เปลี่ยนข้อ)
+  if (window.CR_OFFLINE_APP) crTtsCancelAll();
 }
 
 function playWordAudio(word, parts, onDone) {

@@ -434,27 +434,7 @@ $("cards").addEventListener("click", (e) => {
     startVocabOverview();
     return;
   }
-  const hasSentenceData = currentCategory === "hsk"
-    ? SENT_OK
-    : currentCategory === "it"
-    ? (typeof SENTENCES_IT !== "undefined" && SENTENCES_IT.length > 0)
-    : currentCategory === "hotel"
-    ? (typeof SENTENCES_HOTEL !== "undefined" && SENTENCES_HOTEL.length > 0)
-    : currentCategory === "factory"
-    ? (typeof SENTENCES_FACTORY !== "undefined" && SENTENCES_FACTORY.length > 0)
-    : currentCategory === "trade"
-    ? (typeof SENTENCES_TRADE !== "undefined" && SENTENCES_TRADE.length > 0)
-    : currentCategory === "office"
-    ? (typeof SENTENCES_OFFICE !== "undefined" && SENTENCES_OFFICE.length > 0)
-    : currentCategory === "food"
-    ? (typeof SENTENCES_FOOD !== "undefined" && SENTENCES_FOOD.length > 0)
-    : currentCategory === "media"
-    ? (typeof SENTENCES_MEDIA !== "undefined" && SENTENCES_MEDIA.length > 0)
-    : currentCategory === "business"
-    ? (typeof SENTENCES_BUSINESS !== "undefined" && SENTENCES_BUSINESS.length > 0)
-    : currentCategory === "phone"
-    ? (typeof SENTENCES_PHONE !== "undefined" && SENTENCES_PHONE.length > 0)
-    : (typeof SENTENCES_GYM !== "undefined" && SENTENCES_GYM.length > 0);
+  const hasSentenceData = categoryHasSentences();
   if ((gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak" || gameMode === "copy") && !hasSentenceData) {
     $("setupTitle").textContent = MODE_TITLES[gameMode];
     switchScreen($("setup"));

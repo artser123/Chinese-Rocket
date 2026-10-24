@@ -422,6 +422,16 @@ function podEpisodeTag(ep) {
   return ep.src === "hsk" || ep.src === "specialized" ? `HSK ${ep.hsk}` : `#${ep.n}`;
 }
 
+// กรอบข้อความ "HSK n" เล็ก ๆ ต่อท้ายชื่อบทความเฉพาะทาง — สีข้อความ/กรอบ
+// ต่างกันตามระดับ (สีกำหนดด้วย [data-level] ใน style.css)
+function podLevelTag(level) {
+  const tag = document.createElement("span");
+  tag.className = "pod-level-tag";
+  tag.dataset.level = String(level);
+  tag.textContent = `HSK ${level}`;
+  return tag;
+}
+
 function podGoToNextEpisode(manual = false) {
   if (!podcastState) return;
   const list = podFilteredEpisodes(podSourceOf(podcastState.episode));
@@ -992,6 +1002,8 @@ function podEpisodeList(query = "") {
     body.className = "pod-episode-copy";
     const title = document.createElement("strong");
     title.textContent = ep.t;
+    // บทความเฉพาะทาง: ต่อท้ายชื่อด้วยกรอบ HSK เล็ก ๆ (สีต่างกันตามระดับ)
+    if (ep.src === "specialized" && ep.hsk) title.append(podLevelTag(ep.hsk));
     const meta = document.createElement("small");
     const date = podEpisodeDate(ep.d);
     const duration = ep.dur ? podFormatTime(ep.dur) : "";
