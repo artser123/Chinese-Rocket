@@ -470,36 +470,60 @@ function lisRegisterMediaActions() {
   const mediaAction = (name, handler) => {
     try { navigator.mediaSession.setActionHandler(name, handler); } catch (e) {}
   };
-  mediaAction("play", () => {
-    if (!lis) return;
-    lis.playing = true;
-    crSetPlaybackState(true);
-    clearTimeout(lis.timer);
-    lis.timer = null;
-    $("lisPlayBtn").textContent = "⏸ พัก";
-    lisPlayCurrent();
-  });
-  mediaAction("pause", () => {
-    if (!lis || !lis.playing) return;
-    lis.playing = false;
-    crSetPlaybackState(false);
-    clearTimeout(lis.timer);
-    lisStopMedia();
-    stopSpeech();
-    $("lisPlayBtn").textContent = "▶ เล่นต่อ";
-    $("lisCard").classList.remove("playing");
-    if (lis.current) clearListenKaraoke(lis.current);
-  });
-  mediaAction("nexttrack", () => {
-    if (!lis) return;
-    lis.playing = true;
-    crSetPlaybackState(true);
-    $("lisPlayBtn").textContent = "⏸ พัก";
-    lisAdvance();
-  });
-  mediaAction("previoustrack", () => { if (lis) lisReplayBtnClick(); });
+  mediaAction("play", () => { if (lis && !lis.playing) lisReplayBtnClick(); });
+  mediaAction("pause", () => lisPausePlayback());
+  mediaAction("nexttrack", () => lisSkipTrack());
+  mediaAction("previoustrack", () => lisPreviousTrack());
 }
 lisRegisterMediaActions();
+
+// ปุ่มหูฟังบลูทูธ / หน้าจอล็อก (แอป): บอกฝั่งเนทีฟว่าโหมดฝึกฟังเปิดและเล่นอยู่
+// หรือไม่ (เรียกจากทุกจุดที่สถานะเล่น/พักเปลี่ยน) — ปุ่มที่ผู้ใช้กดวนกลับมาที่
+// window.crNativeMediaAction (js/14-reader.js) แล้วเข้าฟังก์ชันข้างล่างนี้
+function lisSyncMediaButtons() {
+  if (!lis) { crSetMediaButtons(false, false, "", ""); return; }
+  const title = lis.current ? lis.current[0].split(/[｜|]/)[0].trim() : "";
+  crSetMediaButtons(true, !!lis.playing, title,
+    `Chinese Rocket · ${lis.type === "sent" ? "ฝึกฟังประโยค" : "ฝึกฟังคำศัพท์"} HSK ${lis.level}`);
+}
+
+// พักการเล่น — ใช้ร่วมกันทั้งปุ่มบนหน้าจอและ pause/stop จากหูฟัง/หน้าจอล็อก
+function lisPausePlayback() {
+  if (!lis || !lis.playing) return;
+  lis.playing = false;
+  crSetPlaybackState(false);
+  clearTimeout(lis.timer);
+  lis.timer = null;
+  $("lisPlayBtn").textContent = "▶ เล่นต่อ";
+  $("lisCard").classList.remove("playing");
+  lisStopMedia();
+  stopSpeech();
+  if (lis.current) clearListenKaraoke(lis.current);
+  lisSyncMediaButtons();
+}
+
+// ข้ามไปคำ/ประโยคถัดไป — ใช้ร่วมกันทั้งปุ่มบนหน้าจอและ nexttrack จากหูฟัง/หน้าจอล็อก
+function lisSkipTrack() {
+  if (!lis) return;
+  lis.playing = true;
+  crSetPlaybackState(true);
+  $("lisPlayBtn").textContent = "⏸ พัก";
+  lisAdvance();
+  lisSyncMediaButtons();
+}
+
+// ย้อนกลับไปคำ/ประโยคก่อนหน้าในกองเดิม (previoustrack จากหูฟัง/หน้าจอล็อก)
+// ถ้าเป็นตัวแรกของกองแล้ว เล่นตัวปัจจุบันซ้ำแทน
+function lisPreviousTrack() {
+  if (!lis) return;
+  if (lis.pos >= 2) {
+    lis.pos -= 2; // lisAdvance จะกินตัวที่ lis.pos ชี้อยู่ = ตัวก่อนหน้าของตัวปัจจุบัน
+    lis.played = Math.max(0, lis.played - 1);
+    lisSkipTrack();
+  } else {
+    lisReplayBtnClick();
+  }
+}
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
 function renderListenSentence(s) {
@@ -575,6 +599,7 @@ function lisReplayBtnClick() {
   crSetPlaybackState(true);
   $("lisPlayBtn").textContent = "⏸ พัก";
   lisPlayCurrent();
+  lisSyncMediaButtons();
 }
 
 // ดึงตัวถัดไปจากกองที่สับไว้ — ครบกองแล้วสับใหม่ (ตัวแรกรอบใหม่จะไม่ซ้ำตัวที่เพิ่งเล่น)
@@ -649,24 +674,14 @@ function startListenGame(level) {
   $("lisProg").textContent = "0%";
   crSetPlaybackState(true);
   lisAdvance();
+  lisSyncMediaButtons();
 }
 
 $("lisPlayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
-  lis.playing = !lis.playing;
-  crSetPlaybackState(lis.playing);
-  $("lisPlayBtn").textContent = lis.playing ? "⏸ พัก" : "▶ เล่นต่อ";
-  if (lis.playing) {
-    lisPlayCurrent(); // เล่นเสียงคำปัจจุบันใหม่ตั้งแต่ต้นแล้วไปต่อ
-  } else {
-    clearTimeout(lis.timer);
-    lis.timer = null;
-    $("lisCard").classList.remove("playing");
-    lisStopMedia();
-    stopSpeech();
-    if (lis.current) clearListenKaraoke(lis.current);
-  }
+  if (lis.playing) lisPausePlayback();
+  else lisReplayBtnClick();
 });
 $("lisReplayBtn").addEventListener("click", () => {
   if (!lis) return;
@@ -676,10 +691,7 @@ $("lisReplayBtn").addEventListener("click", () => {
 $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
-  lis.playing = true;
-  crSetPlaybackState(true);
-  $("lisPlayBtn").textContent = "⏸ พัก";
-  lisAdvance();
+  lisSkipTrack();
 });
 $("lisMuteBtn").addEventListener("click", toggleMute);
 $("lisQuitBtn").addEventListener("click", () => {
@@ -690,6 +702,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   lisStopMedia();
   if (lis && lis.current) clearListenKaraoke(lis.current);
   lis = null;
+  lisSyncMediaButtons(); // ปิด MediaSession เนทีฟ (ปุ่มหูฟังเลิกควบคุมโหมดนี้)
   $("lisCard").classList.remove("playing");
   stopSpeech();
   try {

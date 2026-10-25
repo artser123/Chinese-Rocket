@@ -1487,7 +1487,7 @@ if (window.CR_OFFLINE_APP) {
 /* ---- ปุ่มหูฟังบลูทูธ (แอป Android) ------------------------------------
    MediaSession ฝั่งเนทีฟ (NativeListenPlugin.setMediaSession) เรียกฟังก์ชันนี้
    เมื่อผู้ใช้กด play/pause/เรื่องก่อนหน้า/เรื่องถัดไป/หยุด บนหูฟัง การแจ้งเตือน
-   หรือหน้าจอล็อก — เลือกโหมดที่กำลังเปิดอยู่ (พอดแคสต์หรือบทอ่าน) ให้เอง
+   หรือหน้าจอล็อก — เลือกโหมดที่กำลังเปิดอยู่ (พอดแคสต์ บทอ่าน หรือฝึกฟัง) ให้เอง
    ทำซ้ำได้ปลอดภัย (กด play ตอนเล่นอยู่แล้ว = ไม่ทำอะไร) */
 window.crNativeMediaAction = function crNativeMediaAction(action) {
   const name = String(action || "");
@@ -1510,6 +1510,12 @@ window.crNativeMediaAction = function crNativeMediaAction(action) {
       if (name === "pause" || name === "stop") { if (readerWantPlay) readerPause(); return; }
       if (name === "nexttrack") { readerGoToAdjacentStory(1); return; }
       if (name === "previoustrack") { readerGoToAdjacentStory(-1); return; }
+    }
+    if (typeof lis !== "undefined" && lis) {
+      if (name === "play") { if (!lis.playing) lisReplayBtnClick(); return; }
+      if (name === "pause" || name === "stop") { lisPausePlayback(); return; }
+      if (name === "nexttrack") { lisSkipTrack(); return; }
+      if (name === "previoustrack") { lisPreviousTrack(); return; }
     }
   } catch (error) {}
 };
