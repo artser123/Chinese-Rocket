@@ -742,8 +742,8 @@ window.__handleAndroidBack = function () {
 
   // The podcast and the HSK story reader have two levels: the reading/player
   // page and the episode/story list. Android back goes back to the list first
-  // (same as the on-page "← เลือกตอนอื่น" / "← เลือกบทอ่าน" buttons); only a
-  // further back leaves the mode for the home screen.
+  // (same as the header "เลือกบทอ่าน" button); only a further back leaves the
+  // mode for the home screen.
   if (active === $("podcast") && !$("podPlayer").hidden) {
     if (typeof podBackToList === "function") {
       sfx.click();
@@ -755,6 +755,16 @@ window.__handleAndroidBack = function () {
     if (typeof readerBackToList === "function") {
       sfx.click();
       readerBackToList();
+      return true;
+    }
+  }
+
+  // เกมรวมคำศัพท์: ถ้า popup วิธีเขียนเปิดอยู่ ให้ปิด popup ก่อน —
+  // กด back อีกครั้งจึงออกจากโหมดกลับหน้าหลัก
+  if (active === $("vocaboverview") && $("voStrokePopup") && !$("voStrokePopup").hidden) {
+    if (typeof voCloseStrokes === "function") {
+      sfx.click();
+      voCloseStrokes();
       return true;
     }
   }

@@ -4,10 +4,11 @@ const zcanvas = $("zcanvas");
 const zctx = zcanvas.getContext("2d");
 const zoptBtns = Array.from(document.querySelectorAll(".zopt"));
 // base/ramp/cap = ความเร็วซอมบี้ (px/s) เพิ่มขึ้นตามเวลาที่ผ่านไป, spawn ลดลงตามจำนวนที่ยิงได้
+// ต.ค. 2026: ลดความเร็ววิ่ง ~30% ทุกระดับ (base/ramp/cap ปรับตามสัดส่วน) ให้เล่นได้นานขึ้น
 const ZDIFF = {
-  easy:   { base: 24, ramp: 0.3,  cap: 110, spawn0: 3.5, spawnDecay: 0.03,  spawnMin: 1.8 },
-  medium: { base: 35, ramp: 0.6,  cap: 160, spawn0: 2.9, spawnDecay: 0.04,  spawnMin: 1.3 },
-  hard:   { base: 50, ramp: 1.1,  cap: 230, spawn0: 2.4, spawnDecay: 0.055, spawnMin: 0.9 },
+  easy:   { base: 17, ramp: 0.2,  cap: 78,  spawn0: 3.5, spawnDecay: 0.03,  spawnMin: 1.8 },
+  medium: { base: 25, ramp: 0.4,  cap: 112, spawn0: 2.9, spawnDecay: 0.04,  spawnMin: 1.3 },
+  hard:   { base: 35, ramp: 0.75, cap: 160, spawn0: 2.4, spawnDecay: 0.055, spawnMin: 0.9 },
 };
 // weapon tiers — auto-upgrade based on kills
 const ZWEAPONS = [
@@ -51,11 +52,55 @@ function zresize() {
   zcanvas.style.height = ZH + "px";
   zctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   zRegenAtmosphere();
+  zBuildStatics();
 }
 window.addEventListener("resize", zresize);
 window.addEventListener("orientationchange", () => setTimeout(zresize, 200));
 window.addEventListener("resize", () => { if (matching) applyMatchLayout(); });
 window.addEventListener("orientationchange", () => { if (matching) setTimeout(applyMatchLayout, 200); });
+
+/* ---- ทรัพยากรที่คงที่ตามขนาดจอ (สร้างใหม่เฉพาะตอน zresize) ----
+   เดิมวาดพื้นหลังสร้าง gradient ทั้งหมดใหม่ "ทุกเฟรม" และเส้น scanline CRT
+   เป็น fillRect ~ZH/3 ครั้งต่อเฟรม — จอใหญ่ (แท็บเล็ต ~4.9 ล้าน px) จึงกระตุก
+   ฝั่งโทรศัพท์จอเล็กไม่รู้สึก เพราะต้นทุนทั้งหมดสเกลตามพื้นที่จอ */
+let zSkyGrad = null, zRoadGrad = null, zMoonHalo = null, zVigGrad = null, zGradeGrad = null;
+let zScanPat = null, zFogSprite = null, zSmokeSprite = null;
+
+function zSoftSprite(rgb, size) {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = size;
+  const cc = cv.getContext("2d");
+  const g = cc.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, `rgba(${rgb},1)`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  cc.fillStyle = g;
+  cc.fillRect(0, 0, size, size);
+  return cv;
+}
+
+function zBuildStatics() {
+  const gy = zGroundY();
+  zSkyGrad = zctx.createLinearGradient(0, 0, 0, gy);
+  zSkyGrad.addColorStop(0, "#05070f"); zSkyGrad.addColorStop(0.55, "#1a1130"); zSkyGrad.addColorStop(1, "#3a1626");
+  zRoadGrad = zctx.createLinearGradient(0, gy, 0, ZH);
+  zRoadGrad.addColorStop(0, "#1b1f2c"); zRoadGrad.addColorStop(1, "#0d0f18");
+  const mx = ZW * 0.8, my = gy * 0.22;
+  zMoonHalo = zctx.createRadialGradient(mx, my, 8, mx, my, 70);
+  zMoonHalo.addColorStop(0, "rgba(243,233,184,0.45)"); zMoonHalo.addColorStop(1, "rgba(243,233,184,0)");
+  zVigGrad = zctx.createRadialGradient(ZW / 2, ZH / 2, Math.min(ZW, ZH) * 0.35, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.75);
+  zVigGrad.addColorStop(0, "rgba(0,0,0,0)"); zVigGrad.addColorStop(1, "rgba(0,0,0,0.55)");
+  zGradeGrad = zctx.createLinearGradient(0, 0, 0, ZH);
+  zGradeGrad.addColorStop(0, "rgba(40,20,80,0.12)"); zGradeGrad.addColorStop(1, "rgba(80,20,40,0.12)");
+  // scanline CRT: pattern 1×3 px (ได้ผลเหมือน fillRect ทุก 3px แต่จ่าย 1 ครั้งต่อเฟรม)
+  const pat = document.createElement("canvas");
+  pat.width = 1; pat.height = 3;
+  const pc = pat.getContext("2d");
+  pc.fillStyle = "#000"; pc.fillRect(0, 0, 1, 1);
+  zScanPat = zctx.createPattern(pat, "repeat");
+  // หมอก/ควัน: blob นุ่ม pre-render ครั้งเดียว แล้ว drawImage แทนการสร้าง radial gradient ทุกเฟรม
+  zFogSprite = zSoftSprite("180,180,210", 256);
+  zSmokeSprite = zSoftSprite("180,180,180", 96);
+}
 zresize();
 
 const zombieBestKey = () => `cr_best_${catPrefix()}${currentLevel}_zombie_${difficulty}_${zDuration}`;
@@ -346,10 +391,8 @@ function zRoundRect(c, x, y, w, h, r) {
 
 function zDrawBackground(c) {
   const gy = zGroundY();
-  // sky gradient (deeper, duskier)
-  const g = c.createLinearGradient(0, 0, 0, gy);
-  g.addColorStop(0, "#05070f"); g.addColorStop(0.55, "#1a1130"); g.addColorStop(1, "#3a1626");
-  c.fillStyle = g; c.fillRect(0, 0, ZW, ZH);
+  // sky gradient (deeper, duskier) — แคชตามขนาดจอ (zBuildStatics)
+  c.fillStyle = zSkyGrad; c.fillRect(0, 0, ZW, ZH);
 
   // stars (twinkle)
   for (const s of zStars) {
@@ -360,26 +403,27 @@ function zDrawBackground(c) {
   }
   c.globalAlpha = 1;
 
-  // moon with glow halo
+  // moon with glow halo (ตำแหน่งคงที่ — ใช้ gradient ที่แคชไว้)
   const mx = ZW * 0.8, my = gy * 0.22;
-  const halo = c.createRadialGradient(mx, my, 8, mx, my, 70);
-  halo.addColorStop(0, "rgba(243,233,184,0.45)"); halo.addColorStop(1, "rgba(243,233,184,0)");
-  c.fillStyle = halo; c.beginPath(); c.arc(mx, my, 70, 0, 6.28); c.fill();
+  c.fillStyle = zMoonHalo; c.beginPath(); c.arc(mx, my, 70, 0, 6.28); c.fill();
   c.fillStyle = "#f3e9b8"; c.beginPath(); c.arc(mx, my, 26, 0, 6.28); c.fill();
   c.fillStyle = "#e0d6a5"; c.beginPath(); c.arc(mx - 8, my - 6, 5, 0, 6.28); c.arc(mx + 9, my + 8, 4, 0, 6.28); c.fill();
 
   // far buildings (parallax) — two layers for depth
+  // หน้าต่างรวมเป็น path เดียวต่อเลเยอร์แล้ว fill ครั้งเดียว (เดิม ~450 fillRect/เฟรม)
   const par = zb.scroll * 0.25, off = par % 160;
   for (let x = -off - 160; x < ZW + 160; x += 160) {
     const k = Math.round((x + par) / 160);
     const h = 50 + ((k * 37) % 7) * 16, bw = 110 + ((k * 11) % 3) * 12;
     c.fillStyle = "#11142a"; c.fillRect(x, gy - h, bw, h);
     c.fillStyle = "#c9b458";
+    c.beginPath();
     let wi = 0;
     for (let wy = gy - h + 10; wy < gy - 14; wy += 16)
       for (let wx = 0; wx < bw - 20; wx += 18) {
-        if (((k * 13 + wi++) % 5) === 0) c.fillRect(x + 10 + wx, wy, 7, 8);
+        if (((k * 13 + wi++) % 5) === 0) c.rect(x + 10 + wx, wy, 7, 8);
       }
+    c.fill();
   }
   // near buildings (faster parallax, darker)
   const par2 = zb.scroll * 0.5, off2 = par2 % 220;
@@ -388,36 +432,34 @@ function zDrawBackground(c) {
     const h = 80 + ((k * 53) % 5) * 22, bw = 150 + ((k * 17) % 3) * 18;
     c.fillStyle = "#0a0c1a"; c.fillRect(x, gy - h, bw, h);
     c.fillStyle = "#ffd76a";
+    c.beginPath();
     let wi = 0;
     for (let wy = gy - h + 14; wy < gy - 18; wy += 20)
       for (let wx = 0; wx < bw - 28; wx += 24) {
-        if (((k * 23 + wi++) % 4) === 0) c.fillRect(x + 14 + wx, wy, 8, 10);
+        if (((k * 23 + wi++) % 4) === 0) c.rect(x + 14 + wx, wy, 8, 10);
       }
+    c.fill();
   }
 
-  // drifting fog
+  // drifting fog — blob pre-render แล้ว drawImage แทน createRadialGradient ทุกเฟรม
   for (const f of zFog) {
     f.x -= f.sp * 0.016;
     if (f.x < -f.r) f.x = ZW + f.r;
-    const fg = c.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
-    fg.addColorStop(0, `rgba(180,180,210,${f.a})`); fg.addColorStop(1, "rgba(180,180,210,0)");
-    c.fillStyle = fg; c.beginPath(); c.arc(f.x, f.y, f.r, 0, 6.28); c.fill();
+    c.globalAlpha = f.a;
+    c.drawImage(zFogSprite, f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
   }
+  c.globalAlpha = 1;
 
   // fence / grass edge
   c.fillStyle = "#2f4a24"; c.fillRect(0, gy - 6, ZW, 8);
-  // road with subtle gradient
-  const rg = c.createLinearGradient(0, gy, 0, ZH);
-  rg.addColorStop(0, "#1b1f2c"); rg.addColorStop(1, "#0d0f18");
-  c.fillStyle = rg; c.fillRect(0, gy, ZW, ZH - gy);
+  // road with subtle gradient (แคช)
+  c.fillStyle = zRoadGrad; c.fillRect(0, gy, ZW, ZH - gy);
   const off3 = zb.scroll % 90;
   c.fillStyle = "#5a5a40";
   for (let x = -off3; x < ZW; x += 90) c.fillRect(x, gy + 18, 44, 4);
 
-  // vignette (dark edges)
-  const vg = c.createRadialGradient(ZW / 2, ZH / 2, Math.min(ZW, ZH) * 0.35, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.75);
-  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
-  c.fillStyle = vg; c.fillRect(0, 0, ZW, ZH);
+  // vignette (dark edges) — แคช
+  c.fillStyle = zVigGrad; c.fillRect(0, 0, ZW, ZH);
 }
 
 function zDrawPolice(c) {
@@ -681,21 +723,23 @@ function zDraw() {
     glowOff(c);
   }
   c.globalAlpha = 1;
-  // particles (smoke uses radial gradient, others solid)
+  // particles (smoke uses pre-rendered soft sprite, others solid)
   for (const p of zb.particles) {
     const a = 1 - p.age / p.life;
     c.globalAlpha = a;
     if (p.smoke) {
-      const sg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-      sg.addColorStop(0, `rgba(180,180,180,${a * 0.5})`); sg.addColorStop(1, "rgba(180,180,180,0)");
-      c.fillStyle = sg; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+      c.globalAlpha = a * 0.5;
+      c.drawImage(zSmokeSprite, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     } else {
       c.fillStyle = p.color;
       c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
     }
   }
   c.globalAlpha = 1;
-  bloom(canvas, c, ZW, ZH);   // Bloom ปลอม: ปากกระบอก/ระเบิด/rocket trail จะฟุ้งเป็นแสง
+  bloom(zcanvas, c, ZW, ZH);   // Bloom ปลอม: ปากกระบอก/ระเบิด/rocket trail จะฟุ้งเป็นแสง
+                                // (ต้องใช้ zcanvas ของเกมนี้เป็นแหล่งภาพ — ครั้งหนึ่งส่ง `canvas`
+                                //  ของเกมอุกกาบาตเข้ามา ทำให้เฟรมสุดท้ายของอุกกาบาต/จรวดถูกเบลอ
+                                //  ซ้อนเป็นภาพโปร่งค้างบนจอซอมบี้ทุกเฟรม)
   c.font = "800 22px 'Noto Sans Thai', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
   for (const f of zb.floaters) {
     c.globalAlpha = 1 - f.age / f.life;
@@ -720,14 +764,12 @@ function zDraw() {
     c.fillRect(0, 0, ZW, ZH);
   }
 
-  // color grading (cool dusk tint)
-  const grade = c.createLinearGradient(0, 0, 0, ZH);
-  grade.addColorStop(0, "rgba(40,20,80,0.12)"); grade.addColorStop(1, "rgba(80,20,40,0.12)");
-  c.fillStyle = grade; c.fillRect(0, 0, ZW, ZH);
+  // color grading (cool dusk tint) — แคช gradient ตามขนาดจอ
+  c.fillStyle = zGradeGrad; c.fillRect(0, 0, ZW, ZH);
 
-  // CRT scanlines (subtle)
-  c.globalAlpha = 0.06; c.fillStyle = "#000";
-  for (let y = 0; y < ZH; y += 3) c.fillRect(0, y, ZW, 1);
+  // CRT scanlines (subtle) — pattern 1×3px แทน fillRect ~ZH/3 ครั้งต่อเฟรม
+  c.globalAlpha = 0.06; c.fillStyle = zScanPat;
+  c.fillRect(0, 0, ZW, ZH);
   c.globalAlpha = 1;
 
   // weapon upgrade flash (golden glow)

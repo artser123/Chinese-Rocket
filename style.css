@@ -395,7 +395,7 @@ html, body {
 }
 /* ไอคอนโหมดตัวใหญ่ด้านบนหน้าตั้งค่า — คัดลอกมาจาก .card-icon ของการ์ดที่กด */
 #setupIcon { font-size: clamp(64px, 18vw, 96px); line-height: 1.2; }
-#setupIcon.bomb-card-icon { width: 110px; height: 110px; line-height: 100px; font-size: clamp(48px, 13vw, 64px); }
+#setupIcon.bomb-card-icon { width: 110px; height: 110px; line-height: 1; font-size: clamp(48px, 13vw, 64px); }
 .setup-row { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .setup-label { color: #8fd3ff; font-size: clamp(14px, 3.8vw, 17px); font-weight: 700; }
 .cp-pen-note { max-width: min(520px, 90vw); color: var(--fg-dim); text-align: center; line-height: 1.45; }
@@ -1500,7 +1500,7 @@ button.fill-blank {
 }
 #cpWordPopup .cpw-bpy { min-width: 3.4em; color: #8fd3ff; }
 #cpWordPopup .cpw-bth { color: #9dff9d; }
-#cpWordPopup .cpw-actions { display: flex; gap: 8px; margin-top: 8px; }
+#cpWordPopup .cpw-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 #cpWordPopup .cpw-btn {
   flex: 1;
   padding: 8px 12px;
@@ -1805,7 +1805,15 @@ button.fill-blank {
 .final-score { font-size: clamp(30px, 9vw, 44px); font-weight: 800; color: #ffd76a; text-shadow: 0 0 20px rgba(255, 190, 0, .5), 0 2px 8px rgba(0,0,0,.6); }
 .new-best { color: #58ff88; font-weight: 700; min-height: 1.2em; }
 
-.bomb-card-icon { border-radius: 50%; background: #263044; border: 3px solid #ffb25a; width: 72px; height: 72px; line-height: 66px; color: #fff4cd; }
+/* จัดตัว 字 ให้อยู่กึ่งกลางวงกลมด้วย flex — เดิมใช้ line-height เท่าความสูงกล่อง
+   ซึ่งเพี้ยนกับเมตริกแนวตั้งของ Noto Sans SC และไม่มีการจัดกึ่งกลางแนวนอนเลย */
+.bomb-card-icon {
+  border-radius: 50%; background: #263044; border: 3px solid #ffb25a;
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+  color: #fff4cd;
+}
 .bomb-toggle { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; cursor: pointer; color: #d4e7ff; }
 .bomb-toggle input { width: 22px; height: 22px; accent-color: #ffc46b; }
 .bomb-instructions { color: #aebfdf; font-size: 14px; line-height: 1.7; text-align: center; }
@@ -2088,6 +2096,7 @@ button.fill-blank {
   padding: 16px;
 }
 .dict-write[hidden] { display: none; }
+.dict-write-stage { position: relative; width: 100%; }
 .dict-write #dictWriter {
   width: 100%;
   aspect-ratio: 1;
@@ -2097,6 +2106,24 @@ button.fill-blank {
   cursor: crosshair;
   touch-action: none;
 }
+/* ปุ่มย้อนกลับเส้นล่าสุด — ลอยที่มุมขวาบนของพื้นที่เขียน (คร่อมขอบ เพื่อไม่บังพื้นที่เขียน) */
+.dict-write .dict-undo-btn {
+  position: absolute;
+  top: -12px;
+  right: -4px;
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 1.5px solid rgba(255, 87, 34, .6);
+  border-radius: 999px;
+  background: rgba(19, 26, 61, .92);
+  color: #ffd7c9;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .35);
+}
+.dict-write .dict-undo-btn:active { transform: scale(.95); }
+.dict-write .dict-undo-btn[disabled] { opacity: .45; cursor: default; }
 .dict-write #dictCharPicker {
   display: flex;
   flex-wrap: wrap;
@@ -2498,7 +2525,7 @@ button.fill-blank {
      desktop). Same trap as .screen — do not use stretch here. */
   align-items: center;
   gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  padding: calc(6px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
   overflow: hidden;
   touch-action: pan-y;
   background: radial-gradient(ellipse at 50% 0%, #1a2855 0%, #070b24 64%);
@@ -2510,11 +2537,21 @@ button.fill-blank {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 2px 8px;
+  padding: 4px 2px 4px;
 }
 .pod-brand { color: var(--accent-cool); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .pod-header h2 { margin-top: 2px; font-size: clamp(21px, 5.6vw, 29px); }
 .pod-header .icon-btn { flex: 0 0 auto; }
+/* กลุ่มปุ่มขวาบนหัวจอ (podcast/reader): ปุ่ม "เลือกบทอ่าน" ปรากฏแทน ✖️ ตอนอยู่หน้าเนื้อหา */
+.pod-header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* ปุ่ม "เลือกบทอ่าน" เป็นปุ่มหลักของหน้าเนื้อหา (ปุ่มย้อนกลับซ้ายในแถบ sticky ถูกเอาออกแล้ว) — ให้ใหญ่กว่าปุ่มเล็กทั่วไป */
+#podSelectBtn, #readerSelectBtn {
+  align-self: center;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 15px;
+  font-weight: 700;
+}
 .pod-episodes, .pod-player { width: min(820px, 100%); min-height: 0; flex: 1; }
 .pod-episodes { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 .pod-episodes[hidden], .pod-player[hidden] { display: none; }
@@ -2699,11 +2736,9 @@ button.fill-blank {
   border-bottom: 1px solid rgba(122, 140, 255, .22);
   background: #080d28;
 }
-/* แถวหัวของตัวเล่น: ปุ่มย้อนกลับ (ซ้าย) + เวลาปิดอัตโนมัติ + ปุ่มตัวเลือกเพิ่มเติม (ขวา)
-   เป็นแถวเดียวเตี้ย ๆ เพื่อคืนพื้นที่ให้บทความ — ตัวเลือกที่ใช้นาน ๆ ครั้ง
-   (ความเร็ว / เล่นซ้ำ / อัตโนมัติ / ตั้งเวลาปิด / เสียงแปล) ย้ายไปอยู่ใน #podExtra */
-.pod-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.pod-bar-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* แถวหัวของตัวเล่นถูกลบออก (ตอนก่อนมีปุ่มย้อนกลับ + ⏱ + ⋯) — ปัจจุบัน
+   ⏱ และ ⋯ ย้ายไปอยู่ท้ายแถว 拼音/ไทย (.pod-display-actions) และแถบ
+   ตัวเล่นเริ่มที่ seek row ทันทีเพื่อชิดด้านบนให้มากที่สุด */
 .pod-sleep-badge { color: #ffe0a1; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pod-sleep-badge:empty { display: none; }
 .pod-more-btn {
@@ -2970,13 +3005,13 @@ button.fill-blank {
   justify-content: flex-start;
   align-items: center;
   gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  padding: calc(6px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
   overflow: hidden;
   touch-action: pan-y;
   background: radial-gradient(ellipse at 50% 0%, #1a2855 0%, #070b24 64%);
 }
 #reader > * { flex-shrink: 0; }
-.reader-header { width: min(820px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px 8px; }
+.reader-header { width: min(820px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px 4px; }
 .reader-brand { color: var(--accent-cool); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .reader-header h2 { margin-top: 2px; font-size: clamp(21px, 5.6vw, 29px); }
 .reader-library, .reader-player { width: min(820px, 100%); min-height: 0; flex: 1; }
@@ -3749,4 +3784,291 @@ button.fill-blank {
   #vocaboverview {
     --vo-pad: 24px;
   }
+}
+
+/* ---- popup วิธีเขียนตัวอักษร (แตะการ์ดคำศัพท์) — js/15-vocaboverview.js ---- */
+.vo-item {
+  cursor: pointer;
+}
+.vo-item:active {
+  transform: scale(.99);
+}
+
+.vo-stroke-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 16px) 14px calc(env(safe-area-inset-bottom) + 16px);
+  background: rgba(4, 7, 20, .82);
+}
+.vo-stroke-popup[hidden] { display: none; }
+
+.vo-stroke-card {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px 16px;
+  background: linear-gradient(180deg, #182247 0%, #101633 100%);
+  border: 1.5px solid #334185;
+  border-radius: 16px;
+  box-shadow: var(--sh-3);
+}
+
+.vo-stroke-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid #496482;
+  background: #131a3d;
+  color: #90a6bf;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vo-stroke-close:active { transform: scale(.92); }
+
+.vo-stroke-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  padding: 0 44px;
+}
+.vo-stroke-zh {
+  font-family: "Noto Sans SC", sans-serif;
+  font-weight: 700;
+  font-size: clamp(26px, 7vw, 34px);
+  color: var(--fg);
+}
+.vo-stroke-py {
+  font-family: var(--font-pinyin);
+  font-size: clamp(13px, 3.6vw, 15px);
+  color: #8fd3ff;
+}
+.vo-stroke-th {
+  font-size: clamp(13px, 3.6vw, 15px);
+  color: var(--fg-mute);
+}
+
+.vo-stroke-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.vo-stroke-writer {
+  width: min(300px, 68vw);
+  aspect-ratio: 1;
+  border: 2px solid #93a9c0;
+  border-radius: 14px;
+  overflow: hidden;
+  background-color: #fbf7ee;
+  background-image:
+    linear-gradient(90deg, transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(transparent calc(50% - .5px), #c9d1d8 calc(50% - .5px), #c9d1d8 calc(50% + .5px), transparent calc(50% + .5px));
+}
+.vo-stroke-writer svg { display: block; width: 100%; height: 100%; }
+.vo-stroke-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  color: #b08000;
+  font-size: clamp(12px, 3.4vw, 14px);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.vo-stroke-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.vo-stroke-chars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.vo-stroke-chars[hidden] { display: none; }
+.vo-stroke-chip {
+  padding: 3px 10px;
+  border: 1px solid #496482;
+  border-radius: 8px;
+  background: #131a3d;
+  font: 24px "Noto Sans SC", sans-serif;
+  color: #90a6bf;
+  cursor: pointer;
+}
+.vo-stroke-chip.current { border-color: #ffc46b; color: #ffe0a1; background: #483923; }
+
+
+/* ===========================================================
+   เกมภารกิจประจำวัน (Daily Missions) — js/16-missions.js
+   บับเบิ้ล 📖 มุมซ้ายล่างหน้าหลัก / แถบความคืบหน้าลอย / overlay สรุปภารกิจ
+   =========================================================== */
+#missionFab {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 500;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 210, 120, .75);
+  background: linear-gradient(160deg, #ffb25a, #ff5722);
+  box-shadow: 0 6px 20px rgba(255, 110, 40, .45), 0 0 26px rgba(255, 160, 60, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#missionFab[hidden] { display: none; }
+#missionFab:active { transform: scale(.94); }
+/* ขยับแค่ไอคอนข้างใน ไม่ขยับปุ่ม — ปุ่มอยู่กับที่จึงแตะง่ายและ Playwright click ได้ */
+#missionFab .ms-fab-icon { font-size: 28px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); animation: msBob 2.6s ease-in-out infinite; }
+.ms-fab-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #0d1330;
+  border: 2px solid rgba(255, 210, 120, .8);
+  color: #ffd76a;
+  font: 700 11px/18px var(--font-ui);
+  text-align: center;
+}
+/* ครบทั้ง 4 ภารกิจแล้ว → สีทึบ ไม่เรืองแสง ไม่ขยับ (ยังไม่ครบ = สีสว่างตามด้านบน) */
+#missionFab.all-done {
+  background: var(--surface-2);
+  border-color: var(--line-1);
+  box-shadow: var(--sh-1);
+  animation: none;
+  opacity: .88;
+}
+#missionFab.all-done .ms-fab-badge { border-color: rgba(60, 224, 127, .55); color: #58ff88; }
+@keyframes msBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* แถบความคืบหน้าลอยตอนเล่นภารกิจ — แถบเองไม่กินการแตะ ยกเว้นปุ่ม ✖ */
+.ms-hud {
+  position: fixed;
+  top: calc(6px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 540px);
+  padding: 5px 7px 5px 14px;
+  border-radius: 999px;
+  background: rgba(10, 16, 38, .92);
+  border: 1px solid rgba(255, 210, 120, .55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+  font: 600 12.5px/1.4 var(--font-ui);
+  color: #ffe3ad;
+  pointer-events: none;
+}
+.ms-hud[hidden] { display: none; }
+#msHudText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#msHudQuit {
+  pointer-events: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* overlay กลาง (ผ่านเกม / ครบภารกิจ / ยืนยันออก) + หน้าต่างสรุปภารกิจ */
+.ms-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 7, 20, .86);
+  animation: msFadeIn .18s var(--ease-out) both;
+}
+.ms-overlay[hidden] { display: none; }
+@keyframes msFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.ms-box { width: min(480px, 100%); max-height: 86vh; overflow-y: auto; }
+.ms-ov-icon { font-size: 44px; line-height: 1; }
+.ms-actions { display: flex; gap: 10px; justify-content: center; width: 100%; flex-wrap: wrap; }
+.ms-actions .big-btn { flex: 1 1 150px; }
+.ms-panel-sub { color: var(--fg-dim); font-size: 13px; }
+.ms-panel-note { color: var(--fg-mute); font-size: 12px; line-height: 1.6; }
+
+/* รายการภารกิจในหน้าต่างสรุป */
+.ms-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.ms-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+.ms-row.done { border-color: rgba(60, 224, 127, .45); }
+.ms-row-icon { font-size: 24px; width: 34px; text-align: center; flex-shrink: 0; }
+.ms-row-body { flex: 1; min-width: 0; }
+.ms-row-name { font-weight: 700; font-size: 15px; }
+.ms-row-desc { color: var(--fg-dim); font-size: 12.5px; line-height: 1.5; }
+.ms-row-state {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.ms-row.done .ms-row-state { border-color: rgba(60, 224, 127, .6); color: #58ff88; }
+.ms-lvl-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(143, 211, 255, .14);
+  border: 1px solid rgba(143, 211, 255, .35);
+  color: var(--accent-cool);
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+/* ป้ายบนหน้าจบเกม: บอกว่าภารกิจจะเริ่มเกมนี้ใหม่เอง */
+.ms-over-note { color: #ffd76a; font-weight: 700; font-size: 14px; line-height: 1.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  #missionFab { animation: none; }
+  .ms-overlay { animation: none; }
 }

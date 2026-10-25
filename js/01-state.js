@@ -681,9 +681,10 @@ function renderLevelSelect() {
   updateStartBtn();
 }
 const DIFF = {
-  easy:   { label: "ง่าย",     base: 7,  cap: 30, ramp: 0.45, spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
-  medium: { label: "ปานกลาง", base: 19, cap: 48, ramp: 1.1,  spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
-  hard:   { label: "ยากมาก",  base: 30, cap: 78, ramp: 1.8,  spawn0: 2.3, spawnDecay: 0.028, spawnMin: 0.75 },
+  // ต.ค. 2026: ลดความเร็วการตกลง ~30% ทุกระดับ (base/ramp/cap ปรับตามสัดส่วน) ให้เล่นได้นานขึ้น
+  easy:   { label: "ง่าย",     base: 5,  cap: 20, ramp: 0.3,  spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
+  medium: { label: "ปานกลาง", base: 13, cap: 34, ramp: 0.75, spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
+  hard:   { label: "ยากมาก",  base: 21, cap: 55, ramp: 1.25, spawn0: 2.3, spawnDecay: 0.028, spawnMin: 0.75 },
 };
 
 

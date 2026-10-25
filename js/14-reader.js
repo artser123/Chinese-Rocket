@@ -850,8 +850,7 @@ function readerSelectStory(story, resume = false, withIntro = true) {
   readerStopCurrentAudio(true);
   readerState = { story, nextTurn: 0, activeTurn: -1, playback: null, resume };
   readerEndedFor = null;
-  $("readerLibrary").hidden = true;
-  $("readerPlayer").hidden = false;
+  readerShowPlayerView(true);
   $("readerHeading").textContent = story.title_zh;
   $("readerStoryNumber").textContent = `HSK ${story.level} · STORY ${story.reader_story_number}`;
   $("readerTitle").textContent = story.title_zh;
@@ -1198,12 +1197,20 @@ function readerEnded() {
   readerSyncBackgroundAudio();
 }
 
+// สลับหน้า รายการบทอ่าน ↔ หน้าเนื้อหาบทอ่าน — ตอนอยู่หน้าเนื้อหา ปุ่ม ✖️ ออกจากโหมด
+// ถูกแทนด้วยปุ่ม "เลือกบทอ่าน" (กลับรายการ) ตามที่ผู้ใช้ขอ ออกจากโหมดทำที่หน้ารายการ
+function readerShowPlayerView(on) {
+  $("readerPlayer").hidden = !on;
+  $("readerLibrary").hidden = on;
+  $("readerSelectBtn").hidden = !on;
+  $("readerQuitBtn").hidden = on;
+}
+
 function readerBackToList() {
   readerStopCurrentAudio();
   readerRestoreMediaActions();
   crClearMediaSession();
-  $("readerPlayer").hidden = true;
-  $("readerLibrary").hidden = false;
+  readerShowPlayerView(false);
   $("readerHeading").textContent = "เลือกบทอ่าน";
   readerSetMediaState("none");
   readerSyncMediaButtons();
@@ -1215,8 +1222,7 @@ function quitReaderGame() {
   readerStopCurrentAudio();
   readerRestoreMediaActions();
   crClearMediaSession();
-  $("readerPlayer").hidden = true;
-  $("readerLibrary").hidden = false;
+  readerShowPlayerView(false);
   $("readerHeading").textContent = "เลือกบทอ่าน";
   readerSetMediaState("none");
   readerSyncMediaButtons();
@@ -1226,8 +1232,7 @@ function quitReaderGame() {
 
 async function startReaderGame() {
   switchScreen($("reader"));
-  $("readerPlayer").hidden = true;
-  $("readerLibrary").hidden = false;
+  readerShowPlayerView(false);
   $("readerHeading").textContent = "เลือกบทอ่าน";
   $("readerSearch").value = "";
   $("readerListStatus").textContent = "กำลังโหลดบทอ่านส่วนตัวในเครื่อง…";
@@ -1277,7 +1282,7 @@ function readerHandleThaiEnded() {
 
 // ---- interface wiring ---------------------------------------------------
 $("readerQuitBtn").addEventListener("click", () => { sfx.click(); quitReaderGame(); });
-$("readerBackBtn").addEventListener("click", () => { sfx.click(); readerBackToList(); });
+$("readerSelectBtn").addEventListener("click", () => { sfx.click(); readerBackToList(); });
 $("readerMoreBtn").addEventListener("click", () => { sfx.click(); readerToggleExtra(); });
 readerApplyExtraOpen();
 readerSyncMoreBtn();

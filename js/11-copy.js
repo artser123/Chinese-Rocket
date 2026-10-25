@@ -298,6 +298,14 @@ $("cpWordSpeakBtn").addEventListener("click", () => {
     playWordAudio(audioKey, [[spoken, "zh-CN"]]);
   }
 });
+// ปุ่ม Bing ในป๊อปอัปคำศัพท์ (ใช้ร่วมทุกโหมดที่แตะคำได้) — เปิดในเว็บของแอพ (APK)
+// แล้วกดย้อนกลับกลับมาหน้าเกมเดิมได้; ปิดป๊อปอัปก่อนเพื่อไม่ให้ค้างระหว่างดูเว็บ
+$("cpWordBingBtn").addEventListener("click", () => {
+  sfx.click();
+  const word = cpPopupWord;
+  cpHideWordPopup();
+  if (word) crOpenWeb(dictBingUrl(word));
+});
 // ปิดป๊อปอัปเมื่อแตะที่อื่น เลื่อนจอ หรือกลับไปโหมดอื่น (ป๊อปอัปเป็น position:fixed จึงไม่ตามจอ)
 document.addEventListener("pointerdown", (e) => {
   const pop = $("cpWordPopup");

@@ -679,7 +679,10 @@ function updateBombHUD() {
   }
   s.hudScore = s.score;
   const livesEl = $("bombLives");
-  livesEl.textContent = `ชีวิต ${s.lives} / 3 ${"💣".repeat(Math.max(0, s.lives))}`;
+  // โหมดภารกิจ: ไม่มีชีวิตให้หัก — ผ่านเมื่อปลดระเบิดครบ 20 คำ (คำที่เลือกพินอินผิดไม่ถูกนับ)
+  livesEl.textContent = s.mission
+    ? `📖 ปลดแล้ว ${s.defused} / 20 คำ • ♾️`
+    : `ชีวิต ${s.lives} / 3 ${"💣".repeat(Math.max(0, s.lives))}`;
   if (s.hudLives !== undefined && s.lives < s.hudLives) {
     livesEl.classList.remove("lost");
     void livesEl.offsetWidth;
@@ -692,13 +695,13 @@ function updateBombHUD() {
   applyBombSky(bombTier(s));
 }
 
-function startBombGame(level, diff = difficulty) {
+function startBombGame(level, diff = difficulty, opts = null) {
   stopBombGame();
   currentLevel = level;
-  lastStarter = () => startBombGame(level, diff);
+  lastStarter = () => startBombGame(level, diff, opts);
   const words = bombVocabulary(level);
   $("bombFx").style.display = "";
-  bombGame = { level, difficulty: diff, words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
+  bombGame = { level, difficulty: diff, mission: !!(opts && opts.mission), words, deck: [], lastWord: null, word: null, phase: "loading", score: 0,
     lives: 3, defused: 0, bonuses: 0, elapsed: 0, charIndex: 0, paused: false,
     frame: 0, lastTime: performance.now(), request: 0, controller: null,
     perfectStreak: 0, charHadMistake: false, lastBombPos: null, fuseWorld: null, skyTier: -1, hudScore: 0, hudLives: 3,
@@ -714,7 +717,8 @@ function startBombGame(level, diff = difficulty) {
   bombFxClear();
   $("bombFlash").classList.remove("show");
   $("bombOutlinePlay").checked = $("bombOutlineSetup").checked;
-  $("bombLevel").textContent = `${levelDisplayName(level)} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`;
+  $("bombLevel").textContent = `${levelDisplayName(level)} • ${BOMB_DIFF[diff].label} • ${words.length} คำ • ไม่ซ้ำจนกว่าจะครบชุด`
+    + (bombGame.mission ? " • 📖 ภารกิจ: ปลดระเบิดครบ 20 คำ (ไม่จำกัดชีวิต/เวลา)" : "");
   $("bombMuteBtn").textContent = muted ? "เปิดเสียง" : "ปิดเสียง";
   $("bombMuteBtn").setAttribute("aria-pressed", String(muted));
   switchScreen($("bomb"));
@@ -970,7 +974,8 @@ function resolveBomb(success, reason = "") {
     const fr = $("bombFeedback").getBoundingClientRect();
     bombCelebrate(fr.width ? fr.left + fr.width / 2 : window.innerWidth / 2, fr.height ? fr.top + 42 : window.innerHeight * 0.3);
   } else {
-    s.lives--;
+    // โหมดภารกิจไม่หักชีวิต — คำที่พลาด (เลือกพินอินผิด/เขียนไม่ทัน) แค่ไม่ถูกนับใน 20 คำ
+    if (!s.mission) s.lives--;
     sfx.bombBlast();
     const p = bombBlastPoint();
     bombExplode(p.x, p.y);
@@ -982,8 +987,10 @@ function resolveBomb(success, reason = "") {
   $("bombRevealThai").textContent = s.word[2];
   $("bombResultDetail").textContent = success
     ? `+100 คะแนน${s.bonus ? " +50 โบนัสพินอิน" : " • ไม่มีโบนัสพินอิน"} • เตรียมรับลูกถัดไป`
-    : `เสีย 1 ชีวิต • เหลือ ${s.lives} / 3${s.lives ? " • ลองคำใหม่กัน" : " • เกมจบ"}`;
-  $("bombNextBtn").textContent = s.lives ? "ลูกถัดไป" : "ดูผลคะแนน";
+    : s.mission
+      ? `ไม่เสียชีวิต • คำนี้ไม่ถูกนับ • ปลดแล้ว ${s.defused} / 20 คำ • ลองคำใหม่ต่อ`
+      : `เสีย 1 ชีวิต • เหลือ ${s.lives} / 3${s.lives ? " • ลองคำใหม่กัน" : " • เกมจบ"}`;
+  $("bombNextBtn").textContent = s.lives || s.mission ? "ลูกถัดไป" : "ดูผลคะแนน";
   showBombView("bombFeedback");
   $("bombNextBtn").focus({ preventScroll: true });
   updateBombHUD();
@@ -1017,7 +1024,8 @@ function bombLoop(now, session) {
 function continueBombGame() {
   const s = bombGame;
   if (!s || s.paused || s.phase !== "feedback") return;
-  if (s.lives > 0) { nextBombWord(); return; }
+  // โหมดภารกิจไม่มีวันจบเกม — วนเล่นไปเรื่อยๆ จนกว่าจะปลดครบ 20 คำ (ตัวรันภารกิจเป็นคนจับ pass)
+  if (s.lives > 0 || s.mission) { nextBombWord(); return; }
   stopBombGame();
   sfx.over();
   showGameOver("จบเกมเขียนปลดระเบิด", s.score,

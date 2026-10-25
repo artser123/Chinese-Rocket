@@ -1,12 +1,15 @@
 "use strict";
 /* ================= Meteors ================= */
+// ท้องฟ้าเป็น gradient คงที่ตามขนาดจอ — แคชไว้ สร้างใหม่เฉพาะตอน H เปลี่ยน
+// (เดิมสร้างใหม่ทุกเฟรม แพงมากบนจอใหญ่ เช่น แท็บเล็ต)
+let meteorSkyGrad = null, meteorSkyH = 0;
 function spawnMeteor() {
   if (meteors.length >= maxOnScreen()) return;
   const w = pick(pool);
   ctx.font = `700 16px sans-serif`;
   const tw = Math.max(ctx.measureText(w[1]).width, 28);
   const r = Math.max(26, tw / 2 + 12);
-  meteors.push({
+  const m = {
     word: w,
     x: rand(r + 6, W - r - 6),
     y: -r - 20,
@@ -15,7 +18,80 @@ function spawnMeteor() {
     speed: fallSpeed() * rand(0.85, 1.2),
     wobble: rand(0, 6.28),
     rot: rand(0, 6.28),
-  });
+  };
+  // รูปทรงหิน (รวมเงาเบลอ) และป้ายพินอินไม่เปลี่ยนตลอดชีวิตของลูกนี้
+  // → pre-render เป็น sprite ครั้งเดียว แทนการ shadowBlur + strokeText ทุกเฟรม
+  m.rock = makeMeteorRockSprite(m);
+  m.label = makeMeteorLabelSprite(w[1], Math.max(15, r * 0.52));
+  meteors.push(m);
+}
+
+// sprite ของก้อนหิน (เบกที่ rot=0 แล้วค่อยหมุนตอน blit — เงาจึงหมุนตามหิน แทบมองไม่ออก)
+function makeMeteorRockSprite(m) {
+  const R = m.r;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const margin = Math.ceil(R * 1.0); // เผื่อเงาเบลอ 0.7R + offset 0.18R
+  const size = Math.ceil(R * 1.15 + margin) * 2;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = Math.ceil(size * dpr);
+  const c2 = cv.getContext("2d");
+  c2.scale(dpr, dpr);
+  c2.translate(size / 2, size / 2);
+  const rock = c2.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.2, 0, 0, R);
+  rock.addColorStop(0, "#8a5a3a");
+  rock.addColorStop(1, "#4a2c1c");
+  c2.shadowColor = "rgba(0,0,0,.6)";
+  c2.shadowBlur = R * 0.7;
+  c2.shadowOffsetY = R * 0.18;
+  c2.fillStyle = rock;
+  c2.beginPath();
+  const n = m.verts.length;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.28;
+    const rr = R * m.verts[i];
+    i ? c2.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : c2.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  c2.closePath();
+  c2.fill();
+  c2.strokeStyle = "rgba(0,0,0,.35)";
+  c2.lineWidth = 2;
+  c2.stroke();
+  c2.fillStyle = "rgba(0,0,0,.25)";
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.1;
+    c2.beginPath();
+    c2.arc(Math.cos(a) * R * 0.5, Math.sin(a) * R * 0.5, R * 0.16, 0, 6.28);
+    c2.fill();
+  }
+  return { cv, size };
+}
+
+// sprite ของป้ายพินอิน (ข้อความ/ขนาดคงที่ต่อลูก — เดิม strokeText+เงาเบลอใหม่ทุกเฟรม)
+function makeMeteorLabelSprite(text, fontPx) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const font = `700 ${fontPx}px sans-serif`;
+  const probe = document.createElement("canvas").getContext("2d");
+  probe.font = font;
+  const tw = probe.measureText(text).width;
+  const w = Math.ceil(tw + fontPx * 1.2);
+  const h = Math.ceil(fontPx * 2.2);
+  const cv = document.createElement("canvas");
+  cv.width = Math.ceil(w * dpr);
+  cv.height = Math.ceil(h * dpr);
+  const c2 = cv.getContext("2d");
+  c2.scale(dpr, dpr);
+  c2.font = font;
+  c2.textAlign = "center";
+  c2.textBaseline = "middle";
+  c2.shadowColor = "rgba(0,0,0,.65)";
+  c2.shadowBlur = 5;
+  c2.shadowOffsetY = 1;
+  c2.lineWidth = 4;
+  c2.strokeStyle = "rgba(0,0,0,.85)";
+  c2.strokeText(text, w / 2, h / 2);
+  c2.fillStyle = "#ffe9b0";
+  c2.fillText(text, w / 2, h / 2);
+  return { cv, w, h };
 }
 
 function hitGround(m, idx) {
@@ -178,10 +254,13 @@ function updateHUD() {
 
 /* ================= Draw ================= */
 function drawBackground(dt) {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#05081e");
-  g.addColorStop(1, "#141b45");
-  ctx.fillStyle = g;
+  if (!meteorSkyGrad || meteorSkyH !== H) {
+    meteorSkyGrad = ctx.createLinearGradient(0, 0, 0, H);
+    meteorSkyGrad.addColorStop(0, "#05081e");
+    meteorSkyGrad.addColorStop(1, "#141b45");
+    meteorSkyH = H;
+  }
+  ctx.fillStyle = meteorSkyGrad;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "#fff";
   for (const s of stars) {
@@ -284,48 +363,13 @@ function drawMeteor(m) {
   ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 2.1, 0, 6.28); ctx.fill();
   glowOff(ctx);
 
-  // rock — เงาหลักด้านล่างทำให้ก้อนหินหลุดจากพื้นหลัง (ตัดกับแสงด้านบน)
-  const rock = ctx.createRadialGradient(m.x - m.r * 0.3, m.y - m.r * 0.3, m.r * 0.2, m.x, m.y, m.r);
-  rock.addColorStop(0, "#8a5a3a");
-  rock.addColorStop(1, "#4a2c1c");
+  // rock + pinyin — pre-render sprite (สร้างตอน spawn) แทนการวาด shadowBlur + strokeText ใหม่ทุกเฟรม
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,.6)";
-  ctx.shadowBlur = m.r * 0.7;
-  ctx.shadowOffsetY = m.r * 0.18;
-  ctx.fillStyle = rock;
-  ctx.beginPath();
-  const n = m.verts.length;
-  for (let i = 0; i < n; i++) {
-    const a = m.rot + (i / n) * 6.28;
-    const rr = m.r * m.verts[i];
-    const px = m.x + Math.cos(a) * rr, py = m.y + Math.sin(a) * rr;
-    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,.35)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // craters
-  ctx.fillStyle = "rgba(0,0,0,.25)";
-  for (let i = 0; i < 3; i++) {
-    const a = m.rot + i * 2.1;
-    ctx.beginPath();
-    ctx.arc(m.x + Math.cos(a) * m.r * 0.5, m.y + Math.sin(a) * m.r * 0.5, m.r * 0.16, 0, 6.28);
-    ctx.fill();
-  }
-  ctx.restore(); // ปิดเงาของก้อนหิน ก่อนวาดตัวอักษร
-  // pinyin label — ตัวอักษรมีเงามืด+เส้นขอบดำ อ่านชัดบนพื้นหลังที่วุ่นวาย
-  ctx.font = `700 ${Math.max(15, m.r * 0.52)}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  textShadowOn(ctx, 5);
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = "rgba(0,0,0,.85)";
-  ctx.strokeText(m.word[1], m.x, m.y);
-  ctx.fillStyle = "#ffe9b0";
-  ctx.fillText(m.word[1], m.x, m.y);
-  textShadowOff(ctx);
+  ctx.translate(m.x, m.y);
+  ctx.rotate(m.rot);
+  ctx.drawImage(m.rock.cv, -m.rock.size / 2, -m.rock.size / 2, m.rock.size, m.rock.size);
+  ctx.restore();
+  ctx.drawImage(m.label.cv, m.x - m.label.w / 2, m.y - m.label.h / 2, m.label.w, m.label.h);
 }
 
 function drawMissileBody() {

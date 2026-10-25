@@ -150,9 +150,20 @@ function dictSearch(query) {
 
 let dictTransSeq = 0; // stale-guard for the sentence translation card
 
+// เล่นเสียงจีนจากไฟล์สำเร็จรูปในแอปก่อน (audio/zh/<คำหรือประโยค>.mp3 — มีครบ
+// ทั้งคำศัพท์ HSK 1–9/หมวดต่างๆ และประโยคทุกประโยคใน SENTENCES) แล้วค่อยตกไป
+// TTS เมื่อไม่มีไฟล์ — เดิมปุ่ม 🔊 ทุกตัวเรียก speak() ซึ่งเป็น TTS ล้วน
+// และ TTS ของเครื่องจะเงียบสนิทใน APK ถ้าไม่ได้ติดตั้งชุดเสียงอ่านภาษาจีน
+function dictSpeakZh(zh, pinyin) {
+  const base = String(zh || "").split(/[｜|]/)[0].trim();
+  if (!base) return;
+  const key = wordAudioKey(base, pinyin);
+  const spoken = key === "了-le" ? "le" : base;
+  wordAudio.play([{ url: `audio/zh/${key}.mp3`, tts: [spoken, "zh-CN"] }], null);
+}
+
 // free MyMemory translation API (no key needed; falls back to Bing link on failure)
 async function dictTranslate(text, langpair) {
-  if (window.CR_OFFLINE_APP) throw new Error("Offline app: online translation is unavailable");
   const url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=" + langpair;
   const res = await fetch(url);
   if (!res.ok) throw new Error("translate " + res.status);
@@ -242,7 +253,7 @@ async function dictAddTranslation(q) {
     ${hasCjk ? DICT_STROKES_HTML : ""}`;
   box.querySelector(".dict-translate-zh").textContent = q;
   box.querySelector(".dict-translate-pinyin").textContent = dictSentencePinyin(q);
-  box.querySelector(".dict-speak-btn").addEventListener("click", () => speak(q));
+  box.querySelector(".dict-speak-btn").addEventListener("click", () => dictSpeakZh(q));
   const copyBtn = box.querySelector(".dict-copy-btn");
   copyBtn.addEventListener("click", () => { sfx.click(); dictCopyText(copyBtn, q); });
   const strokeBtn = box.querySelector(".dict-stroke-btn");
@@ -255,7 +266,7 @@ async function dictAddTranslation(q) {
     thBox.textContent = th || "(แปลไม่ได้)";
   } catch (e) {
     if (seq !== dictTransSeq) return;
-    thBox.innerHTML = `แปลอัตโนมัติไม่สำเร็จ — <a href="${dictBingUrl(q)}" target="_blank" rel="noopener">🌐 เปิด Bing Translator</a>`;
+    thBox.innerHTML = `แปลอัตโนมัติไม่สำเร็จ — <a href="${dictBingUrl(q)}" target="_blank" rel="noopener" data-cr-web>🌐 เปิด Bing Translator</a>`;
   }
 }
 
@@ -284,7 +295,7 @@ async function dictAddTranslationTh(q) {
     box.querySelector(".dict-translate-pinyin").textContent = dictSentencePinyin(zh);
     const spkBtn = box.querySelector(".dict-speak-btn");
     spkBtn.hidden = false;
-    spkBtn.addEventListener("click", () => speak(zh));
+    spkBtn.addEventListener("click", () => dictSpeakZh(zh));
     strokeBtn.dataset.zh = zh;
     strokeBtn.hidden = !/[一-鿿]/.test(zh);
     const copyBtn = box.querySelector(".dict-copy-btn");
@@ -294,7 +305,7 @@ async function dictAddTranslationTh(q) {
     if (seq !== dictTransSeq) return;
     zhBox.textContent = "(แปลไม่ได้)";
     box.querySelector(".dict-translate-pinyin").innerHTML =
-      `<a href="${dictBingUrl(q)}" target="_blank" rel="noopener">🌐 แปลด้วย Bing Translator</a>`;
+      `<a href="${dictBingUrl(q)}" target="_blank" rel="noopener" data-cr-web>🌐 แปลด้วย Bing Translator</a>`;
   }
 }
 
@@ -315,7 +326,7 @@ function dictRenderResults(results, query) {
     const from = isThai ? "th" : isChinese ? "zh-Hans" : "auto";
     const to = isThai ? "zh-Hans" : "th";
     const bingUrl = `https://www.bing.com/translator?from=${from}&to=${to}&text=` + encodeURIComponent(query);
-    dictResults.innerHTML = `<div class="dict-not-found"><p>🔍 ไม่พบคำ "${query}" ในฐานข้อมูล HSK 1–9</p><p>ลองค้นหาผ่าน Bing Translator:</p><a href="${bingUrl}" target="_blank" rel="noopener">🌐 Bing Translator</a></div>`;
+    dictResults.innerHTML = `<div class="dict-not-found"><p>🔍 ไม่พบคำ "${query}" ในฐานข้อมูล HSK 1–9</p><p>ลองค้นหาผ่าน Bing Translator:</p><a href="${bingUrl}" target="_blank" rel="noopener" data-cr-web>🌐 Bing Translator</a></div>`;
     return;
   }
   dictResults.innerHTML = "";
@@ -345,10 +356,10 @@ function dictRenderResults(results, query) {
     <div class="dict-entry-th ${thClass}">${thText}</div>
     ${altHtml}
     <div class="dict-entry-actions">
-      <button class="dict-speak-btn" data-zh="${r.zh}">🔊 ฟังเสียง</button>
+      <button class="dict-speak-btn" data-zh="${r.zh}" data-py="${r.py || ""}">🔊 ฟังเสียง</button>
       <button class="dict-copy-btn" data-zh="${r.zh}">📋 คัดลอก</button>
       ${hasCjk ? `<button class="dict-stroke-btn" data-zh="${r.zh}">✍️ ดูเส้นขีด</button>` : ""}
-      <a class="bing-link" href="${bingUrl}" target="_blank" rel="noopener">🌐 แปลด้วย Bing</a>`;
+      <a class="bing-link" href="${bingUrl}" target="_blank" rel="noopener" data-cr-web>🌐 แปลด้วย Bing</a>`;
     html += `</div>`;
     if (hasCjk) html += DICT_STROKES_HTML;
     if (examples.length) {
@@ -370,7 +381,7 @@ function dictRenderResults(results, query) {
   }
   // wire up speak buttons
   dictResults.querySelectorAll(".dict-speak-btn, .dict-ex-speak-btn").forEach((btn) => {
-    btn.addEventListener("click", () => speak(btn.dataset.zh));
+    btn.addEventListener("click", () => dictSpeakZh(btn.dataset.zh, btn.dataset.py));
   });
   // wire up copy buttons
   dictResults.querySelectorAll(".dict-copy-btn").forEach((btn) => {
@@ -946,6 +957,7 @@ function dictInitCanvas() {
   dictStrokes = []; dictCurrentStroke = []; dictDrawing = false;
   dictRecogSeq++; // cancel any recognition still in flight
   dictRefitCanvas();
+  dictUpdateUndoBtn();
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
   // wire pointer events
   dictCanvas.onpointerdown = dictPointerDown;
@@ -972,6 +984,7 @@ function dictCanvasPos(e) {
 function dictPointerDown(e) {
   e.preventDefault();
   dictDrawing = true;
+  dictUpdateUndoBtn(); // ระหว่างเขียนเส้นใหม่ ปุ่มย้อนกลับถูกปิดไว้ก่อน
   dictStrokeT0 = performance.now();
   const [x, y] = dictCanvasPos(e);
   dictCurrentStroke = [[x, y, 0]];
@@ -999,6 +1012,7 @@ function dictPointerUp(e) {
   }
   if (dictCurrentStroke.length) dictStrokes.push(dictCurrentStroke);
   dictCurrentStroke = [];
+  dictUpdateUndoBtn();
   dictRecognize();
 }
 
@@ -1007,7 +1021,40 @@ function dictClearCanvas() {
   dictCtx.fillStyle = "#fff"; dictCtx.fillRect(0, 0, dictW, dictH);
   dictStrokes = []; dictCurrentStroke = [];
   dictRecogSeq++; // cancel any recognition still in flight
+  dictUpdateUndoBtn();
   $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
+}
+
+// วาดเส้นทั้งหมดใน dictStrokes ลงพื้นขาวใหม่ — ปกติ canvas วาดสะสมทีละเส้น
+// จึงต้องมี repaint ตอนลบเส้นด้วยปุ่มย้อนกลับ
+function dictRepaintCanvas() {
+  dictCtx.fillStyle = "#fff";
+  dictCtx.fillRect(0, 0, dictW, dictH);
+  dictCtx.strokeStyle = "#ff5722";
+  dictCtx.lineWidth = 10;
+  for (const s of dictStrokes) {
+    if (!s.length) continue;
+    dictCtx.beginPath();
+    dictCtx.moveTo(s[0][0], s[0][1]);
+    for (let i = 1; i < s.length; i++) dictCtx.lineTo(s[i][0], s[i][1]);
+    dictCtx.stroke();
+  }
+}
+
+function dictUpdateUndoBtn() {
+  const btn = $("dictWriteUndoBtn");
+  if (btn) btn.disabled = !dictStrokes.length || dictDrawing;
+}
+
+// ย้อนกลับเส้นที่เขียนก่อนหน้า: ลบเส้นสุดท้าย วาดเส้นที่เหลือใหม่ แล้วจำแนกลายมือใหม่
+function dictUndoStroke() {
+  if (!dictCtx || dictDrawing || !dictStrokes.length) return;
+  dictStrokes.pop();
+  dictRecogSeq++; // cancel any recognition still in flight
+  dictRepaintCanvas();
+  dictUpdateUndoBtn();
+  if (dictStrokes.length) dictRecognize();
+  else $("dictCharPicker").innerHTML = '<p style="color:#8b95c9;">วาดตัวอักษรจีนได้เลย</p>';
 }
 
 // Google Input Tools handwriting API — much more accurate than the offline
@@ -1100,7 +1147,7 @@ $("dictSearchBtn").addEventListener("click", () => {
 });
 $("dictBingBtn").addEventListener("click", () => {
   sfx.click();
-  window.open(dictBingUrl(dictInput.value.trim()), "_blank", "noopener");
+  crOpenWeb(dictBingUrl(dictInput.value.trim()));
 });
 dictInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dictSearch(); } });
 dictInput.addEventListener("input", () => {
@@ -1139,6 +1186,7 @@ window.addEventListener("resize", () => {
 });
 $("dictWriteCloseBtn").addEventListener("click", () => { sfx.click(); dictWritePanel.hidden = true; });
 $("dictWriteClearBtn").addEventListener("click", () => { sfx.click(); dictClearCanvas(); });
+$("dictWriteUndoBtn").addEventListener("click", () => { sfx.click(); dictUndoStroke(); });
 $("dictWriteClearTextBtn").addEventListener("click", () => {
   sfx.click();
   dictInput.value = "";

@@ -642,7 +642,10 @@
       <div class="pod-brand">🎙️ MAOMI CHINESE</div>
       <h2 id="podHeading">เลือกตอนพอดแคสต์</h2>
     </div>
-    <button id="podQuitBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+    <div class="pod-header-actions">
+      <button id="podSelectBtn" class="pod-back" type="button" hidden>เลือกบทอ่าน</button>
+      <button id="podQuitBtn" class="icon-btn" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+    </div>
   </header>
   <section id="podEpisodes" class="pod-episodes" aria-label="รายการพอดแคสต์">
     <div class="pod-source-tabs" role="group" aria-label="เลือกแหล่งพอดแคสต์">
@@ -663,13 +666,6 @@
   </section>
   <section id="podPlayer" class="pod-player" hidden>
     <div class="pod-sticky-controls">
-      <div class="pod-bar-head">
-        <button id="podBackBtn" class="pod-back" type="button">← เลือกตอนอื่น</button>
-        <div class="pod-bar-tools">
-          <span id="podSleepHint" class="pod-sleep-badge"></span>
-          <button id="podMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="podExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
-        </div>
-      </div>
       <div class="pod-transport">
         <div class="pod-seek-row">
           <span id="podCurrentTime">0:00</span>
@@ -692,6 +688,8 @@
           <div class="pod-display-actions">
             <button id="podPinyinToggle" class="pod-thai-toggle" type="button" aria-pressed="true" title="ซ่อนพินอิน">拼音</button>
             <button id="podThaiToggle" class="pod-thai-toggle" type="button" aria-pressed="true" title="ซ่อนคำแปล">ไทย</button>
+            <span id="podSleepHint" class="pod-sleep-badge"></span>
+            <button id="podMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="podExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
           </div>
         </div>
         <div id="podExtra" class="pod-extra" hidden>
@@ -741,7 +739,10 @@
       <div class="reader-brand">📚 HSK STORY READER</div>
       <h2 id="readerHeading">เลือกบทอ่าน</h2>
     </div>
-    <button id="readerQuitBtn" class="icon-btn" type="button" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+    <div class="pod-header-actions">
+      <button id="readerSelectBtn" class="pod-back" type="button" hidden>เลือกบทอ่าน</button>
+      <button id="readerQuitBtn" class="icon-btn" type="button" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">✖️</button>
+    </div>
   </header>
   <section id="readerLibrary" class="reader-library" aria-label="รายการบทอ่าน">
     <div id="readerLevelTabs" class="reader-level-tabs" role="group" aria-label="เลือกระดับ HSK">
@@ -757,13 +758,6 @@
   </section>
   <section id="readerPlayer" class="reader-player" hidden>
     <div class="reader-sticky-controls">
-      <div class="pod-bar-head">
-        <button id="readerBackBtn" class="pod-back" type="button">← เลือกบทอ่าน</button>
-        <div class="pod-bar-tools">
-          <span id="readerSleepHint" class="pod-sleep-badge"></span>
-          <button id="readerMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="readerExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
-        </div>
-      </div>
       <div class="reader-transport">
         <div class="pod-seek-row">
           <span id="readerCurrentTime">0:00</span>
@@ -786,6 +780,8 @@
           <div class="pod-display-actions">
             <button id="readerPinyinToggle" class="reader-toggle" type="button" aria-pressed="true" title="ซ่อนพินอิน">拼音</button>
             <button id="readerThaiToggle" class="reader-toggle" type="button" aria-pressed="true" title="ซ่อนคำแปล">ไทย</button>
+            <span id="readerSleepHint" class="pod-sleep-badge"></span>
+            <button id="readerMoreBtn" class="pod-more-btn" type="button" aria-expanded="false" aria-controls="readerExtra" title="ตัวเลือกเพิ่มเติม" aria-label="ตัวเลือกเพิ่มเติม">⋯</button>
           </div>
         </div>
         <div id="readerExtra" class="pod-extra" hidden>
@@ -950,7 +946,10 @@
     <button id="dictWriteBtn" class="icon-btn" title="ค้นหาด้วยลายมือ">✍️</button>
   </div>
   <div id="dictWritePanel" class="dict-write" hidden>
-    <canvas id="dictWriter" width="220" height="220" aria-label="วาดตัวอักษรจีนด้วยนิ้วหรือเมาส์"></canvas>
+    <div class="dict-write-stage">
+      <canvas id="dictWriter" width="220" height="220" aria-label="วาดตัวอักษรจีนด้วยนิ้วหรือเมาส์"></canvas>
+      <button id="dictWriteUndoBtn" class="dict-undo-btn" type="button" title="ย้อนกลับเส้นที่เขียนก่อนหน้า" aria-label="ย้อนกลับเส้นที่เขียนก่อนหน้า" disabled>↩ ย้อนกลับ</button>
+    </div>
     <div id="dictCharPicker" aria-label="ตัวอักษรที่จดจำได้"></div>
     <p class="dict-write-hint">วาดตัวอักษรจีนบนช่อง — เขียนเรียงกันหลายตัวเป็นคำหรือประโยคยาวๆ ได้เลย ระบบจะเดาให้ด้านล่าง แตะคำที่ถูกเพื่อเพิ่มลงช่องค้นหา แล้วดูคำแปลทั้งประโยคในผลค้นหา</p>
     <button id="dictWriteClearBtn" class="big-btn secondary">🧹 ล้างลายมือ</button>
@@ -1034,16 +1033,25 @@
   <button id="voScrollTopBtn" class="vo-scroll-top-btn" title="ขึ้นด้านบน" aria-label="ขึ้นด้านบน" hidden>⬆</button>
 </div>
 
-  <div id="voListContainer" class="vo-list-container">
-    <div id="voList" class="vo-list"></div>
-    <div id="voEmptyNotice" class="vo-empty-notice" hidden>
-      <div class="vo-empty-icon">🔍</div>
-      <div class="vo-empty-title" id="voEmptyTitle">ไม่พบคำศัพท์ที่ตรงกับการค้นหา</div>
-      <div class="vo-empty-desc" id="voEmptyDesc">ลองค้นหาด้วยคำอื่น หรือกด "ทั้งหมด" เพื่อดูคำศัพท์ทั้งหมดในหมวดนี้</div>
+<!-- STROKE POPUP (เกมรวมคำศัพท์) — แตะการ์ดคำศัพท์เพื่อเปิดวิธีเขียนเส้นขีดรายตัว -->
+<div id="voStrokePopup" class="vo-stroke-popup" role="dialog" aria-modal="true" aria-label="วิธีเขียนตัวอักษรจีน" hidden>
+  <div class="vo-stroke-card">
+    <button id="voStrokeClose" class="vo-stroke-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
+    <div class="vo-stroke-head">
+      <span id="voStrokeZh" class="vo-stroke-zh" lang="zh"></span>
+      <span id="voStrokePy" class="vo-stroke-py"></span>
+      <span id="voStrokeTh" class="vo-stroke-th"></span>
     </div>
+    <div class="vo-stroke-stage">
+      <div id="voStrokeWriter" class="vo-stroke-writer"></div>
+      <div id="voStrokeStatus" class="vo-stroke-status"></div>
+    </div>
+    <div class="vo-stroke-actions">
+      <button id="voStrokeReplay" class="vo-action-btn" type="button" title="เล่นภาพเส้นขีดซ้ำ">🔁 เล่นซ้ำ</button>
+      <button id="voStrokeSound" class="vo-action-btn" type="button" title="ฟังเสียงคำศัพท์">🔊 ฟังเสียง</button>
+    </div>
+    <div id="voStrokeChars" class="vo-stroke-chars" hidden></div>
   </div>
-
-  <button id="voScrollTopBtn" class="vo-scroll-top-btn" title="ขึ้นด้านบน" aria-label="ขึ้นด้านบน" hidden>⬆</button>
 </div>
 
 <!-- WORD POPUP — แตะคำในประโยค (เกมเขียนเป็นประโยค) เพื่อดูคำแปลไทยรายคำ ลอยอยู่เหนือคำนั้น -->
@@ -1056,6 +1064,7 @@
   <div id="cpWordBreak" class="cpw-break" hidden></div>
   <div class="cpw-actions">
     <button id="cpWordSpeakBtn" class="cpw-btn" type="button">🔊 ฟังเสียงคำนี้</button>
+    <button id="cpWordBingBtn" class="cpw-btn" type="button" title="แปลคำนี้ด้วย Bing Translator">🌐 แปลด้วย Bing</button>
   </div>
 </div>
 
@@ -1063,6 +1072,45 @@
 <div id="imgLightbox" class="img-lightbox" role="dialog" aria-modal="true" aria-label="รูปขนาดเต็ม" hidden>
   <button id="imgLightboxClose" class="img-lightbox-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
   <img id="imgLightboxImg" alt="">
+</div>
+
+<!-- DAILY MISSIONS (เกมภารกิจประจำวัน) — บับเบิ้ลหนังสือมุมซ้ายล่างของหน้าหลัก -->
+<button id="missionFab" type="button" hidden aria-label="เกมภารกิจประจำวัน">
+  <span class="ms-fab-icon" aria-hidden="true">📖</span>
+  <span id="missionFabBadge" class="ms-fab-badge">0/4</span>
+</button>
+
+<!-- แถบความคืบหน้าภารกิจ ลอยบนจอขณะเล่น -->
+<div id="missionHud" class="ms-hud" hidden role="status" aria-live="polite">
+  <span id="msHudText"></span>
+  <button id="msHudQuit" type="button" title="ออกจากภารกิจ" aria-label="ออกจากภารกิจ">✖</button>
+</div>
+
+<!-- หน้าต่างสรุปภารกิจของวันนี้ -->
+<div id="missionPanel" class="ms-overlay" role="dialog" aria-modal="true" aria-labelledby="missionPanelTitle" hidden>
+  <div class="overlay-box ms-box">
+    <h2 id="missionPanelTitle">📖 เกมภารกิจประจำวัน</h2>
+    <p class="ms-panel-sub" id="missionPanelSub"></p>
+    <div id="missionList" class="ms-list"></div>
+    <p class="ms-panel-note">ภารกิจรีเซ็ตทุกวันหลังเที่ยงคืน • ระดับ HSK สุ่ม 1–6 ของแต่ละวัน • เกมไหนไม่ผ่านจะวนเล่นเกมนั้นจนกว่าจะผ่าน แล้วไปเกมถัดไปเองโดยไม่ต้องกลับหน้าหลัก</p>
+    <div class="ms-actions">
+      <button id="missionCloseBtn" class="big-btn secondary" type="button">ปิด</button>
+      <button id="missionStartBtn" class="big-btn" type="button">▶ เริ่มภารกิจประจำวัน</button>
+    </div>
+  </div>
+</div>
+
+<!-- overlay กลางของภารกิจ: ผ่านเกม / ครบทั้งหมด / ยืนยันออก -->
+<div id="missionOverlay" class="ms-overlay" role="dialog" aria-modal="true" aria-labelledby="msOvTitle" hidden>
+  <div class="overlay-box ms-box">
+    <div id="msOvIcon" class="ms-ov-icon" aria-hidden="true">✅</div>
+    <h2 id="msOvTitle"></h2>
+    <p id="msOvText"></p>
+    <div class="ms-actions">
+      <button id="msOvBtn2" class="big-btn secondary" type="button" hidden></button>
+      <button id="msOvBtn" class="big-btn" type="button"></button>
+    </div>
+  </div>
 </div>
 
 <script src="data/vocab.js"></script>
@@ -1108,6 +1156,7 @@
 <script src="js/13-podcast.js"></script>
 <script src="js/14-reader.js"></script>
 <script src="js/15-vocaboverview.js"></script>
+<script src="js/16-missions.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

@@ -172,8 +172,34 @@ function initVocabOverview() {
     });
   }
 
+  // Popup วิธีเขียน (แตะการ์ดคำศัพท์เพื่อเปิด) — ตั้งค่าครั้งเดียว
+  const strokePopup = $("voStrokePopup");
+  if (strokePopup) {
+    $("voStrokeClose").addEventListener("click", () => {
+      sfx.click();
+      voCloseStrokes();
+    });
+    $("voStrokeReplay").addEventListener("click", () => {
+      sfx.click();
+      voStrokePlayChar();
+    });
+    $("voStrokeSound").addEventListener("click", () => {
+      sfx.click();
+      if (voStrokeCurItem) voPlayWord(voStrokeCurItem, null);
+    });
+    // แตะพื้นหลังนอกการ์ด = ปิด (เหมือน lightbox)
+    strokePopup.addEventListener("click", (e) => {
+      if (e.target === strokePopup) voCloseStrokes();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !strokePopup.hidden) voCloseStrokes();
+    });
+  }
+
   window.addEventListener("resize", () => {
-    if (gameMode === "vocaboverview") voFillViewport();
+    if (gameMode !== "vocaboverview") return;
+    voFillViewport();
+    if (strokePopup && !strokePopup.hidden) voStrokeFit();
   });
 }
 
@@ -244,6 +270,7 @@ function startVocabOverview(categoryOverride) {
 }
 
 function quitVocabOverview() {
+  voCloseStrokes();
   clearTimeout(voSearchTimer);
   voSearchTimer = null;
   voStopPlayAll();
@@ -834,6 +861,22 @@ function voCreateCardElement(item, index) {
 
   card.appendChild(sentWrap);
 
+  // แตะตัวการ์ด = เปิด popup วิธีเขียนเส้นขีด (ปุ่มเสียง/ประโยคในการ์ดไม่เปิด)
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.title = `แตะเพื่อดูวิธีเขียน ${zhSpan.textContent}`;
+  card.setAttribute("aria-label", `ดูวิธีเขียนคำ ${item.zh}`);
+  card.addEventListener("click", (e) => {
+    if (e.target.closest("button, a, input, select, textarea")) return;
+    voOpenStrokes(item);
+  });
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      voOpenStrokes(item);
+    }
+  });
+
   return card;
 }
 
@@ -1113,6 +1156,141 @@ function voHandleScroll() {
   if (scrollTop + clientHeight >= scrollHeight - 400) {
     if (voRenderedCount < voFilteredItems.length) {
       voRenderNextChunk();
+    }
+  }
+}
+
+/* ---- popup วิธีเขียนตัวอักษร (แตะการ์ดคำศัพท์) ----
+   ใช้ระบบเดียวกับตัวดูเส้นขีดของโหมดพจนานุกรม: loadBombLibrary() +
+   แคช bombCharData (สลับ path vendor3/ ให้เอพีเคเอง), สร้าง writer "ครั้งเดียว"
+   แล้วสลับตัวอักษรด้วย setCharacter เพราะ HanziWriter ผูก listener
+   ระดับ document — ทำแบบ animation ล้วน ไม่มี listener ของโหมดทดสอบ */
+let voStrokeWriter = null;
+let voStrokeCurItem = null;
+let voStrokeChars = [];
+let voStrokeCharIndex = 0;
+let voStrokeSeq = 0; // เพิ่มทุกครั้งที่เปิด/เล่น/ปิด — ยกเลิก chain async ที่ค้างอยู่
+
+function voStrokeSize(box) {
+  return Math.min(320, Math.max(160, (box && box.clientWidth) || 280));
+}
+
+function voStrokeFit() {
+  const box = $("voStrokeWriter");
+  if (!box || !voStrokeWriter) return;
+  const size = voStrokeSize(box);
+  voStrokeWriter.updateDimensions({ width: size, height: size, padding: 10 });
+}
+
+async function voOpenStrokes(item) {
+  const popup = $("voStrokePopup");
+  if (!popup) return;
+  if (voPlayAllActive) voStopPlayAll(); // กำลังจะดูเส้นขีดคำนี้ หยุดเล่นเสียงวนก่อน
+  sfx.click();
+  voStrokeCurItem = item;
+  const zh = String(item.zh || "").split(/[｜|]/)[0].trim();
+  voStrokeChars = [...zh].filter((c) => /[㐀-鿿豈-﫿]/.test(c));
+  voStrokeCharIndex = 0;
+  const zhEl = $("voStrokeZh"), pyEl = $("voStrokePy"), thEl = $("voStrokeTh");
+  if (zhEl) zhEl.textContent = zh;
+  if (pyEl) pyEl.textContent = item.py || "";
+  if (thEl) thEl.textContent = item.th || "";
+  const status = $("voStrokeStatus");
+  popup.hidden = false;
+  const closeBtn = $("voStrokeClose");
+  if (closeBtn) closeBtn.focus({ preventScroll: true });
+
+  const seq = ++voStrokeSeq;
+  voStrokeBuildChips();
+  if (!voStrokeChars.length) {
+    if (status) status.textContent = "คำนี้ไม่มีตัวอักษรจีนให้ดูเส้นขีด";
+    return;
+  }
+  if (status) status.textContent = "กำลังโหลดข้อมูลเส้นขีด…";
+  try {
+    await loadBombLibrary();
+    await Promise.all([...new Set(voStrokeChars)].map(async (char) => {
+      if (bombCharData.has(char)) return;
+      try {
+        const dataUrl = window.CR_OFFLINE_APP
+          ? `vendor3/hanzi-writer-data/${encodeURIComponent(char)}.json`
+          : `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(char)}.json`;
+        const res = await fetch(dataUrl);
+        const data = res.ok ? await res.json() : null;
+        bombCharData.set(char, data && data.strokes && data.strokes.length ? data : null);
+      } catch (e) { /* network error — leave uncached so the next open retries */ }
+    }));
+    if (popup.hidden || seq !== voStrokeSeq) return;
+    if (!voStrokeChars.some((c) => bombCharData.get(c))) throw new Error("no stroke data");
+    if (!voStrokeWriter) {
+      const box = $("voStrokeWriter");
+      const size = voStrokeSize(box);
+      voStrokeWriter = new window.HanziWriter(box, {
+        width: size, height: size, padding: 10,
+        showCharacter: false, showOutline: true,
+        strokeColor: "#203954", outlineColor: "#b8c4d0",
+        charDataLoader: (char) => bombCharData.get(char),
+      });
+    } else {
+      voStrokeFit(); // เปิดใหม่: viewport อาจถูก resize ไปแล้ว
+    }
+    if (status) status.textContent = "";
+    voStrokePlayChar();
+  } catch (e) {
+    if (!popup.hidden && seq === voStrokeSeq && status) {
+      status.textContent = "โหลดข้อมูลเส้นขีดไม่สำเร็จ — ต้องใช้อินเทอร์เน็ตครั้งแรก ลองปิดแล้วเปิดใหม่อีกครั้ง";
+    }
+  }
+}
+
+function voCloseStrokes() {
+  const popup = $("voStrokePopup");
+  if (!popup || popup.hidden) return;
+  popup.hidden = true;
+  voStrokeSeq++; // chain async ที่กำลังโหลด/เล่นอยู่ต้องยอมแพ้
+  voStrokeCurItem = null;
+}
+
+function voStrokeBuildChips() {
+  const wrap = $("voStrokeChars");
+  if (!wrap) return;
+  wrap.replaceChildren();
+  voStrokeChars.forEach((char, i) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "vo-stroke-chip";
+    chip.textContent = char;
+    chip.lang = "zh";
+    chip.title = `ดูเส้นขีดของตัว "${char}"`;
+    chip.addEventListener("click", () => { sfx.click(); voStrokePlayChar(i); });
+    wrap.appendChild(chip);
+  });
+  wrap.hidden = voStrokeChars.length < 2;
+}
+
+async function voStrokePlayChar(index = null) {
+  if (!voStrokeWriter) return;
+  if (index !== null) voStrokeCharIndex = index;
+  const char = voStrokeChars[voStrokeCharIndex];
+  if (char === undefined) return;
+  const seq = ++voStrokeSeq;
+  const status = $("voStrokeStatus");
+  document.querySelectorAll("#voStrokeChars .vo-stroke-chip").forEach((c, i) => {
+    c.classList.toggle("current", i === voStrokeCharIndex);
+  });
+  if (!bombCharData.get(char)) {
+    if (status) status.textContent = `ไม่มีข้อมูลเส้นขีดของ "${char}"`;
+    return;
+  }
+  if (status) status.textContent = "";
+  try {
+    await voStrokeWriter.setCharacter(char);
+    if ($("voStrokePopup").hidden || seq !== voStrokeSeq) return;
+    voStrokeWriter.loopCharacterAnimation();
+  } catch (e) {
+    const popup = $("voStrokePopup");
+    if (!popup.hidden && seq === voStrokeSeq && status) {
+      status.textContent = `โหลดเส้นขีดของ "${char}" ไม่สำเร็จ`;
     }
   }
 }

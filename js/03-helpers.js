@@ -229,3 +229,26 @@ if ($("imgLightbox")) {
     if (event.key === "Escape") crCloseImageLightbox();
   });
 }
+
+/* ---------- เปิดเว็บภายนอกในแอพ (Bing Translator ฯลฯ) ---------- */
+// ใน APK: เปิดหน้าเว็บใน WebView ของแอพเอง (NativeBrowser plugin) แทนการเด้งไป
+// เบราว์เซอร์ภายนอก — ปุ่ม ✕ หรือปุ่ม back ของระบบในหน้านั้นกลับมาหน้าเกมเดิมได้
+// บนเว็บ (GitHub Pages) ยังเปิดเป็นแท็บใหม่เหมือนเดิม
+function crOpenWeb(url) {
+  if (!url) return;
+  if (window.CR_OFFLINE_APP && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeBrowser) {
+    try {
+      window.Capacitor.Plugins.NativeBrowser.open({ url: String(url) });
+      return;
+    } catch (e) { /* fall through ไปเปิดแท็บใหม่ */ }
+  }
+  window.open(url, "_blank", "noopener");
+}
+
+// ลิงก์ <a data-cr-web> ทั้งหมด (ปุ่ม Bing ในผลค้นหาพจนานุกรม) เปิดในแอพแทนแท็บใหม่
+document.addEventListener("click", (e) => {
+  const a = e.target && e.target.closest ? e.target.closest("a[data-cr-web]") : null;
+  if (!a) return;
+  e.preventDefault();
+  crOpenWeb(a.href || a.getAttribute("href"));
+});

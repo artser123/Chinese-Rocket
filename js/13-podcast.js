@@ -1258,8 +1258,7 @@ function podSelectEpisode(ep, options = {}) {
   podcastState = { episode: ep, intervals: podSentenceIntervals(ep) };
   podThaiVoiceLastIndex = -1;
   const screen = $("podcast");
-  $("podEpisodes").hidden = true;
-  $("podPlayer").hidden = false;
+  podShowPlayerView(true);
   $("podHeading").textContent = "กำลังฟังพอดแคสต์";
   $("podEpisodeNumber").textContent = ep.src === "hsk"
     ? `HSK ${ep.hsk} · ${ep.cat || ""}`
@@ -1461,6 +1460,15 @@ function podInstallBubbleGuard() {
   }, true);
 }
 
+// สลับหน้า รายการตอน ↔ หน้าเนื้อหาตอน — ตอนอยู่หน้าเนื้อหา ปุ่ม ✖️ ออกจากโหมด
+// ถูกแทนด้วยปุ่ม "เลือกบทอ่าน" (กลับรายการ) ตามที่ผู้ใช้ขอ ออกจากโหมดทำที่หน้ารายการ
+function podShowPlayerView(on) {
+  $("podPlayer").hidden = !on;
+  $("podEpisodes").hidden = on;
+  $("podSelectBtn").hidden = !on;
+  $("podQuitBtn").hidden = on;
+}
+
 function podBackToList() {
   podWantPlay = false;
   podStatusNote = "";
@@ -1468,8 +1476,7 @@ function podBackToList() {
   podClearIntro();
   cpHideWordPopup();
   crClearMediaSession();
-  $("podPlayer").hidden = true;
-  $("podEpisodes").hidden = false;
+  podShowPlayerView(false);
   $("podHeading").textContent = "เลือกตอนพอดแคสต์";
   podSetMediaState("none");
   podSyncMediaButtons();
@@ -1491,8 +1498,7 @@ function quitPodcastGame() {
   crClearMediaSession();
   podcastState = null;
   podActiveToken = null;
-  $("podPlayer").hidden = true;
-  $("podEpisodes").hidden = false;
+  podShowPlayerView(false);
   $("podPlayBtn").textContent = "▶ เล่น";
   podSetMediaState("none");
   podSyncMediaButtons();
@@ -1503,8 +1509,7 @@ function quitPodcastGame() {
 async function startPodcastGame() {
   podRegisterMediaActions();
   switchScreen($("podcast"));
-  $("podPlayer").hidden = true;
-  $("podEpisodes").hidden = false;
+  podShowPlayerView(false);
   $("podHeading").textContent = "เลือกตอนพอดแคสต์";
   $("podSearch").value = "";
   $("podListStatus").textContent = "กำลังเตรียมรายการพอดแคสต์…";
@@ -1554,7 +1559,7 @@ async function startPodcastGame() {
 }
 
 $("podSearch").addEventListener("input", () => podEpisodeList($("podSearch").value));
-$("podBackBtn").addEventListener("click", () => { sfx.click(); podBackToList(); });
+$("podSelectBtn").addEventListener("click", () => { sfx.click(); podBackToList(); });
 $("podMoreBtn").addEventListener("click", () => { sfx.click(); podToggleExtra(); });
 podApplyExtraOpen();
 podSyncMoreBtn();
