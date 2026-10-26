@@ -453,6 +453,7 @@ $("cards").addEventListener("click", (e) => {
   $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
+  $("spkStrictRow").style.display = gameMode === "speak" ? "" : "none";
   $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
   cpSyncSetupUI();
@@ -552,6 +553,17 @@ $("nextSelect").addEventListener("click", (e) => {
   btn.classList.add("selected");
   autoNext = btn.dataset.next === "auto";
 });
+
+// โหมดฝึกพูด: ความเข้มการตรวจ (ผ่อนปรน 65% / ปกติ 80% / เข้ม ถูกทุกตัว) — SPK_STRICT ใน 09-speak.js
+$("spkStrictSelect").addEventListener("click", (e) => {
+  const btn = e.target.closest(".spks-btn");
+  if (!btn || !SPK_STRICT[btn.dataset.strict]) return;
+  sfx.click();
+  spkStrict = btn.dataset.strict;
+  localStorage.setItem("cr_speak_strict", spkStrict);
+  document.querySelectorAll(".spks-btn").forEach((b) => b.classList.toggle("selected", b === btn));
+});
+document.querySelectorAll(".spks-btn").forEach((b) => b.classList.toggle("selected", b.dataset.strict === spkStrict));
 
 // โหมดฝึกฟัง: เลือกคำศัพท์ (HSK 1-9) หรือประโยค (HSK 1-5 เท่านั้น)
 $("lisTypeSelect").addEventListener("click", (e) => {
@@ -712,11 +724,82 @@ if (catSelectEl) {
 }
 updateCategoryDropdownUI();
 
-// Native Android hardware-back navigation: unwind overlays, then return from
-// gameplay to its setup screen. The home screen returns false so Android exits.
+// ยืนยันก่อนออกจากเกมเมื่อกดปุ่ม Back ของ Android (#backConfirm) — กดพลาดจะได้ไม่เสียเกม.
+// เกมที่พักได้จะถูกพักไว้ระหว่างเปิดหน้าต่าง แล้วเล่นต่อเมื่อกด "ยกเลิก" (หรือกด Back ซ้ำ)
+let backConfirmState = null; // { quit, resume }
+
+// พักเกมของจอที่เปิดอยู่ (ถ้ายังไม่ได้พัก) แล้วคืนฟังก์ชันสำหรับเล่นต่อ — null = ไม่มีอะไรต้องพัก
+function backConfirmPause(id) {
+  if (id === "game" && running && !paused) {
+    $("pauseBtn").click();
+    return () => { if (running && paused) $("resumeBtn").click(); };
+  }
+  if (id === "zombie" && zb && !zb.paused) {
+    $("zPauseBtn").click();
+    return () => { if (zb && zb.paused) $("zResumeBtn").click(); };
+  }
+  if (id === "bomb" && bombGame && !bombGame.paused) {
+    pauseBombGame();
+    return () => { if (bombGame && bombGame.paused) resumeBombGame(); };
+  }
+  if (id === "matching" && matching && !matching.paused) {
+    pauseMatchingGame();
+    return () => { if (matching && matching.paused) $("matchResumeBtn").click(); };
+  }
+  if (id === "listen" && lis && lis.playing) {
+    lisPausePlayback();
+    return () => { if (lis && !lis.playing) lisReplayBtnClick(); };
+  }
+  return null;
+}
+
+function backConfirmOpen(active, quit) {
+  backConfirmState = { quit, resume: backConfirmPause(active.id) };
+  $("backConfirm").hidden = false;
+  $("backConfirmCancel").focus();
+}
+
+function backConfirmClose(ok) {
+  const st = backConfirmState;
+  if (!st) return;
+  backConfirmState = null;
+  $("backConfirm").hidden = true;
+  if (ok) {
+    st.quit(); // ปุ่มออกของโหมดเอง (บันทึกคะแนน/หยุดเสียง/กลับหน้าหลัก)
+    if (!menuEl.classList.contains("active")) { switchScreen(menuEl); updateBestLine(); }
+  } else {
+    sfx.click();
+    if (st.resume) st.resume();
+  }
+}
+
+$("backConfirmOk").addEventListener("click", () => backConfirmClose(true));
+$("backConfirmCancel").addEventListener("click", () => backConfirmClose(false));
+$("backConfirm").addEventListener("click", (e) => {
+  if (e.target === $("backConfirm")) backConfirmClose(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && backConfirmState) backConfirmClose(false);
+});
+
+// Native Android hardware-back navigation: unwind overlays/inner levels, then
+// ask for confirmation (#backConfirm) before a game is left for the home
+// screen. The home screen returns false so Android exits.
 window.__handleAndroidBack = function () {
   const active = document.querySelector(".screen.active");
   if (!active || active === menuEl) return false;
+
+  // Back ซ้ำขณะหน้าต่างยืนยันเปิดอยู่ = ยกเลิก
+  if (backConfirmState) {
+    backConfirmClose(false);
+    return true;
+  }
+  // ภารกิจประจำวันมี overlay ของตัวเอง: ถ้าเป็นหน้าต่างยืนยันออก (มีปุ่ม "เล่นต่อ") Back = เล่นต่อ,
+  // overlay ผ่านเกม/ครบภารกิจ ปล่อยให้กดปุ่มเอง (Back ไม่ทำอะไร)
+  if (!$("missionOverlay").hidden) {
+    if (!$("msOvBtn2").hidden) $("msOvBtn2").click();
+    return true;
+  }
 
   const overlays = [
     ["pauseOverlay", "resumeBtn"],
@@ -725,10 +808,20 @@ window.__handleAndroidBack = function () {
     ["matchPauseOverlay", "matchResumeBtn"],
   ];
   for (const [overlayId, resumeId] of overlays) {
-    if ($(overlayId)?.classList.contains("show")) {
+    // เฉพาะ overlay ในจอที่เปิดอยู่: ปุ่มออกของจับคู่/ระเบิดไม่ล้าง .show ของ overlay พักเกม
+    // (เกมใหม่ค่อยล้าง) — ถ้าไม่จำกัดจอ overlay ค้างจะดัก Back ของทุกโหมดที่เล่นต่อจากนั้น
+    const ov = $(overlayId);
+    if (ov && active.contains(ov) && ov.classList.contains("show")) {
       $(resumeId)?.click();
       return true;
     }
+  }
+
+  // ระหว่างเล่นภารกิจ ใช้หน้าต่างยืนยันออกของภารกิจเอง (พักเกม + "ออกจากภารกิจ"/"เล่นต่อ")
+  // แทน #backConfirm — กันหน้าต่างซ้อนกันสองชั้น และครอบคลุมจอจบเกมระหว่างภารกิจด้วย
+  if (msRun) {
+    $("msHudQuit").click();
+    return true;
   }
 
   if (active === $("setup")) {
@@ -788,6 +881,11 @@ window.__handleAndroidBack = function () {
     trace: "tcQuitBtn",
   };
   const quit = $(quitByScreen[active.id]);
+  // ทุกเกมถามยืนยันก่อนออก ยกเว้นพจนานุกรมและเกมรวมคำศัพท์ (ออกทันทีแบบเดิม)
+  if (quit && active.id !== "dict" && active.id !== "vocaboverview") {
+    backConfirmOpen(active, () => quit.click());
+    return true;
+  }
   if (quit) quit.click();
   else {
     sfx.click();

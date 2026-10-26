@@ -366,10 +366,10 @@ function dictRenderResults(results, query) {
       html += `<div class="dict-examples"><div class="dict-examples-label">📝 ประโยคตัวอย่าง (${examples.length})</div>`;
       for (const ex of examples) {
         html += `<div class="dict-example">
-          <div class="dict-example-zh" lang="zh">${ex[0]}</div>
-          <div class="dict-example-pinyin">${ex[1]}</div>
-          <div class="dict-example-th">${ex[2]}</div>
-          <div class="dict-example-actions"><button class="dict-ex-speak-btn" data-zh="${ex[0]}">🔊 ฟัง</button></div>
+          <div class="dict-example-zh" lang="zh">${dictEsc(ex[0])}</div>
+          <div class="dict-example-pinyin">${dictEsc(ex[1])}</div>
+          <div class="dict-example-th">${dictEsc(ex[2])}</div>
+          <div class="dict-example-actions"><button class="dict-ex-speak-btn" data-zh="${dictEsc(ex[0])}">🔊 ฟัง</button></div>
         </div>`;
       }
       html += `</div>`;
@@ -514,6 +514,13 @@ async function dictStrokePlay(entry, index = null) {
   } catch (e) {
     if (entry.isConnected && st.seq === seq) status.textContent = `โหลดเส้นขีดของ "${char}" ไม่สำเร็จ`;
   }
+}
+
+// ประโยคตัวอย่างจาก Bing (VOCAB_EXTRA) บางประโยคมีเครื่องหมาย " < & — ต้อง escape
+// ไม่งั้น data-zh="..." ถูกตัดกลางประโยค ปุ่ม 🔊 จะอ่านแค่ท่อนแรก
+function dictEsc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function dictFindExamples(zh, lvl) {

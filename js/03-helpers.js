@@ -6,18 +6,89 @@ const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = 
 // เปอร์เซ็นความก้าวหน้าของเซสชัน — จำนวนไอเท็มไม่ซ้ำที่ทำแล้ว / จำนวนทั้งหมดในระดับ
 const progPct = (done, total) => `${total ? Math.round(done * 100 / total) : 0}%`;
 
+/* ================= เครื่องมือวาดภาพที่ใช้ร่วมกัน (เกมอุกกาบาต + ซอมบี้) =================
+   ทั้งสองเกมติดที่ fill-rate ของ GPU มือถือ: ต้นทุนต่อเฟรมสเกลตามจำนวนพิกเซลของ canvas
+   - makeRenderQuality(): ความละเอียดที่วาด = min(DPR, 1.5, งบพิกเซลรวม) × q โดย q ลดลงเอง 15 %
+     เมื่อ 90 เฟรมเฉลี่ยช้ากว่า ~45 fps (ต่ำสุด 0.6, ไม่ปรับขึ้นระหว่างเล่น, จำไว้ใน localStorage)
+     เบราว์เซอร์ขยายภาพให้เต็มจอเองตอน composite แทบไม่มีต้นทุน
+   - makeLayer()/softSprite(): ภาพที่อบไว้ครั้งเดียว → ต่อเฟรมแค่ drawImage
+   - seededRng(): สุ่มแบบกำหนด seed ให้ฉากหน้าตาเดิมทุกครั้งที่ resize */
+const RQ_MAX_DPR = 1.5, RQ_PX_BUDGET = 1.3e6, RQ_MIN = 0.6;
+const RQ_WINDOW = 90, RQ_SLOW_MS = 22;
+function makeRenderQuality(storageKey, onDrop) {
+  let q = 1;
+  try { const v = +localStorage.getItem(storageKey); if (v >= RQ_MIN && v <= 1) q = v; } catch {}
+  let sum = 0, n = 0, warm = 0;
+  return {
+    get q() { return q; },
+    scale(w, h) {
+      const dpr = Math.min(window.devicePixelRatio || 1, RQ_MAX_DPR);
+      const cap = Math.sqrt(RQ_PX_BUDGET / Math.max(1, w * h));
+      return Math.max(0.5, Math.min(dpr, cap) * q);
+    },
+    reset() { sum = n = warm = 0; },
+    // เรียกทุกเฟรม: idle = พัก/จบเกม/จอซ่อน → ไม่นับ
+    frame(dtMs, idle) {
+      if (idle || document.hidden) { sum = n = 0; return; }
+      if (warm < 60) { warm++; return; }            // ข้ามช่วงเริ่มเกม (โหลดเสียง/ฟอนต์)
+      if (dtMs > 100) return;                       // เฟรมสะดุดครั้งเดียว (GC/สลับแอป) ไม่นับ
+      sum += dtMs; n++;
+      if (n < RQ_WINDOW) return;
+      const avg = sum / n;
+      sum = n = 0;
+      if (avg <= RQ_SLOW_MS || q <= RQ_MIN) return;
+      q = Math.max(RQ_MIN, +(q * 0.85).toFixed(2));
+      try { localStorage.setItem(storageKey, String(q)); } catch {}
+      warm = 30;                                    // ให้เครื่องนิ่งก่อนวัดรอบถัดไป
+      onDrop();
+    },
+  };
+}
+function makeLayer(w, h, scale) {
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.ceil(w * scale));
+  cv.height = Math.max(1, Math.ceil(h * scale));
+  const c = cv.getContext("2d");
+  c.scale(scale, scale);
+  return { cv, c, w, h, scale };
+}
+// วงกลมนุ่ม (radial ทึบ→โปร่ง) ใช้แทน radial gradient/shadowBlur ต่อเฟรม
+function softSprite(rgb, size) {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = size;
+  const cc = cv.getContext("2d");
+  const g = cc.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, `rgba(${rgb},1)`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  cc.fillStyle = g;
+  cc.fillRect(0, 0, size, size);
+  return cv;
+}
+function seededRng(seed) {
+  let s = seed >>> 0;
+  return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+}
+
+/* ---- canvas เกมอุกกาบาต ----
+   ภาพที่อบไว้ (ฉาก/ฐาน/sprite) สร้างใหม่แบบ lazy ในลูปเกม (meteorStaticsDirty) ไม่ใช่ใน resize
+   เพราะ resize เกิดบ่อยตอนอยู่โหมดอื่น (เช่นคีย์บอร์ดมือถือเด้งในพจนานุกรม) */
+const meteorRQ = makeRenderQuality("cr_meteor_quality", () => resize());
+let meteorStaticsDirty = true;
+let gyCache = 0;
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth; H = window.innerHeight;
+  DPR = meteorRQ.scale(W, H);
   canvas.width = Math.floor(W * DPR);
   canvas.height = Math.floor(H * DPR);
   canvas.style.width = W + "px";
   canvas.style.height = H + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  gyCache = 0;
+  meteorStaticsDirty = true;
 }
 window.addEventListener("resize", resize);
 
-/* ================= Additive glow (bloom ปลอม) =================
+/* ================= Additive glow =================
    ไฟ/ระเบิด/แสงปากกระบอก/ตัวอักษรเรืองแสง ใช้ "แสงแบบบวก" (lighter) แทนการวางสีทับ
    → สีซ้อนกันยิ่งสว่าง เหมือนแสงจริง ไม่ใช่คราบสีทึบ. ทั้งเซสชันใช้ ctx.globalCompositeOperation
    ที่เก็บ/คืนด้วย save/restore เสมอ เพื่อไม่ให้สถานะรั่วไปฟังก์ชันวาดอื่น */
@@ -27,42 +98,6 @@ function glowOn(c, alpha = 1) {
   c.globalAlpha = alpha;
 }
 const glowOff = (c) => c.restore();
-// เงามืดรอบตัวอักษรจีน ให้ตัวอักษรลอยออกจากพื้นหลัง (อ่านง่ายขึ้นบนมือถือ)
-function textShadowOn(c, blur = 6, color = "rgba(0,0,0,.65)") {
-  c.shadowColor = color; c.shadowBlur = blur; c.shadowOffsetY = 1;
-}
-function textShadowOff(c) { c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0; }
-
-/* ================= Bloom ปลอม =================
-   ย่อ canvas → เบลอ → วาดทับแบบบวก: ไฟ/ระเบิด/แสงปากกระบอกจะ "ฟุ้ง" เป็นแสงจริง
-   เก็บสำเนาย่อในออฟสกรีนบัฟเฟอร์ 1 ใบต่อ canvas (WeakMap) จึงไม่สร้าง canvas ใหม่ทุกเฟรม
-   ต้นทุนต่อเฟรม: drawImage ย่อ 1 ครั้ง + drawImage เบลอ 1 ครั้ง (เบลอจ่ายที่ภาพเล็ก 1/4)
-   ต้องประกาศ "ก่อน" ฟังก์ชันที่เรียกใช้ เพราะ const/function ที่อยู่หลังจะยังไม่ถูก hoist
-   (เดิมวางไว้หลัง loop → เฟรมแรก throw ReferenceError ทำให้เกมหยุดวาด) */
-const bloomBuf = new WeakMap();
-const BLOOM_DIV = 4;          // ย่อเหลือ 1/4 ก่อนเบลอ → เร็วและเบลอกว้างพอ
-const BLOOM_BLUR = 7;         // รัศมีเบลอ (หน่วยของภาพย่อ)
-const BLOOM_ALPHA = 0.5;      // ความแรงของแสงที่ทับกลับ
-function bloom(src, sc, lw, lh) {
-  if (!lw || !lh) return;
-  let b = bloomBuf.get(src);
-  if (!b) { b = document.createElement("canvas"); bloomBuf.set(src, b); }
-  const bw = Math.max(1, Math.ceil(lw / BLOOM_DIV)), bh = Math.max(1, Math.ceil(lh / BLOOM_DIV));
-  if (b.width !== bw || b.height !== bh) { b.width = bw; b.height = bh; }
-  const bc = b.getContext("2d");
-  bc.setTransform(1, 0, 0, 1, 0, 0);
-  bc.globalAlpha = 1;
-  bc.globalCompositeOperation = "source-over";
-  bc.clearRect(0, 0, bw, bh);
-  bc.drawImage(src, 0, 0, bw, bh);
-  bc.filter = `blur(${BLOOM_BLUR}px)`; // เบลอตอนวาดกลับ → ต้นทุนจ่ายที่ภาพเล็ก
-  sc.save();
-  sc.globalCompositeOperation = "lighter";
-  sc.globalAlpha = BLOOM_ALPHA;
-  sc.drawImage(b, 0, 0, lw, lh);
-  sc.restore();
-  bc.filter = "none";
-}
 window.addEventListener("orientationchange", () => setTimeout(resize, 200));
 resize();
 
@@ -80,7 +115,9 @@ function initStars() {
 }
 initStars();
 
-const groundY = () => rocketBar.offsetTop || H - 90;
+// แคช offsetTop (ล้างใน resize) — เดิมอ่านสดหลายครั้งต่อเฟรม (ต่ออุกกาบาตแต่ละลูก)
+// จอเกมยังซ่อนอยู่ → offsetTop = 0 → ใช้ค่าสำรอง ไม่แคช
+const groundY = () => gyCache || (rocketBar.offsetTop ? (gyCache = rocketBar.offsetTop) : H - 90);
 const baseX = () => W / 2;
 const baseY = () => groundY() - 24;
 
@@ -113,6 +150,10 @@ function startGame(level) {
   refreshOptions();
   renderOptions();
   switchScreen(gameEl);
+  // resize หลังจอแสดงแล้ว: groundY อ่าน offsetTop จริง และฉาก (สีตามระดับ HSK) ถูกอบใหม่
+  resize();
+  meteorResetFx();
+  meteorRQ.reset();
   running = true; paused = false;
   $("pauseOverlay").classList.remove("show");
   stopSpeech();

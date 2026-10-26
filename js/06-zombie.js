@@ -27,14 +27,24 @@ const zWeapon = () => {
   return w;
 };
 let ZW = 0, ZH = 0;
-const zGroundY = () => ($("zombieBar").offsetTop || ZH - 90) - 28;
+// แคช offsetTop ไว้ (ล้างตอน zresize) — เดิมอ่านสดหลายครั้งต่อเฟรม หลัง HUD เขียน DOM
+// ทุกเฟรม จึงบังคับ layout ทั้งหน้าแบบ synchronous ทุกเฟรม (เกมอุกกาบาตไม่มีปัญหานี้
+// เพราะ updateHUD ไม่ได้ถูกเรียกทุกเฟรม) ถ้าจอยังซ่อนอยู่ offsetTop = 0 → ใช้ค่าสำรอง ไม่แคช
+let zGyCache = 0;
+const zGroundY = () => {
+  if (zGyCache) return zGyCache;
+  const top = $("zombieBar").offsetTop;
+  if (!top) return ZH - 90 - 28;
+  return (zGyCache = top - 28);
+};
 const zPoliceX = () => Math.max(70, ZW * 0.14);
 const zGunTip = () => ({ x: zPoliceX() + 56 - zb.recoil, y: zGroundY() - 75 });
 // pre-generate twinkling stars + drifting fog puffs (regenerated on resize)
+// ดาวส่วนใหญ่ถูกอบไว้ในภาพท้องฟ้า (zSkyLayer) แล้ว — ที่นี่เหลือแค่ดวงที่กะพริบสด
 let zStars = [], zFog = [];
 function zRegenAtmosphere() {
   const gy = zGroundY();
-  zStars = Array.from({ length: 60 }, () => ({
+  zStars = Array.from({ length: 16 }, () => ({
     x: Math.random() * ZW, y: Math.random() * gy * 0.7,
     r: rand(0.4, 1.6), tw: rand(0, 6.28), sp: rand(1.5, 4),
   }));
@@ -43,14 +53,22 @@ function zRegenAtmosphere() {
     r: rand(80, 180), sp: rand(6, 16), a: rand(0.04, 0.1),
   }));
 }
+/* ---- ความละเอียดที่ใช้วาด (ต.ค. 2026 รอบ 4: APK ยังกระตุกทั้งมือถือและแท็บเล็ต) ----
+   เกมนี้ติดที่ fill-rate ของ GPU มือถือ: ทุกเฟรมมีการวาดเต็มจอหลายชั้น ต้นทุนจึงสเกลตามจำนวนพิกเซล
+   ของ canvas — เดิม DPR สูงสุด 2 → แท็บเล็ต 1280×800 = 4.1 ล้าน px ต่อชั้น. ตอนนี้ใช้
+   makeRenderQuality() ที่ใช้ร่วมกับเกมอุกกาบาต (03-helpers.js: DPR ≤ 1.5 + งบพิกเซลรวม
+   + ลดคุณภาพเองถ้าเครื่องวาดไม่ทัน จำไว้ใน cr_zombie_quality) */
+const zRQ = makeRenderQuality("cr_zombie_quality", () => zresize());
+let zScale = 1;
 function zresize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   ZW = window.innerWidth; ZH = window.innerHeight;
-  zcanvas.width = Math.floor(ZW * dpr);
-  zcanvas.height = Math.floor(ZH * dpr);
+  zScale = zRQ.scale(ZW, ZH);
+  zcanvas.width = Math.floor(ZW * zScale);
+  zcanvas.height = Math.floor(ZH * zScale);
   zcanvas.style.width = ZW + "px";
   zcanvas.style.height = ZH + "px";
-  zctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  zctx.setTransform(zScale, 0, 0, zScale, 0, 0);
+  zGyCache = 0;
   zRegenAtmosphere();
   zBuildStatics();
 }
@@ -63,45 +81,330 @@ window.addEventListener("orientationchange", () => { if (matching) setTimeout(ap
    เดิมวาดพื้นหลังสร้าง gradient ทั้งหมดใหม่ "ทุกเฟรม" และเส้น scanline CRT
    เป็น fillRect ~ZH/3 ครั้งต่อเฟรม — จอใหญ่ (แท็บเล็ต ~4.9 ล้าน px) จึงกระตุก
    ฝั่งโทรศัพท์จอเล็กไม่รู้สึก เพราะต้นทุนทั้งหมดสเกลตามพื้นที่จอ */
-let zSkyGrad = null, zRoadGrad = null, zMoonHalo = null, zVigGrad = null, zGradeGrad = null;
-let zScanPat = null, zFogSprite = null, zSmokeSprite = null;
-
-function zSoftSprite(rgb, size) {
-  const cv = document.createElement("canvas");
-  cv.width = cv.height = size;
-  const cc = cv.getContext("2d");
-  const g = cc.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, `rgba(${rgb},1)`);
-  g.addColorStop(1, `rgba(${rgb},0)`);
-  cc.fillStyle = g;
-  cc.fillRect(0, 0, size, size);
-  return cv;
+/* ต.ค. 2026 รอบ 3: ฉากหลังทั้งหมดอบเป็นภาพ (layer) ครั้งเดียวตอน resize
+   - zSkyLayer: ท้องฟ้า + แสงเมืองที่ขอบฟ้า + ดาว + ดวงจันทร์มีหลุม + เมฆบางพาดจันทร์
+   - zFarStrip / zNearStrip: แถบตึกที่ต่อกันได้ไม่มีรอยต่อ (หน้าต่างหลายสี เสาอากาศ แท็งก์น้ำ
+     ป้ายนีออนตัวจีน เสาไฟพร้อมลำแสง) — ต่อเฟรมแค่ drawImage 2–3 ครั้งต่อเลเยอร์
+   - zGroundStrip: ขอบหญ้า ขอบทาง ถนนมีเม็ดกรวด/รอยแตก/แอ่งน้ำสะท้อนจันทร์ + เส้นถนน (เลื่อนทั้งแถบ)
+   - zGradeLayer: vignette + color grade รวมเป็นภาพครึ่งความละเอียด (gradient นุ่ม ขยายได้ไม่แตก)
+   เดิมต่อเฟรม = gradient 3 ชั้นเต็มจอ + ดาว 60 ดวง + path หน้าต่างตึก — ตอนนี้รายละเอียดมากขึ้นแต่ถูกกว่า
+   ห้ามย้ายการวาดรายละเอียดเหล่านี้กลับไปไว้ในลูปต่อเฟรม */
+let zSkyLayer = null, zFarStrip = null, zNearStrip = null, zGroundStrip = null, zGradeLayer = null;
+let zFogSprite = null, zSmokeSprite = null, zGlowSprite = null;
+// เลเยอร์อบไว้ใช้ความละเอียดเดียวกับ canvas (zScale) → blit 1:1 ไม่ต้องย่อ/ขยายทุกเฟรม
+const zMakeLayer = (w, h, scale = zScale) => makeLayer(w, h, scale);
+// สุ่มแบบกำหนด seed — ตึก/ป้ายหน้าตาเดิมทุกครั้งที่ resize ไม่กระโดดเปลี่ยน
+const zRng = seededRng;
+// ของตัวละคร (พิกัด local คงที่ → สร้างครั้งเดียว ไม่ต้องสร้างใหม่ตอน resize)
+// แทน shadowBlur/gradient ที่เดิมสร้างใหม่ทุกเฟรมต่อซอมบี้แต่ละตัวและตำรวจ
+let zZombieLegGrad = null, zPoliceLegGrad = null, zPoliceTorsoGrad = null, zPoliceHeadGrad = null;
+let zBodyShadowSprite = null, zEyeGlowSprite = null;
+function zBuildCharacterStatics() {
+  zZombieLegGrad = zctx.createLinearGradient(0, -44, 0, -5);
+  zZombieLegGrad.addColorStop(0, "#4a6a36"); zZombieLegGrad.addColorStop(1, "#2a401c");
+  zPoliceLegGrad = zctx.createLinearGradient(-8, -46, -8, -5);
+  zPoliceLegGrad.addColorStop(0, "#2a3a8b"); zPoliceLegGrad.addColorStop(1, "#141d52");
+  zPoliceTorsoGrad = zctx.createLinearGradient(-14, -84, 14, -44);
+  zPoliceTorsoGrad.addColorStop(0, "#3a55c8"); zPoliceTorsoGrad.addColorStop(1, "#1e2f88");
+  zPoliceHeadGrad = zctx.createRadialGradient(-2, -100, 2, 0, -98, 13);
+  zPoliceHeadGrad.addColorStop(0, "#f7d2a8"); zPoliceHeadGrad.addColorStop(1, "#e0b07a");
+  zBodyShadowSprite = zSoftSprite("0,0,0", 64);
+  zEyeGlowSprite = zSoftSprite("255,32,32", 32);
 }
 
-function zBuildStatics() {
-  const gy = zGroundY();
-  zSkyGrad = zctx.createLinearGradient(0, 0, 0, gy);
-  zSkyGrad.addColorStop(0, "#05070f"); zSkyGrad.addColorStop(0.55, "#1a1130"); zSkyGrad.addColorStop(1, "#3a1626");
-  zRoadGrad = zctx.createLinearGradient(0, gy, 0, ZH);
-  zRoadGrad.addColorStop(0, "#1b1f2c"); zRoadGrad.addColorStop(1, "#0d0f18");
+const zSoftSprite = softSprite;
+
+function zBuildSky(gy) {
+  const L = zMakeLayer(ZW, gy), c = L.c, r = zRng(11);
+  const sky = c.createLinearGradient(0, 0, 0, gy);
+  sky.addColorStop(0, "#05070f"); sky.addColorStop(0.55, "#1a1130"); sky.addColorStop(1, "#3a1626");
+  c.fillStyle = sky; c.fillRect(0, 0, ZW, gy);
+  // แสงเมืองไฟไหม้ที่ขอบฟ้า (ส้มแดงจาง ๆ)
+  const glow = c.createRadialGradient(ZW * 0.45, gy, 0, ZW * 0.45, gy, Math.max(ZW, gy) * 0.75);
+  glow.addColorStop(0, "rgba(255,90,50,0.28)"); glow.addColorStop(0.5, "rgba(170,40,70,0.1)"); glow.addColorStop(1, "rgba(0,0,0,0)");
+  c.fillStyle = glow; c.fillRect(0, 0, ZW, gy);
+  // ดาวนิ่ง (ดวงที่กะพริบวาดสดใน zDrawBackground)
+  for (let i = 0; i < 90; i++) {
+    c.globalAlpha = 0.25 + r() * 0.6;
+    c.fillStyle = r() < 0.2 ? "#ffd9c8" : "#e8e6ff";
+    c.beginPath(); c.arc(r() * ZW, r() * gy * 0.72, 0.3 + r() * 1.1, 0, 6.28); c.fill();
+  }
+  c.globalAlpha = 1;
+  // ดวงจันทร์: halo + เงาโค้ง + หลุม
   const mx = ZW * 0.8, my = gy * 0.22;
-  zMoonHalo = zctx.createRadialGradient(mx, my, 8, mx, my, 70);
-  zMoonHalo.addColorStop(0, "rgba(243,233,184,0.45)"); zMoonHalo.addColorStop(1, "rgba(243,233,184,0)");
-  zVigGrad = zctx.createRadialGradient(ZW / 2, ZH / 2, Math.min(ZW, ZH) * 0.35, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.75);
-  zVigGrad.addColorStop(0, "rgba(0,0,0,0)"); zVigGrad.addColorStop(1, "rgba(0,0,0,0.55)");
-  zGradeGrad = zctx.createLinearGradient(0, 0, 0, ZH);
-  zGradeGrad.addColorStop(0, "rgba(40,20,80,0.12)"); zGradeGrad.addColorStop(1, "rgba(80,20,40,0.12)");
-  // scanline CRT: pattern 1×3 px (ได้ผลเหมือน fillRect ทุก 3px แต่จ่าย 1 ครั้งต่อเฟรม)
+  const halo = c.createRadialGradient(mx, my, 10, mx, my, 95);
+  halo.addColorStop(0, "rgba(243,233,184,0.5)"); halo.addColorStop(0.4, "rgba(243,200,170,0.12)"); halo.addColorStop(1, "rgba(243,233,184,0)");
+  c.fillStyle = halo; c.beginPath(); c.arc(mx, my, 95, 0, 6.28); c.fill();
+  const disc = c.createRadialGradient(mx - 9, my - 9, 4, mx, my, 28);
+  disc.addColorStop(0, "#fffbe0"); disc.addColorStop(0.7, "#f0e2a8"); disc.addColorStop(1, "#cdb980");
+  c.fillStyle = disc; c.beginPath(); c.arc(mx, my, 27, 0, 6.28); c.fill();
+  c.fillStyle = "rgba(170,150,100,0.45)";
+  for (const [dx, dy, rr] of [[-9, -6, 5], [9, 8, 4], [4, -12, 2.5], [-3, 12, 3], [13, -3, 2]]) {
+    c.beginPath(); c.arc(mx + dx, my + dy, rr, 0, 6.28); c.fill();
+  }
+  // เมฆบางพาดหน้าจันทร์
+  c.globalAlpha = 0.5;
+  c.drawImage(zFogSprite, mx - 90, my + 2, 180, 26);
+  c.drawImage(zFogSprite, mx - 40, my - 14, 130, 18);
+  c.globalAlpha = 1;
+  zDrawDistantSkyline(c, gy, r);
+  return L;
+}
+
+// เส้นขอบฟ้าเมืองไกลลิบ (ตึกสูง + หอคอยทีวี + เจดีย์) เลือนในหมอก — นิ่ง ไม่ทำ parallax
+// ช่วยให้จอมือถือแนวตั้งที่ท้องฟ้าสูงมากไม่โล่ง
+function zDrawDistantSkyline(c, gy, r) {
+  const maxH = Math.min(320, gy * 0.42);
+  const haze = c.createLinearGradient(0, gy - maxH, 0, gy);
+  haze.addColorStop(0, "#2a1a3e"); haze.addColorStop(1, "#4a1f3a");
+  c.fillStyle = haze;
+  c.beginPath();
+  for (let x = -10; x < ZW + 10;) {
+    const w = 18 + r() * 46, h = maxH * (0.25 + r() * 0.5);
+    c.rect(x, gy - h, w, h);
+    if (r() < 0.3) c.rect(x + w * 0.4, gy - h - 14, 3, 14); // เสาบนยอด
+    x += w + r() * 8;
+  }
+  c.fill();
+  // หอคอยทีวี (ทรงไข่มุกตะวันออก)
+  const tx = ZW * 0.28, base = gy, th = maxH * 1.05;
+  c.fillRect(tx - 3, base - th, 6, th);
+  c.beginPath(); c.arc(tx, base - th * 0.42, 13, 0, 6.28); c.arc(tx, base - th * 0.78, 9, 0, 6.28); c.fill();
+  c.fillRect(tx - 1, base - th - 30, 2, 30);
+  // เจดีย์ 5 ชั้น
+  const px = ZW * 0.62;
+  for (let i = 0; i < 5; i++) {
+    const w = 46 - i * 7, y = base - maxH * 0.35 - i * 22;
+    c.fillRect(px - w / 2 + 6, y, w - 12, 22);
+    c.beginPath(); c.moveTo(px - w / 2 - 6, y + 4); c.quadraticCurveTo(px, y - 10, px + w / 2 + 6, y + 4); c.lineTo(px + w / 2 - 4, y + 2); c.lineTo(px - w / 2 + 4, y + 2); c.fill();
+  }
+  c.fillRect(px - 1, base - maxH * 0.35 - 5 * 22 - 18, 2, 20);
+  c.fillRect(px - 16, base - maxH * 0.35, 32, maxH * 0.35);
+  // ไฟสัญญาณแดง + หน้าต่างจาง ๆ
+  c.fillStyle = "rgba(255,70,70,0.8)";
+  c.beginPath(); c.arc(tx, base - th - 30, 2, 0, 6.28); c.fill();
+  c.fillStyle = "rgba(255,200,140,0.18)";
+  for (let i = 0; i < 70; i++) c.fillRect(r() * ZW, gy - r() * maxH * 0.6, 2, 2);
+  // หมอกพื้นกลืนฐานตึก
+  const fog = c.createLinearGradient(0, gy - maxH * 0.5, 0, gy);
+  fog.addColorStop(0, "rgba(90,30,60,0)"); fog.addColorStop(1, "rgba(120,40,70,0.55)");
+  c.fillStyle = fog; c.fillRect(0, gy - maxH * 0.5, ZW, maxH * 0.5);
+}
+
+const ZNEON = [["酒店", "#ff4fd8"], ["药房", "#3cf0ff"], ["面馆", "#ffb13c"], ["网吧", "#7dff6a"], ["旅馆", "#ff5a5a"], ["超市", "#3cf0ff"]];
+function zNeonSign(c, x, y, text, color) {
+  // ป้ายนีออนแนวตั้งแบบร้านจีน — shadowBlur จ่ายครั้งเดียวตอนอบภาพ
+  const w = 24, h = text.length * 20 + 10;
+  c.save();
+  c.fillStyle = "rgba(10,6,20,0.85)";
+  c.fillRect(x, y, w, h);
+  c.shadowColor = color; c.shadowBlur = 12;
+  c.strokeStyle = color; c.lineWidth = 2;
+  c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  c.fillStyle = color;
+  c.font = `700 16px "Noto Sans SC", sans-serif`;
+  c.textAlign = "center"; c.textBaseline = "middle";
+  [...text].forEach((ch, i) => c.fillText(ch, x + w / 2, y + 15 + i * 20));
+  c.restore();
+}
+
+function zBuildFarStrip() {
+  const S = 160, N = 8, H = 175, L = zMakeLayer(S * N, H), c = L.c, r = zRng(7);
+  for (let i = 0; i < N; i++) {
+    const bw = 100 + Math.floor(r() * 3) * 16, h = 56 + Math.floor(r() * 7) * 15;
+    const x = i * S + 8, top = H - h;
+    c.fillStyle = "#121530"; c.fillRect(x, top, bw, h);
+    c.fillStyle = "rgba(130,140,220,0.2)"; c.fillRect(x, top, bw, 2);       // แสงจันทร์ที่ขอบหลังคา
+    c.fillStyle = "rgba(0,0,0,0.25)"; c.fillRect(x + bw - 10, top, 10, h);  // ด้านเงาของตึก
+    const roof = r();
+    c.strokeStyle = "#1c2044"; c.fillStyle = "#1c2044"; c.lineWidth = 2;
+    if (roof < 0.4) {
+      const ax = x + bw * (0.3 + r() * 0.4);
+      c.beginPath(); c.moveTo(ax, top); c.lineTo(ax, top - 26); c.moveTo(ax - 6, top - 16); c.lineTo(ax + 6, top - 16); c.stroke();
+      c.fillStyle = "#ff3b3b"; c.beginPath(); c.arc(ax, top - 27, 1.8, 0, 6.28); c.fill();
+    } else if (roof < 0.7) {
+      const tx = x + 12 + r() * (bw - 40);
+      c.fillRect(tx, top - 14, 18, 10); c.fillRect(tx + 2, top - 4, 2, 4); c.fillRect(tx + 14, top - 4, 2, 4);
+    }
+    for (let wy = top + 10; wy < H - 14; wy += 16)
+      for (let wx = x + 10; wx < x + bw - 16; wx += 18) {
+        const k = r();
+        c.fillStyle = k < 0.16 ? "#c9b458" : k < 0.22 ? "#e8d48a" : k < 0.25 ? "#8fb8dc" : "rgba(255,255,255,0.035)";
+        c.fillRect(wx, wy, 7, 8);
+      }
+  }
+  return L;
+}
+
+function zBuildNearStrip() {
+  const S = 220, N = 6, H = 215, L = zMakeLayer(S * N, H), c = L.c, r = zRng(23);
+  for (let i = 0; i < N; i++) {
+    const bw = 150 + Math.floor(r() * 3) * 18, h = 80 + Math.floor(r() * 5) * 22;
+    const x = i * S + 10, top = H - h;
+    c.fillStyle = "#0b0d1c"; c.fillRect(x, top, bw, h);
+    c.fillStyle = "rgba(150,160,230,0.14)"; c.fillRect(x, top, bw, 2);
+    c.fillStyle = "rgba(0,0,0,0.3)"; c.fillRect(x + bw - 14, top, 14, h);
+    for (let wy = top + 14; wy < H - 18; wy += 20)
+      for (let wx = x + 14; wx < x + bw - 22; wx += 24) {
+        const k = r();
+        if (k < 0.2) {
+          c.fillStyle = k < 0.15 ? "#ffd76a" : "#ffad5a";
+          c.fillRect(wx, wy, 8, 10);
+          c.fillStyle = "rgba(255,215,106,0.12)"; c.fillRect(wx - 3, wy - 3, 14, 16); // แสงฟุ้งรอบหน้าต่าง
+        } else {
+          c.fillStyle = k < 0.24 ? "#5fd0e0" : "rgba(255,255,255,0.03)";
+          c.fillRect(wx, wy, 8, 10);
+        }
+      }
+    // บันไดหนีไฟ
+    if (r() < 0.5 && h > 110) {
+      c.strokeStyle = "rgba(60,64,96,0.9)"; c.lineWidth = 1.5;
+      const fx = x + 8;
+      c.beginPath();
+      for (let fy = top + 22; fy < H - 20; fy += 26) { c.moveTo(fx, fy); c.lineTo(fx + 30, fy); c.moveTo(fx, fy); c.lineTo(fx + 30, fy + 26); }
+      c.stroke();
+    }
+    // ป้ายนีออน
+    if (r() < 0.65) {
+      const [text, color] = ZNEON[Math.floor(r() * ZNEON.length)];
+      zNeonSign(c, x + bw - 40, top + 16, text, color);
+    }
+  }
+  // เสาไฟถนน + ลำแสง (อยู่ในแถบตึกใกล้ ฐานเสาตรงกับพื้น)
+  for (let i = 0; i < N; i += 2) {
+    const px = i * S + 120, base = H;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    const cone = c.createRadialGradient(px + 16, base - 108, 2, px + 16, base - 40, 90);
+    cone.addColorStop(0, "rgba(255,210,140,0.35)"); cone.addColorStop(1, "rgba(255,210,140,0)");
+    c.fillStyle = cone;
+    c.beginPath(); c.moveTo(px + 10, base - 108); c.lineTo(px - 40, base); c.lineTo(px + 72, base); c.lineTo(px + 22, base - 108); c.closePath(); c.fill();
+    c.restore();
+    c.fillStyle = "#1a1d30";
+    c.fillRect(px - 2, base - 112, 4, 112);
+    c.fillRect(px - 2, base - 112, 20, 3);
+    c.fillStyle = "#ffe6a8"; c.shadowColor = "#ffc860"; c.shadowBlur = 14;
+    c.fillRect(px + 10, base - 110, 12, 4);
+    c.shadowBlur = 0;
+  }
+  return L;
+}
+
+function zBuildGroundStrip(gy) {
+  const P = 720, H = Math.max(40, ZH - gy + 6), L = zMakeLayer(P, H), c = L.c, r = zRng(31);
+  // ขอบหญ้า + กอหญ้า
+  c.fillStyle = "#2f4a24"; c.fillRect(0, 0, P, 8);
+  c.fillStyle = "#3f6630";
+  for (let x = 0; x < P; x += 6 + r() * 10) {
+    const h = 3 + r() * 5;
+    c.beginPath(); c.moveTo(x, 2); c.lineTo(x + 2, 2 - h); c.lineTo(x + 4, 2); c.fill();
+  }
+  // ขอบทางเท้า (แบ่งเป็นก้อน)
+  c.fillStyle = "#3d4254"; c.fillRect(0, 6, P, 6);
+  c.fillStyle = "#23263a";
+  for (let x = 0; x < P; x += 60) c.fillRect(x, 6, 2, 6);
+  // ถนน
+  const road = c.createLinearGradient(0, 12, 0, H);
+  road.addColorStop(0, "#1d2130"); road.addColorStop(1, "#0b0d16");
+  c.fillStyle = road; c.fillRect(0, 12, P, H - 12);
+  // เม็ดกรวด
+  for (let i = 0; i < 420; i++) {
+    c.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.3)";
+    c.fillRect(r() * P, 12 + r() * (H - 12), 1 + r() * 1.5, 1 + r() * 1.5);
+  }
+  // รอยแตก
+  c.strokeStyle = "rgba(0,0,0,0.45)"; c.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    let x = r() * (P - 80) + 20, y = 30 + r() * Math.max(10, H - 50);
+    c.beginPath(); c.moveTo(x, y);
+    for (let k = 0; k < 4; k++) { x += 6 + r() * 12; y += (r() - 0.5) * 10; c.lineTo(x, y); }
+    c.stroke();
+  }
+  // แอ่งน้ำสะท้อนแสงจันทร์
+  for (const px of [140, 500]) {
+    const py = 34 + r() * Math.max(4, Math.min(30, H - 50));
+    const g = c.createRadialGradient(px, py, 2, px, py, 40);
+    g.addColorStop(0, "rgba(180,190,255,0.22)"); g.addColorStop(1, "rgba(120,130,200,0)");
+    c.fillStyle = g; c.beginPath(); c.ellipse(px, py, 44, 7, 0, 0, 6.28); c.fill();
+  }
+  // เส้นถนน (ตำแหน่งเดิม gy+18 → y 24 ในแถบนี้ที่เริ่มที่ gy-6)
+  c.fillStyle = "#77744c";
+  for (let x = 0; x < P; x += 90) c.fillRect(x, 24, 44, 4);
+  return L;
+}
+
+function zBuildGradeLayer() {
+  // color grade + vignette + scanline CRT รวมเป็นภาพเดียว → วาดเต็มจอ 1 ครั้งต่อเฟรม
+  // (เดิม grade กับ scanline แยกกัน = เต็มจอ 2 ครั้ง; scanline ต้องคมจึงอบที่ zScale ไม่ใช่ครึ่งความละเอียด)
+  const L = zMakeLayer(ZW, ZH), c = L.c;
+  const grade = c.createLinearGradient(0, 0, 0, ZH);
+  grade.addColorStop(0, "rgba(40,20,80,0.12)"); grade.addColorStop(1, "rgba(80,20,40,0.12)");
+  c.fillStyle = grade; c.fillRect(0, 0, ZW, ZH);
+  const vig = c.createRadialGradient(ZW / 2, ZH / 2, Math.min(ZW, ZH) * 0.35, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.75);
+  vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.55)");
+  c.fillStyle = vig; c.fillRect(0, 0, ZW, ZH);
+  // scanline CRT: pattern 1×3 px (แถวมืด 1 px ทุก 3 px) ความเข้ม 6 %
   const pat = document.createElement("canvas");
   pat.width = 1; pat.height = 3;
   const pc = pat.getContext("2d");
   pc.fillStyle = "#000"; pc.fillRect(0, 0, 1, 1);
-  zScanPat = zctx.createPattern(pat, "repeat");
+  c.globalAlpha = 0.06; c.fillStyle = c.createPattern(pat, "repeat");
+  c.fillRect(0, 0, ZW, ZH);
+  c.globalAlpha = 1;
+  return L;
+}
+
+function zBuildStatics() {
+  const gy = zGroundY();
   // หมอก/ควัน: blob นุ่ม pre-render ครั้งเดียว แล้ว drawImage แทนการสร้าง radial gradient ทุกเฟรม
-  zFogSprite = zSoftSprite("180,180,210", 256);
-  zSmokeSprite = zSoftSprite("180,180,180", 96);
+  // (สร้างก่อน zBuildSky เพราะเมฆหน้าจันทร์ใช้ sprite นี้)
+  if (!zFogSprite) {
+    zFogSprite = zSoftSprite("180,180,210", 256);
+    zSmokeSprite = zSoftSprite("180,180,180", 96);
+    zGlowSprite = zSoftSprite("255,215,106", 128);   // แสงฟุ้งปากกระบอก/ไฟอัปเกรดอาวุธ
+  }
+  zSkyLayer = zBuildSky(gy);
+  // แถบตึกไม่ขึ้นกับขนาดจอ — สร้างใหม่เฉพาะเมื่อความละเอียดที่วาด (zScale) เปลี่ยน
+  if (!zFarStrip || zFarStrip.scale !== zScale) zFarStrip = zBuildFarStrip();
+  if (!zNearStrip || zNearStrip.scale !== zScale) zNearStrip = zBuildNearStrip();
+  zGroundStrip = zBuildGroundStrip(gy);
+  zGradeLayer = zBuildGradeLayer();
 }
 zresize();
+zBuildCharacterStatics();
+
+// sprite บับเบิลคำจีนเหนือหัวซอมบี้ (ข้อความคงที่ตลอดชีวิตของตัวนี้) — pre-render ตอน spawn
+// แทน shadowBlur + fillText + strokeText ทุกเฟรม (แนวเดียวกับ makeMeteorLabelSprite)
+function makeZombieBubbleSprite(text) {
+  const dpr = zScale;
+  const fs = text.length > 3 ? 22 : text.length > 2 ? 27 : 34;
+  const font = `800 ${fs}px "Noto Sans SC", sans-serif`;
+  const probe = document.createElement("canvas").getContext("2d");
+  probe.font = font;
+  const tw = probe.measureText(text).width, bw = tw + 24, bh = fs + 16;
+  const pad = 10; // เผื่อเงาเบลอ + หางบับเบิล
+  const w = Math.ceil(bw + pad * 2), h = Math.ceil(bh + 7 + pad * 2);
+  const cv = document.createElement("canvas");
+  cv.width = Math.ceil(w * dpr);
+  cv.height = Math.ceil(h * dpr);
+  const c2 = cv.getContext("2d");
+  c2.scale(dpr, dpr);
+  c2.translate(w / 2, pad);
+  c2.shadowColor = "rgba(0,0,0,0.4)"; c2.shadowBlur = 6; c2.shadowOffsetY = 2;
+  c2.fillStyle = "rgba(255,255,255,.96)";
+  zRoundRect(c2, -bw / 2, 0, bw, bh, 10);
+  c2.beginPath(); c2.moveTo(-6, bh - 1); c2.lineTo(6, bh - 1); c2.lineTo(0, bh + 7); c2.fill();
+  c2.shadowColor = "transparent"; c2.shadowBlur = 0; c2.shadowOffsetY = 0;
+  c2.font = font;
+  c2.fillStyle = "#1a1a1a"; c2.textAlign = "center"; c2.textBaseline = "middle";
+  c2.fillText(text, 0, bh / 2 + 1);
+  c2.globalCompositeOperation = "lighter";
+  c2.strokeStyle = "rgba(140,200,255,.35)";
+  c2.lineWidth = 1.2;
+  c2.strokeText(text, 0, bh / 2);
+  // anchor = ขอบล่างของบับเบิลหลัก (ไม่รวมหาง) อยู่ที่ y = pad + bh ในสไปรต์
+  return { cv, w, h, ay: pad + bh };
+}
 
 const zombieBestKey = () => `cr_best_${catPrefix()}${currentLevel}_zombie_${difficulty}_${zDuration}`;
 function zSpeed() {
@@ -120,7 +423,6 @@ function startZombieGame(level) {
   pool = getVocabPool(level);
   if (!pool.length) pool = getVocabPool("1");
   lastStarter = () => startZombieGame(level);
-  zresize();
   zb = {
     score: 0, kills: 0, combo: 0, elapsed: 0, timeLeft: zDuration,
     spawnTimer: 0, nextSpawn: 1.0, stunUntil: 0,
@@ -130,7 +432,12 @@ function startZombieGame(level) {
     weaponId: "bow", upgradeFlash: 0, done: new Set(),
   };
   switchScreen($("zombie"));
+  // resize หลังจอแสดงแล้ว เพื่อให้ zGroundY อ่าน offsetTop จริงของ #zombieBar (ไม่ใช่ค่าสำรอง)
+  // และ gradient พื้นหลังที่แคชไว้ตรงกับเส้นพื้นจริง
+  zresize();
+  zRQ.reset();
   $("zPauseOverlay").classList.remove("show");
+  zHudCache = {};
   updateZombieHUD();
   refreshZOptions();
   renderZOptions();
@@ -139,18 +446,26 @@ function startZombieGame(level) {
   requestAnimationFrame(zloop);
 }
 
+// HUD ถูกเรียกทุกเฟรมจาก zUpdate — เขียน DOM เฉพาะเมื่อค่าเปลี่ยนจริง
+// (เดิมเขียน textContent 5 จุดทุกเฟรม → style/layout/repaint ของ HUD ที่มี backdrop-filter ทุกเฟรม)
+let zHudCache = {};
+function zSetText(id, text) {
+  if (zHudCache[id] === text) return;
+  zHudCache[id] = text;
+  const el = $(id);
+  if (el) el.textContent = text;
+}
 function updateZombieHUD() {
-  $("zScore").textContent = zb.score;
-  $("zKills").textContent = "🧟 " + zb.kills;
+  zSetText("zScore", String(zb.score));
+  zSetText("zKills", "🧟 " + zb.kills);
   // show current weapon
-  const wp = zWeapon();
-  if ($("zWeapon")) $("zWeapon").textContent = wp.name;
+  zSetText("zWeapon", zWeapon().name);
   // ไม่จำกัดเวลา → แสดงเวลาที่เล่นไปแล้วแทนการนับถอยหลัง
   const t = zDuration ? Math.max(0, Math.ceil(zb.timeLeft)) : Math.floor(zb.elapsed);
-  const el = $("zTimer");
-  el.textContent = `${zDuration ? "⏱" : "♾️"} ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-  el.classList.toggle("urgent", !!zDuration && t <= 10);
-  $("zProg").textContent = progPct(zb.done.size, pool.length);
+  zSetText("zTimer", `${zDuration ? "⏱" : "♾️"} ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`);
+  const urgent = !!zDuration && t <= 10;
+  if (zHudCache.urgent !== urgent) { zHudCache.urgent = urgent; $("zTimer").classList.toggle("urgent", urgent); }
+  zSetText("zProg", progPct(zb.done.size, pool.length));
 }
 
 function spawnZombie() {
@@ -161,7 +476,7 @@ function spawnZombie() {
   const usedPinyin = new Set(alive.map((z) => z.word[1]));
   let w = pick(pool), guard = 0;
   while (usedPinyin.has(w[1]) && guard++ < 200) w = pick(pool);
-  zb.zombies.push({
+  const z = {
     word: w, x: ZW + 40, speed: zSpeed() * rand(0.9, 1.1),
     phase: rand(0, 6.28), hit: false, dead: false, fall: 0,
     scale: rand(0.85, 1.2),
@@ -169,7 +484,14 @@ function spawnZombie() {
     skinDark: pick(["#4e8f2e", "#3a6a22", "#5a8033"]),
     shirtLight: pick(["#7a5a9a", "#5a3a7a", "#6a4a8a", "#8a6aaa", "#4a5a8a"]),
     shirtDark: pick(["#5a3a7a", "#3a2a5a", "#4a3a6a", "#6a4a8a", "#2a3a6a"]),
-  });
+  };
+  // gradient เสื้อ/หัว (สีคงที่ต่อตัว) สร้างที่ bob=0 ครั้งเดียว แล้วตอนวาดค่อย translate ตาม bob
+  z.torsoGrad = zctx.createLinearGradient(-15, -82, 15, -42);
+  z.torsoGrad.addColorStop(0, z.shirtLight); z.torsoGrad.addColorStop(1, z.shirtDark);
+  z.headGrad = zctx.createRadialGradient(-3, -98, 2, 0, -96, 15);
+  z.headGrad.addColorStop(0, z.skin); z.headGrad.addColorStop(1, z.skinDark);
+  z.bubble = makeZombieBubbleSprite(zFirst(w[0]));
+  zb.zombies.push(z);
 }
 
 function refreshZOptions() {
@@ -391,55 +713,21 @@ function zRoundRect(c, x, y, w, h, r) {
 
 function zDrawBackground(c) {
   const gy = zGroundY();
-  // sky gradient (deeper, duskier) — แคชตามขนาดจอ (zBuildStatics)
-  c.fillStyle = zSkyGrad; c.fillRect(0, 0, ZW, ZH);
+  // ท้องฟ้า + ดาว + จันทร์ อบไว้แล้ว (zBuildSky) — พื้นที่ใต้เส้นพื้นถูกถนนทับอยู่แล้ว
+  c.drawImage(zSkyLayer.cv, 0, 0, zSkyLayer.w, zSkyLayer.h);
 
-  // stars (twinkle)
+  // ดาวที่กะพริบ (ไม่กี่ดวง วาดสด)
+  c.fillStyle = "#f2f0ff";
   for (const s of zStars) {
     s.tw += 0.05;
-    c.globalAlpha = 0.5 + Math.sin(s.tw) * 0.4;
-    c.fillStyle = "#e8e6ff";
-    c.beginPath(); c.arc(s.x, s.y, s.r, 0, 6.28); c.fill();
+    c.globalAlpha = 0.5 + Math.sin(s.tw) * 0.45;
+    c.fillRect(s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
   }
   c.globalAlpha = 1;
 
-  // moon with glow halo (ตำแหน่งคงที่ — ใช้ gradient ที่แคชไว้)
-  const mx = ZW * 0.8, my = gy * 0.22;
-  c.fillStyle = zMoonHalo; c.beginPath(); c.arc(mx, my, 70, 0, 6.28); c.fill();
-  c.fillStyle = "#f3e9b8"; c.beginPath(); c.arc(mx, my, 26, 0, 6.28); c.fill();
-  c.fillStyle = "#e0d6a5"; c.beginPath(); c.arc(mx - 8, my - 6, 5, 0, 6.28); c.arc(mx + 9, my + 8, 4, 0, 6.28); c.fill();
-
-  // far buildings (parallax) — two layers for depth
-  // หน้าต่างรวมเป็น path เดียวต่อเลเยอร์แล้ว fill ครั้งเดียว (เดิม ~450 fillRect/เฟรม)
-  const par = zb.scroll * 0.25, off = par % 160;
-  for (let x = -off - 160; x < ZW + 160; x += 160) {
-    const k = Math.round((x + par) / 160);
-    const h = 50 + ((k * 37) % 7) * 16, bw = 110 + ((k * 11) % 3) * 12;
-    c.fillStyle = "#11142a"; c.fillRect(x, gy - h, bw, h);
-    c.fillStyle = "#c9b458";
-    c.beginPath();
-    let wi = 0;
-    for (let wy = gy - h + 10; wy < gy - 14; wy += 16)
-      for (let wx = 0; wx < bw - 20; wx += 18) {
-        if (((k * 13 + wi++) % 5) === 0) c.rect(x + 10 + wx, wy, 7, 8);
-      }
-    c.fill();
-  }
-  // near buildings (faster parallax, darker)
-  const par2 = zb.scroll * 0.5, off2 = par2 % 220;
-  for (let x = -off2 - 220; x < ZW + 220; x += 220) {
-    const k = Math.round((x + par2) / 220);
-    const h = 80 + ((k * 53) % 5) * 22, bw = 150 + ((k * 17) % 3) * 18;
-    c.fillStyle = "#0a0c1a"; c.fillRect(x, gy - h, bw, h);
-    c.fillStyle = "#ffd76a";
-    c.beginPath();
-    let wi = 0;
-    for (let wy = gy - h + 14; wy < gy - 18; wy += 20)
-      for (let wx = 0; wx < bw - 28; wx += 24) {
-        if (((k * 23 + wi++) % 4) === 0) c.rect(x + 14 + wx, wy, 8, 10);
-      }
-    c.fill();
-  }
+  // ตึก 2 เลเยอร์ (parallax) — แถบที่อบไว้ ต่อกันวนไม่มีรอยต่อ
+  zBlitStrip(c, zFarStrip, zb.scroll * 0.25, gy - zFarStrip.h);
+  zBlitStrip(c, zNearStrip, zb.scroll * 0.5, gy - zNearStrip.h);
 
   // drifting fog — blob pre-render แล้ว drawImage แทน createRadialGradient ทุกเฟรม
   for (const f of zFog) {
@@ -450,16 +738,15 @@ function zDrawBackground(c) {
   }
   c.globalAlpha = 1;
 
-  // fence / grass edge
-  c.fillStyle = "#2f4a24"; c.fillRect(0, gy - 6, ZW, 8);
-  // road with subtle gradient (แคช)
-  c.fillStyle = zRoadGrad; c.fillRect(0, gy, ZW, ZH - gy);
-  const off3 = zb.scroll % 90;
-  c.fillStyle = "#5a5a40";
-  for (let x = -off3; x < ZW; x += 90) c.fillRect(x, gy + 18, 44, 4);
+  // ขอบหญ้า + ถนน + เส้นถนน: แถบเดียวที่เลื่อนไปทั้งแถบ
+  zBlitStrip(c, zGroundStrip, zb.scroll, gy - 6);
+  // (vignette ย้ายไปรวมกับ color grade ใน zGradeLayer ท้าย zDraw)
+}
 
-  // vignette (dark edges) — แคช
-  c.fillStyle = zVigGrad; c.fillRect(0, 0, ZW, ZH);
+function zBlitStrip(c, s, scroll, y) {
+  const off = ((scroll % s.w) + s.w) % s.w;
+  // ปัด x เป็นจำนวนเต็ม กันรอยต่อเส้นบาง ๆ ระหว่างแผ่น
+  for (let x = -Math.round(off); x < ZW; x += s.w) c.drawImage(s.cv, x, y, s.w, s.h);
 }
 
 function zDrawPolice(c) {
@@ -478,24 +765,18 @@ function zDrawPolice(c) {
   c.beginPath(); c.arc(0, -98, 13.6, 0, 6.28); c.fill();
   c.restore();
   c.lineCap = "round";
-  // legs (with shading) — เงาใต้ขาให้ตัวอิงพื้น ไม่ลอย
-  c.save();
-  c.shadowColor = "rgba(0,0,0,.55)";
-  c.shadowBlur = 10;
-  c.shadowOffsetY = 2;
-  const lg = c.createLinearGradient(-8, -46, -8, -5);
-  lg.addColorStop(0, "#2a3a8b"); lg.addColorStop(1, "#141d52");
-  c.strokeStyle = lg; c.lineWidth = 9;
+  // legs (with shading) — เงาใต้ขาใช้ sprite นุ่มที่แคชไว้ แทน shadowBlur ทุกเฟรม
+  c.globalAlpha = 0.5;
+  c.drawImage(zBodyShadowSprite, -24, -30, 48, 34);
+  c.globalAlpha = 1;
+  c.strokeStyle = zPoliceLegGrad; c.lineWidth = 9;
   c.beginPath(); c.moveTo(-4, -46); c.lineTo(-4 + swing * 12, -5); c.moveTo(4, -46); c.lineTo(4 - swing * 12, -5); c.stroke();
   c.fillStyle = "#0a0a0a"; c.fillRect(-4 + swing * 12 - 7, -6, 16, 6); c.fillRect(4 - swing * 12 - 7, -6, 16, 6);
-  c.restore();
   // back arm
   c.strokeStyle = "#2a45b8"; c.lineWidth = 8;
   c.beginPath(); c.moveTo(-8, -76); c.lineTo(-16, -52); c.stroke();
   // torso with vertical gradient + belt
-  const tg = c.createLinearGradient(-14, -84, 14, -44);
-  tg.addColorStop(0, "#3a55c8"); tg.addColorStop(1, "#1e2f88");
-  c.fillStyle = tg; zRoundRect(c, -14, -84, 28, 40, 6);
+  c.fillStyle = zPoliceTorsoGrad; zRoundRect(c, -14, -84, 28, 40, 6);
   // belt
   c.fillStyle = "#1a1a1a"; c.fillRect(-14, -50, 28, 5);
   c.fillStyle = "#ffd23c"; c.fillRect(-3, -50, 6, 5); // buckle
@@ -503,9 +784,7 @@ function zDrawPolice(c) {
   c.fillStyle = "#ffd23c"; c.beginPath(); c.arc(-6, -74, 3, 0, 6.28); c.fill();
   c.fillStyle = "#b8860b"; c.beginPath(); c.arc(-6, -74, 1.4, 0, 6.28); c.fill();
   // head (skin gradient) + face
-  const hg = c.createRadialGradient(-2, -100, 2, 0, -98, 13);
-  hg.addColorStop(0, "#f7d2a8"); hg.addColorStop(1, "#e0b07a");
-  c.fillStyle = hg; c.beginPath(); c.arc(0, -98, 12, 0, 6.28); c.fill();
+  c.fillStyle = zPoliceHeadGrad; c.beginPath(); c.arc(0, -98, 12, 0, 6.28); c.fill();
   // eyes
   c.fillStyle = "#222"; c.beginPath(); c.arc(-4, -99, 1.6, 0, 6.28); c.arc(4, -99, 1.6, 0, 6.28); c.fill();
   // mouth (determined)
@@ -564,6 +843,12 @@ function zDrawPolice(c) {
     cone.addColorStop(0, "rgba(255,230,107,0.9)"); cone.addColorStop(1, "rgba(255,230,107,0)");
     c.fillStyle = cone;
     c.beginPath(); c.moveTo(60 - r, -75); c.lineTo(60 - r + 120, -95); c.lineTo(60 - r + 120, -55); c.closePath(); c.fill();
+    // แสงฟุ้งรอบปากกระบอก (แทน bloom เต็มจอที่เอาออกไป)
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    c.globalAlpha = fa * 0.8;
+    c.drawImage(zGlowSprite, 60 - r - 34, -75 - 34, 68, 68);
+    c.restore();
     c.globalAlpha = fa;
     c.fillStyle = "#ffe66b";
     c.beginPath();
@@ -592,22 +877,18 @@ function zDrawZombie(c, z) {
   c.scale(z.scale, z.scale);
   const bob = Math.sin(z.phase) * 3, swing = Math.sin(z.phase);
   c.lineCap = "round";
-  // เงาหลักด้านหลังตัว (fallback ให้ silhouette หลุดจากพื้นหลังถ้าพื้นหลังสว่าง)
-  c.save();
-  c.shadowColor = "rgba(0,0,0,.55)"; c.shadowBlur = 14;
-  c.fillStyle = "rgba(0,0,0,.01)";
-  zRoundRect(c, -15, -82 + bob, 30, 40, 6);
-  c.restore();
+  // เงาหลักด้านหลังตัว (ให้ silhouette หลุดจากพื้นหลัง) — sprite นุ่มที่แคชไว้ แทน shadowBlur 14 ทุกเฟรม
+  c.globalAlpha *= 0.55;
+  c.drawImage(zBodyShadowSprite, -30, -96 + bob, 60, 68);
+  c.globalAlpha /= 0.55;
   // legs (shaded)
-  const lg = c.createLinearGradient(0, -44, 0, -5);
-  lg.addColorStop(0, "#4a6a36"); lg.addColorStop(1, "#2a401c");
-  c.strokeStyle = lg; c.lineWidth = 9;
+  c.strokeStyle = zZombieLegGrad; c.lineWidth = 9;
   c.beginPath(); c.moveTo(-4, -44); c.lineTo(-4 - swing * 10, -5); c.moveTo(4, -44); c.lineTo(4 + swing * 10, -5); c.stroke();
   c.fillStyle = "#1a1a1a"; c.fillRect(-4 - swing * 10 - 6, -6, 14, 5); c.fillRect(4 + swing * 10 - 6, -6, 14, 5);
-  // torso (torn shirt) with gradient
-  const tg = c.createLinearGradient(-15, -82 + bob, 15, -42 + bob);
-  tg.addColorStop(0, z.shirtLight); tg.addColorStop(1, z.shirtDark);
-  c.fillStyle = tg; zRoundRect(c, -15, -82 + bob, 30, 40, 6);
+  // torso (torn shirt) with gradient (แคชต่อตัว ที่ bob=0 → translate ตาม bob)
+  c.save(); c.translate(0, bob);
+  c.fillStyle = z.torsoGrad; zRoundRect(c, -15, -82, 30, 40, 6);
+  c.restore();
   // exposed flesh patches
   c.fillStyle = "#7fc45a"; c.fillRect(-15, -50 + bob, 8, 8); c.fillRect(4, -56 + bob, 9, 6);
   // arms reaching left toward the police (shaded)
@@ -623,9 +904,9 @@ function zDrawZombie(c, z) {
     c.beginPath(); c.moveTo(-32, -57 + bob - swing * 3 + i * 2); c.lineTo(-38, -59 + bob - swing * 3 + i * 2); c.stroke();
   }
   // head (skin gradient)
-  const hg = c.createRadialGradient(-3, -98 + bob, 2, 0, -96 + bob, 15);
-  hg.addColorStop(0, z.skin); hg.addColorStop(1, z.skinDark);
-  c.fillStyle = hg; c.beginPath(); c.arc(0, -96 + bob, 14, 0, 6.28); c.fill();
+  c.save(); c.translate(0, bob);
+  c.fillStyle = z.headGrad; c.beginPath(); c.arc(0, -96, 14, 0, 6.28); c.fill();
+  c.restore();
   // rim light: ขอบเรืองแสงด้านซ้าย (เหมือนแสงจันทร์ส่องข้างหลัง) ให้หัวหลุดจากฉากหลัง
   c.save();
   c.globalCompositeOperation = "lighter";
@@ -637,10 +918,10 @@ function zDrawZombie(c, z) {
   c.fillStyle = "#2d4a1c"; c.fillRect(-12, -111 + bob, 20, 6);
   c.strokeStyle = "#2d4a1c"; c.lineWidth = 2;
   for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(-10 + i * 5, -111 + bob); c.lineTo(-12 + i * 5, -116 + bob); c.stroke(); }
-  // glowing red eyes
-  c.shadowColor = "#ff2020"; c.shadowBlur = 8;
+  // glowing red eyes — แสงเรืองใช้ sprite นุ่มที่แคชไว้ แทน shadowBlur 8 ทุกเฟรม
+  c.drawImage(zEyeGlowSprite, -14, -106 + bob, 16, 16);
+  c.drawImage(zEyeGlowSprite, -6, -107 + bob, 16, 16);
   c.fillStyle = "#ff3b3b"; c.beginPath(); c.arc(-6, -98 + bob, 2.6, 0, 6.28); c.arc(2, -99 + bob, 2.6, 0, 6.28); c.fill();
-  c.shadowBlur = 0;
   // fangs + bloody mouth
   c.fillStyle = "#3a0a0a"; c.fillRect(-10, -90 + bob, 11, 3);
   c.fillStyle = "#fff";
@@ -649,28 +930,10 @@ function zDrawZombie(c, z) {
   // blood drip
   c.fillStyle = "#a01010"; c.fillRect(-7, -84 + bob, 1.5, 4);
   // Chinese word above the head
+  // (บับเบิล + เงา + rim light ถูก pre-render ไว้ใน z.bubble ตอน spawn)
   if (!z.dead) {
-    const text = zFirst(z.word[0]);
-    const fs = text.length > 3 ? 22 : text.length > 2 ? 27 : 34;
-    c.font = `800 ${fs}px "Noto Sans SC", sans-serif`;
-    const tw = c.measureText(text).width, bw = tw + 24, bh = fs + 16, by = -120 + bob - bh;
-    // speech bubble with shadow
-    c.shadowColor = "rgba(0,0,0,0.4)"; c.shadowBlur = 6; c.shadowOffsetY = 2;
-    c.fillStyle = "rgba(255,255,255,.96)";
-    zRoundRect(c, -bw / 2, by, bw, bh, 10);
-    c.beginPath(); c.moveTo(-6, by + bh - 1); c.lineTo(6, by + bh - 1); c.lineTo(0, by + bh + 7); c.fill();
-    c.shadowBlur = 0; c.shadowOffsetY = 0;
-    textShadowOn(c, 0, "transparent");
-    c.fillStyle = "#1a1a1a"; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(text, 0, by + bh / 2 + 1);
-    // ขอบตัวอักษรเรืองแสง (rim light) จากด้านบน ให้ตัวอักษรดูมีมิติ ไม่แบนติดบับเบิล
-    c.save();
-    c.globalCompositeOperation = "lighter";
-    c.strokeStyle = "rgba(140,200,255,.35)";
-    c.lineWidth = 1.2;
-    c.strokeText(text, 0, by + bh / 2);
-    c.restore();
-    textShadowOff(c);
+    const b = z.bubble;
+    c.drawImage(b.cv, -b.w / 2, -120 + bob - b.ay, b.w, b.h);
   }
   c.restore();
 }
@@ -723,32 +986,37 @@ function zDraw() {
     glowOff(c);
   }
   c.globalAlpha = 1;
-  // particles (smoke uses pre-rendered soft sprite, others solid)
+  // particles: ควันวาดแบบปกติ (sprite นุ่ม) ก่อน แล้วสะเก็ดไฟ/เลือดวาดแบบแสงบวก (lighter)
+  // → สะเก็ดซ้อนกันยิ่งสว่างเหมือนเรืองแสง
   for (const p of zb.particles) {
-    const a = 1 - p.age / p.life;
-    c.globalAlpha = a;
-    if (p.smoke) {
-      c.globalAlpha = a * 0.5;
-      c.drawImage(zSmokeSprite, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
-    } else {
-      c.fillStyle = p.color;
-      c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+    if (!p.smoke) continue;
+    c.globalAlpha = (1 - p.age / p.life) * 0.5;
+    c.drawImage(zSmokeSprite, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+  }
+  glowOn(c);
+  for (const p of zb.particles) {
+    if (p.smoke) continue;
+    c.globalAlpha = 1 - p.age / p.life;
+    c.fillStyle = p.color;
+    c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill();
+  }
+  glowOff(c);
+  c.globalAlpha = 1;
+  // ไม่มี bloom() แล้ว: มันต้องอ่านภาพทั้งเฟรมกลับมาย่อ + เบลอ + วาดทับเต็มจอแบบ lighter ทุกเฟรม
+  // ซึ่งเป็นต้นทุนก้อนใหญ่ที่สุดของเกมนี้บน GPU มือถือ (APK กระตุก) — แสงฟุ้งได้จาก lighter +
+  // zGlowSprite ที่ปากกระบอกแทน (เกมอุกกาบาตก็เลิกใช้แล้ว — ฟังก์ชัน bloom ถูกลบออก)
+  if (zb.floaters.length) {
+    c.font = "800 22px 'Noto Sans Thai', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+    // ขอบเข้มด้วย strokeText แทน shadowBlur (ถูกกว่ามากบน WebView)
+    c.lineWidth = 4; c.strokeStyle = "rgba(0,0,0,.6)"; c.lineJoin = "round";
+    for (const f of zb.floaters) {
+      c.globalAlpha = 1 - f.age / f.life;
+      c.strokeText(f.text, f.x, f.y);
+      c.fillStyle = "#ffd76a";
+      c.fillText(f.text, f.x, f.y);
     }
+    c.globalAlpha = 1;
   }
-  c.globalAlpha = 1;
-  bloom(zcanvas, c, ZW, ZH);   // Bloom ปลอม: ปากกระบอก/ระเบิด/rocket trail จะฟุ้งเป็นแสง
-                                // (ต้องใช้ zcanvas ของเกมนี้เป็นแหล่งภาพ — ครั้งหนึ่งส่ง `canvas`
-                                //  ของเกมอุกกาบาตเข้ามา ทำให้เฟรมสุดท้ายของอุกกาบาต/จรวดถูกเบลอ
-                                //  ซ้อนเป็นภาพโปร่งค้างบนจอซอมบี้ทุกเฟรม)
-  c.font = "800 22px 'Noto Sans Thai', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
-  for (const f of zb.floaters) {
-    c.globalAlpha = 1 - f.age / f.life;
-    textShadowOn(c, 6);
-    c.fillStyle = "#ffd76a";
-    c.fillText(f.text, f.x, f.y);
-    textShadowOff(c);
-  }
-  c.globalAlpha = 1;
   c.restore();
 
   // red danger flash when a zombie is close to the police
@@ -764,29 +1032,24 @@ function zDraw() {
     c.fillRect(0, 0, ZW, ZH);
   }
 
-  // color grading (cool dusk tint) — แคช gradient ตามขนาดจอ
-  c.fillStyle = zGradeGrad; c.fillRect(0, 0, ZW, ZH);
+  // vignette + color grading + CRT scanlines — ภาพเดียวที่อบไว้ (zBuildGradeLayer)
+  c.drawImage(zGradeLayer.cv, 0, 0, ZW, ZH);
 
-  // CRT scanlines (subtle) — pattern 1×3px แทน fillRect ~ZH/3 ครั้งต่อเฟรม
-  c.globalAlpha = 0.06; c.fillStyle = zScanPat;
-  c.fillRect(0, 0, ZW, ZH);
-  c.globalAlpha = 1;
-
-  // weapon upgrade flash (golden glow)
+  // weapon upgrade flash (golden glow) — sprite นุ่มที่แคชไว้ แทน radial gradient ใหม่ทุกเฟรม
   if (zb.upgradeFlash > 0) {
-    const ua = zb.upgradeFlash / 1.5;
-    c.globalAlpha = ua * 0.3;
-    const ug = c.createRadialGradient(ZW / 2, ZH / 2, 0, ZW / 2, ZH / 2, Math.max(ZW, ZH) * 0.6);
-    ug.addColorStop(0, "rgba(255,215,106,0.8)"); ug.addColorStop(1, "rgba(255,215,106,0)");
-    c.fillStyle = ug; c.fillRect(0, 0, ZW, ZH);
+    const ua = zb.upgradeFlash / 1.5, rr = Math.max(ZW, ZH) * 0.6;
+    c.globalAlpha = ua * 0.24;
+    c.drawImage(zGlowSprite, ZW / 2 - rr, ZH / 2 - rr, rr * 2, rr * 2);
     c.globalAlpha = 1;
   }
 }
 
 function zloop(t) {
   if (!zb) return;
-  const dt = Math.min((t - zb.lastTime) / 1000, 0.05);
+  const dtMs = t - zb.lastTime;
+  const dt = Math.min(dtMs / 1000, 0.05);
   zb.lastTime = t;
+  zRQ.frame(dtMs, zb.paused || zb.ending);
   if (!zb.paused) zUpdate(dt);
   if (!zb) return;
   zDraw();

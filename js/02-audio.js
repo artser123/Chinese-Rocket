@@ -181,7 +181,16 @@ function speakSeqNative(parts, onDone, duckAll = false, onProgress) {
         advance();
       }, Math.max(6000, String(text).length * 400 + 8000)),
     });
-    native.speakText({ text, lang: lang || "zh-CN", rate: 0.85, utteranceId: uid })
+    // ชื่อเมธอดต้องตรงกับ @PluginMethod ใน NativeSpeechPlugin.java (ttsSpeak) — เดิมเรียก
+    // speakText ซึ่งไม่มีอยู่ จึงโยน TypeError ทิ้งเงียบๆ: TTS สำรองทุกจุดใน APK ไม่มีเสียง
+    // (เช่นประโยคตัวอย่าง Bing ในพจนานุกรมที่ไม่มีไฟล์ mp3)
+    let speaking;
+    try {
+      speaking = native.ttsSpeak({ text, lang: lang || "zh-CN", rate: 0.85, utteranceId: uid });
+    } catch (e) {
+      speaking = Promise.reject(e);
+    }
+    Promise.resolve(speaking)
       .then((res) => {
         if (sid !== speechSeqId) { crTtsCancelAll(); return; }
         if (!res || !res.started) { if (settle()) advance(); return; }

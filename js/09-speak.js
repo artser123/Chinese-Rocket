@@ -117,33 +117,132 @@ function spkStopNativeMic() {
 const TRAD2SIMP = {};
 for (const p of ("們们 這这 個个 來来 時时 說说 學学 麼么 嗎吗 為为 會会 對对 點点 電电 話话 機机 見见 聽听 覺觉 現现 問问 題题 間间 開开 關关 門门 車车 飛飞 場场 國国 兒儿 醫医 院院 長长 髮发 發发 經经 過过 還还 進进 遠远 運运 動动 氣气 風风 雲云 鳥鸟 貓猫 魚鱼 飯饭 麵面 飲饮 書书 筆笔 紙纸 詞词 語语 課课 讀读 寫写 記记 認认 識识 習习 員员 銀银 錢钱 價价 買买 賣卖 東东 褲裤 襪袜 顏颜 紅红 藍蓝 綠绿 黃黄 歲岁 號号 幾几 樓楼 層层 裡里 後后 邊边 誰谁 樣样 謝谢 請请 沒没 係系 愛爱 歡欢 應应 該该 須须 興兴 傷伤 難难 緊紧 張张 擔担 餓饿 熱热 涼凉 陰阴 聲声 樂乐 畫画 視视 劇剧 戲戏 賽赛 遊游 騎骑 駕驾 駛驶 橋桥 圖图 館馆 誌志 報报 雜杂 貨货 廚厨 務务 護护 藥药 診诊 頭头 臉脸 腳脚 體体 腸肠 鏡镜 孫孙 爺爷 媽妈 親亲 戀恋 結结 離离 寶宝 貝贝 齡龄 漢汉 韓韩 亞亚 灣湾 邁迈 隻只 鐘钟 錄录 業业 數数 術术 藝艺 訊讯 資资 網网 頁页 郵邮 腦脑 標标 軟软 統统 線线 無无 費费 試试 帳账 碼码 種种 養养 讓让 幹干 與与 處处 條条 約约 廣广 慶庆 島岛 節节 慣惯 顧顾 蘇苏 寧宁 靜静 爭争 議议 論论 計计 較较 輕轻 輛辆 選选 鹽盐 醬酱 湯汤 餃饺 餅饼 飽饱 雞鸡 鴨鸭 豬猪 鮮鲜 蝦虾 廳厅 鍋锅 壺壶 區区 縣县 鎮镇 鄉乡 峽峡 灘滩 樹树 葉叶 實实 類类 態态 勢势 狀状 況况 質质 額额 幣币 單单 據据 證证 棟栋 廈厦 廁厕 衛卫 櫃柜 畢毕 業业").split(" ")) TRAD2SIMP[p[0]] = p[1];
 
-// เก็บเฉพาะตัวอักษรจีน ตัดเว้นวรรคและเครื่องหมายวรรคตอนทิ้ง
-function normZh(s) { return (s || "").replace(/[^一-鿿]/g, ""); }
+// เก็บเฉพาะตัวอักษรจีน (+ 〇 และเลขอารบิก — ตัวเลขเป็น "ตัวอักษร" ที่ต้องพูดด้วย) ตัดเว้นวรรค/วรรคตอนทิ้ง
+// เดิมตัดเลขอารบิกทิ้ง: ระบบถอดเสียงได้ "3个" จะเหลือแค่ "个" แล้วถูกนับว่าพูดผิด
+const SPK_CHAR_RE = /[一-鿿〇0-9]/;
+function normZh(s) {
+  return (s || "").replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xFEE0)).replace(/[^一-鿿〇0-9]/g, "");
+}
 // พินอินหนึ่งพยางค์ -> ตัวพิมพ์เล็ก ไม่มีวรรณยุกต์/เครื่องหมาย
 function pyToken(t) { return normPinyin(t || "").replace(/[^a-z]/g, ""); }
 
+/* ---------- ตัวเลข: อารบิก ↔ ตัวเลขจีน ----------
+   ตัวอักษรตัวเดียว: เลขอารบิก 1 หลัก = ตัวเลขจีนหลักนั้น, 〇 = 零 (spkCanon)
+   ทั้งก้อน: ระบบถอดเสียงมักให้ "25" / "3:30" / "50%" ทั้งที่ประโยคเขียน 二十五 / 三点半 / 百分之五十
+   → spkHeardVariants สร้างคำอ่านจีนหลายแบบของแต่ละก้อนเลข แล้ว spkEvaluate เลือกแบบที่ตรงประโยคที่สุด */
+const ZH_DIGITS = "零一二三四五六七八九";
+function spkCanon(c) {
+  if (c >= "0" && c <= "9") return ZH_DIGITS[+c];
+  if (c === "〇") return "零";
+  return TRAD2SIMP[c] || c;
+}
+function zhInt(n) {
+  if (n === 0) return "零";
+  if (!(n > 0 && n < 1e8)) return null;
+  const four = (x) => {
+    const ds = [Math.floor(x / 1000) % 10, Math.floor(x / 100) % 10, Math.floor(x / 10) % 10, x % 10];
+    const units = ["千", "百", "十", ""];
+    let s = "", gap = false;
+    ds.forEach((d, i) => {
+      if (!d) { if (s) gap = true; return; }
+      if (gap) { s += "零"; gap = false; }
+      s += ZH_DIGITS[d] + units[i];
+    });
+    return s;
+  };
+  const wan = Math.floor(n / 1e4), rest = n % 1e4;
+  let s = wan ? four(wan) + "万" : "";
+  if (rest) s += (wan && rest < 1000 ? "零" : "") + four(rest);
+  return s.replace(/^一十/, "十"); // 10–19 พูดว่า 十X ไม่ใช่ 一十X
+}
+const zhDigitByDigit = (str) => [...str].map((d) => ZH_DIGITS[+d]).join("");
+// คำอ่านจีนที่เป็นไปได้ของตัวเลขหนึ่งก้อน (เรียงจากที่พบบ่อย)
+function spkNumberReadings(m, intStr, minStr, decStr, pct) {
+  const out = new Set();
+  const n = parseInt(intStr, 10);
+  const card = zhInt(n);
+  if (minStr != null) { // เวลา 3:30
+    const mm = parseInt(minStr, 10);
+    const h = card + "点";
+    if (mm === 0) { out.add(h); out.add(h + "整"); }
+    else {
+      if (mm === 30) out.add(h + "半");
+      if (mm === 15) out.add(h + "一刻");
+      if (mm === 45) out.add(h + "三刻");
+      const ms = (mm < 10 ? "零" : "") + zhInt(mm);
+      out.add(h + ms + "分"); out.add(h + ms);
+    }
+  } else if (pct) {
+    out.add("百分之" + card + (decStr ? "点" + zhDigitByDigit(decStr) : ""));
+  } else if (decStr) {
+    out.add(card + "点" + zhDigitByDigit(decStr));
+  } else {
+    if (card) out.add(card);
+    if (intStr.length >= 3 || /^0/.test(intStr)) out.add(zhDigitByDigit(intStr)); // ปี / เบอร์ / ห้อง / สายรถเมล์
+    // 2 = 两 เวลานับจำนวน (两个, 两百, 两千, 两万)
+    if (card && /^二(百|千|万|$)/.test(card)) out.add(card.replace(/^二/, "两"));
+    out.add(m); // คงเลขอารบิกไว้ — ประโยคที่เขียนเป็นเลขอารบิก (เช่น 302路) จะเทียบได้ตรง
+  }
+  return [...out].filter(Boolean);
+}
+// ประโยคที่ได้ยินในหลายรูปแบบตามคำอ่านของก้อนตัวเลข (จำกัดจำนวนชุดค่าผสมไม่ให้ช้า)
+function spkHeardVariants(heardRaw) {
+  const raw = (heardRaw || "").replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xFEE0)).replace(/：/g, ":");
+  const re = /(\d+)(?::(\d{2}))?(?:\.(\d+))?\s*(%|％)?/g;
+  const parts = [], slots = [];
+  let last = 0, mt;
+  while ((mt = re.exec(raw))) {
+    parts.push(raw.slice(last, mt.index));
+    slots.push(slots.length < 4 ? spkNumberReadings(mt[0].trim(), mt[1], mt[2], mt[3], !!mt[4]) : [mt[0]]);
+    parts.push(null);
+    last = re.lastIndex;
+  }
+  parts.push(raw.slice(last));
+  if (!slots.length) return [raw];
+  let combos = [[]];
+  for (const opts of slots) combos = combos.flatMap((c) => opts.map((o) => c.concat(o))).slice(0, 96);
+  return combos.map((c) => { let k = 0; return parts.map((p) => (p === null ? c[k++] : p)).join(""); });
+}
+
+/* ---------- ความเข้มการตรวจ (เลือกในหน้าตั้งค่า, จำไว้ใน localStorage) ----------
+   easy/normal: ผ่านเมื่อคะแนนความตรง ≥ เกณฑ์ และนับเสียงที่คนไทยมักสับสน (zh/z ch/c sh/s n/l -ng/-n) ว่าถูก
+   strict: แบบเดิม — ทุกตัวต้องถูก (ยอมแค่คำพ้องเสียงที่พินอินเดียวกัน เช่น 他/她) */
+const SPK_STRICT = {
+  easy:   { pass: 0.65, fuzzy: true,  label: "ผ่อนปรน" },
+  normal: { pass: 0.8,  fuzzy: true,  label: "ปกติ" },
+  strict: { pass: 1,    fuzzy: false, label: "เข้ม" },
+};
+let spkStrict = SPK_STRICT[localStorage.getItem("cr_speak_strict")] ? localStorage.getItem("cr_speak_strict") : "normal";
+const pyFuzzy = (p) => p.replace(/^([zcs])h/, "$1").replace(/^n(?=[aeiouv])/, "l").replace(/ng$/, "n");
+
 // พินอินต่อตัวอักษรของประโยคเป้าหมาย: ใช้พินอินจากข้อมูลประโยคถ้าพยางค์ตรงกับตัวอักษร
-// ไม่งั้น fallback เป็นตารางต่อตัวจาก VOCAB (dictPinyinIndex)
+// ไม่งั้น fallback เป็นตารางต่อตัวจาก VOCAB (dictPinyinIndex) — ตัวเลขใช้พินอินของตัวเลขจีน
 function spkTargetPinyin(s) {
   const chars = [...normZh(s[0])];
   const toks = (s[1] || "").split(/\s+/).map(pyToken).filter(Boolean);
   if (toks.length === chars.length) return toks;
   const { charPy } = dictPinyinIndex();
-  return chars.map((c) => pyToken(charPy.get(c) || ""));
+  return chars.map((c) => pyToken(charPy.get(spkCanon(c)) || ""));
 }
 
 // เทียบตัวอักษรที่ได้ยินกับประโยคเป้าหมาย (Levenshtein + backtrace)
 // คู่ที่พินอินเดียวกัน (ตัวหน้าต่างกันแต่ออกเสียงเหมือน เช่น 他/她/它) นับว่าถูก
+// โหมดไม่เข้ม: พินอินใกล้เคียง (pyFuzzy) ก็นับว่าถูก ต้นทุนสูงกว่าเล็กน้อย
 function spkAlign(heard, s, targetPy) {
   const { charPy } = dictPinyinIndex();
+  const fuzzy = SPK_STRICT[spkStrict].fuzzy;
   const pyOf = (c) => pyToken(charPy.get(c) || "");
-  const a = [...normZh(heard)].map((c) => TRAD2SIMP[c] || c);
-  const b = [...normZh(s[0])];
+  const a = [...normZh(heard)].map(spkCanon);
+  const bRaw = [...normZh(s[0])];
+  const b = bRaw.map(spkCanon);
   const n = a.length, m = b.length;
   const cost = (x, j) => {
     if (x === b[j]) return 0;
+    if ((x === "二" && b[j] === "两") || (x === "两" && b[j] === "二")) return 0.5;
     const px = pyOf(x), pb = targetPy[j];
-    return px && pb && px === pb ? 0.5 : 1;
+    if (px && pb && px === pb) return 0.5;
+    if (fuzzy && px && pb && pyFuzzy(px) === pyFuzzy(pb)) return 0.75;
+    return 1;
   };
   const d = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = 0; i <= n; i++) d[i][0] = i;
@@ -156,7 +255,7 @@ function spkAlign(heard, s, targetPy) {
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && d[i][j] === d[i - 1][j - 1] + cost(a[i - 1], j - 1)) {
       const c = cost(a[i - 1], j - 1);
-      ops.unshift({ t: b[j - 1], h: a[i - 1], ok: c < 1, hom: c === 0.5 });
+      ops.unshift({ t: bRaw[j - 1], h: a[i - 1], ok: c < 1, hom: c > 0 && c < 1 });
       i--; j--;
     } else if (i > 0 && d[i][j] === d[i - 1][j] + 1) {
       ops.unshift({ t: null, h: a[i - 1], ok: false });
@@ -242,7 +341,7 @@ function spkShowResult(ops) {
   let oi = 0;
   const nextT = () => { while (oi < ops.length && !ops[oi].t) oi++; return ops[oi++]; };
   for (const ch of spk.current[0]) {
-    if (!/[一-鿿]/.test(ch)) { zh.appendChild(document.createTextNode(ch)); continue; }
+    if (!SPK_CHAR_RE.test(ch)) { zh.appendChild(document.createTextNode(ch)); continue; }
     const o = nextT();
     if (!o) { zh.appendChild(document.createTextNode(ch)); continue; }
     const span = document.createElement("span");
@@ -287,12 +386,29 @@ function spkAdvance(isWrong) {
   }
 }
 
+// คะแนนความตรง 0–1: ตัวในประโยคที่พูดถูก ÷ (ความยาวประโยค + ครึ่งหนึ่งของตัวที่พูดเกินมา)
+function spkScore(ops) {
+  let target = 0, good = 0, extra = 0;
+  for (const o of ops) {
+    if (o.t) { target++; if (o.ok) good++; }
+    else extra++;
+  }
+  return target ? good / (target + extra * 0.5) : 0;
+}
+
 function spkEvaluate(heardRaw) {
   if (!spk || !spk.current) return;
-  const heard = normZh(heardRaw);
-  if (!heard) { spkSetStatus("🤔 ไม่ได้ยินเสียงพูด กด 🎤 แล้วลองพูดอีกครั้ง"); return; }
-  const ops = spkAlign(heard, spk.current, spk.targetPy);
-  const ok = ops.every((o) => o.ok);
+  if (!normZh(heardRaw)) { spkSetStatus("🤔 ไม่ได้ยินเสียงพูด กด 🎤 แล้วลองพูดอีกครั้ง"); return; }
+  // ตัวเลขที่ถอดเสียงเป็นเลขอารบิกมีหลายคำอ่าน → ลองทุกแบบแล้วใช้แบบที่ตรงประโยคที่สุด
+  let ops = null, score = -1;
+  for (const v of spkHeardVariants(heardRaw)) {
+    if (!normZh(v)) continue;
+    const o = spkAlign(v, spk.current, spk.targetPy), sc = spkScore(o);
+    if (sc > score) { ops = o; score = sc; }
+  }
+  const rule = SPK_STRICT[spkStrict];
+  const ok = rule.pass >= 1 ? ops.every((o) => o.ok) : score >= rule.pass;
+  const pct = Math.round(score * 100);
   $("spkCard").classList.remove("correct", "wrong");
   spkShowResult(ops);
   speakSentence(spk.current); // เล่นประโยคที่ถูกต้องให้ฟังทั้งตอนถูกและผิด
@@ -302,14 +418,16 @@ function spkEvaluate(heardRaw) {
     $("spkCard").classList.add("correct");
     sfx.correct();
     confettiBurst($("speak"), 26);
-    spkSetStatus("✅ พูดถูกต้อง!");
+    spkSetStatus(pct >= 100 || ops.every((o) => o.ok) ? "✅ พูดถูกต้อง!" : `✅ ผ่าน! ตรง ${pct}% — ตัวสีแดงคือจุดที่ยังพูดไม่ชัด`);
     spkAdvance(false);
   } else {
     spk.repeat = true; // พูดผิด: ให้ลองประโยคเดิมอีกครั้งหลังฟังเสียงที่ถูก
     if (quizLivesOn) spk.lives--;
     $("spkCard").classList.add("wrong");
     sfx.wrong();
-    spkSetStatus("❌ ยังไม่ตรง — ตัวสีแดงคือจุดที่ผิด ฟังเสียงที่ถูกแล้วลองใหม่");
+    spkSetStatus(rule.pass >= 1
+      ? "❌ ยังไม่ตรง — ตัวสีแดงคือจุดที่ผิด ฟังเสียงที่ถูกแล้วลองใหม่"
+      : `❌ ตรง ${pct}% (ต้อง ${Math.round(rule.pass * 100)}%) — ตัวสีแดงคือจุดที่ผิด ฟังเสียงที่ถูกแล้วลองใหม่`);
     spkAdvance(true);
   }
   updateSpkHUD();

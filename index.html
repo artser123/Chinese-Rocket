@@ -222,6 +222,15 @@
       </div>
     </div>
 
+    <div class="setup-row" id="spkStrictRow" style="display:none">
+      <span class="setup-label">ความเข้มการตรวจเสียงพูด</span>
+      <div class="level-select" id="spkStrictSelect">
+        <button class="spks-btn" data-strict="easy">😊 ผ่อนปรน (ตรง 65%)</button>
+        <button class="spks-btn" data-strict="normal">🙂 ปกติ (ตรง 80%)</button>
+        <button class="spks-btn" data-strict="strict">🎯 เข้ม (ถูกทุกตัว)</button>
+      </div>
+    </div>
+
     <div class="setup-row" id="lisTypeRow" style="display:none">
       <span class="setup-label">ฟังแบบ</span>
       <div class="level-select" id="lisTypeSelect">
@@ -1109,6 +1118,18 @@
     <div class="ms-actions">
       <button id="msOvBtn2" class="big-btn secondary" type="button" hidden></button>
       <button id="msOvBtn" class="big-btn" type="button"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ยืนยันก่อนออกจากเกมเมื่อกดปุ่ม Back ของ Android (APK) — อยู่นอก .screen ทุกจอ -->
+<div id="backConfirm" class="ms-overlay" role="alertdialog" aria-modal="true" aria-labelledby="backConfirmTitle" hidden>
+  <div class="overlay-box ms-box">
+    <div class="ms-ov-icon" aria-hidden="true">🚪</div>
+    <h2 id="backConfirmTitle">คุณต้องการออกจากเกม...<span>ใช่หรือไม่?</span></h2>
+    <div class="ms-actions">
+      <button id="backConfirmCancel" class="big-btn secondary" type="button">ยกเลิก</button>
+      <button id="backConfirmOk" class="big-btn" type="button">ตกลง</button>
     </div>
   </div>
 </div>
