@@ -572,14 +572,40 @@ const CATEGORIES = {
   }
 };
 
+/* ---------- เลือกหลายระดับ/หลายหมวดย่อยพร้อมกัน ----------
+   การเลือกเก็บเป็น "คีย์ระดับ" ข้อความเดียว: ระดับเดียว = id เดิม ("2", "hardware", "all")
+   ส่วนหลายระดับ = id ต่อกันด้วย "+" เรียงตามลำดับปุ่มของหมวด ("2+3", "hardware+network")
+   ทุกโหมดส่งคีย์นี้ต่อเข้า getVocabPool/getSentencePool, levelDisplayName และคีย์สถิติ
+   cr_best_… ได้ตรง ๆ — คีย์ระดับเดียวจึงเหมือนเดิมทุกตัว (สถิติเก่าไม่หาย) และคีย์หลายระดับคงที่
+   "all" (ทั้งหมด) เลือกได้เดี่ยว ๆ เท่านั้น */
+const LEVEL_SEP = "+";
+const levelParts = (level) => String(level == null ? "" : level).split(LEVEL_SEP).filter(Boolean);
+
+// รวมคลังของทุกระดับในคีย์ (ตัดตัวซ้ำด้วย จีน|พินอิน) — ระดับเดียวคืนอาร์เรย์เดิมของหมวดตรง ๆ
+function levelPoolUnion(level, getPool) {
+  const parts = levelParts(level);
+  if (parts.length <= 1) return getPool(level);
+  const seen = new Set();
+  const out = [];
+  for (const part of parts) {
+    for (const item of getPool(part) || []) {
+      const key = item && item[0] + "|" + item[1];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 function getVocabPool(level) {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
-  return cat.getVocabPool(level || selectedLevel || currentLevel);
+  return levelPoolUnion(level || selectedLevel || currentLevel, (l) => cat.getVocabPool(l));
 }
 
 function getSentencePool(level) {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
-  return cat.getSentencePool(level || selectedLevel || currentLevel);
+  return levelPoolUnion(level || selectedLevel || currentLevel, (l) => cat.getSentencePool(l));
 }
 
 // ทะเบียนคลังคำศัพท์ของทุกหมวดที่ไม่ใช่ HSK (ใช้ร่วมกันในพจนานุกรม 08-dict.js
@@ -611,11 +637,13 @@ function categoryHasSentences(level) {
 function levelDisplayName(level) {
   if (!level) return "";
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
-  const found = cat.levels.find((l) => String(l.id) === String(level));
-  if (found) {
-    return currentCategory === "hsk" ? `HSK ${found.id}` : found.label.replace(/\s*\(.*\)/, "");
-  }
-  return `ระดับ ${level}`;
+  return levelParts(level).map((part) => {
+    const found = cat.levels.find((l) => String(l.id) === part);
+    if (found) {
+      return currentCategory === "hsk" ? `HSK ${found.id}` : found.label.replace(/\s*\(.*\)/, "");
+    }
+    return `ระดับ ${part}`;
+  }).join(" + ");
 }
 
 const catPrefix = () => (currentCategory === "hsk" ? "hsk" : `${currentCategory}_`);
@@ -624,8 +652,7 @@ function setCategory(catId) {
   if (!CATEGORIES[catId]) return;
   currentCategory = catId;
   localStorage.setItem("cr_vocab_category", currentCategory);
-  const cat = CATEGORIES[currentCategory];
-  selectedLevel = cat.defaultLevel;
+  selectedLevel = levelLoadSaved(currentCategory);
   renderLevelSelect();
   updateCategoryDropdownUI();
 }
@@ -640,44 +667,89 @@ function updateCategoryDropdownUI() {
   }
 }
 
+// ระดับที่เลือกได้ในโหมดปัจจุบัน (ระดับ vocabOnly ซ่อนในโหมดประโยค)
+function levelValidList() {
+  const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
+  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb", "trace"].includes(gameMode)
+    || (gameMode === "listen" && lisType === "word");
+  return cat.levels.filter((l) => !l.vocabOnly || usesVocab);
+}
+
+// จัดคีย์ให้เป็นรูปมาตรฐาน: ตัดระดับที่ใช้ไม่ได้/ซ้ำ เรียงตามลำดับปุ่ม, "all" เลือกเดี่ยว,
+// เลือกครบทุกหมวดย่อย = "all" — คืน null ถ้าไม่เหลือระดับที่ใช้ได้
+function levelNormalize(level, valid = levelValidList()) {
+  const ids = valid.map((l) => String(l.id));
+  const parts = levelParts(level).filter((p) => ids.includes(p));
+  if (!parts.length) return null;
+  if (parts.includes("all")) return "all";
+  const picked = ids.filter((id) => parts.includes(id));
+  const singles = ids.filter((id) => id !== "all");
+  if (ids.includes("all") && picked.length === singles.length && singles.length > 1) return "all";
+  return picked.join(LEVEL_SEP);
+}
+
+// แตะปุ่มระดับ: "ทั้งหมด" ล้างตัวอื่น / ตัวอื่นล้าง "ทั้งหมด" / แตะซ้ำ = ยกเลิก
+// ยกเลิกตัวสุดท้าย → กลับไป "ทั้งหมด" (ถ้าหมวดมี) หรือคงตัวนั้นไว้ (HSK) จึงไม่มีวันว่าง
+function levelToggle(level, id) {
+  id = String(id);
+  if (id === "all") return "all";
+  const parts = levelParts(level).filter((p) => p !== "all");
+  const next = parts.includes(id) ? parts.filter((p) => p !== id) : parts.concat(id);
+  if (!next.length) {
+    return levelValidList().some((l) => String(l.id) === "all") ? "all" : id;
+  }
+  return levelNormalize(next.join(LEVEL_SEP)) || id;
+}
+
+const levelSaveKey = (catId) => `cr_level_sel_${catId}`;
+function levelLoadSaved(catId) {
+  const cat = CATEGORIES[catId] || CATEGORIES.hsk;
+  let saved = null;
+  try { saved = localStorage.getItem(levelSaveKey(catId)); } catch (e) {}
+  return saved || cat.defaultLevel;
+}
+function levelSave() {
+  if (!selectedLevel) return;
+  try { localStorage.setItem(levelSaveKey(currentCategory), selectedLevel); } catch (e) {}
+}
+
+// ไฮไลต์ปุ่มตาม selectedLevel (ใช้หลังแตะปุ่มด้วย ไม่ต้องสร้างปุ่มใหม่)
+function syncLevelButtons() {
+  const parts = levelParts(selectedLevel);
+  document.querySelectorAll("#levelSelect .level-btn").forEach((b) => {
+    const on = parts.includes(String(b.dataset.level));
+    b.classList.toggle("selected", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
+
 function renderLevelSelect() {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
   const container = $("levelSelect");
   if (!container) return;
 
   const labelEl = $("setupLevelLabel");
-  if (labelEl) labelEl.textContent = cat.levelLabel;
+  if (labelEl) labelEl.textContent = `${cat.levelLabel} (แตะเลือกได้หลาย${currentCategory === "hsk" ? "ระดับ" : "หมวด"})`;
 
   const tagEl = $("setupCategoryTag");
   if (tagEl) tagEl.textContent = `หมวดหมู่: ${cat.icon} ${cat.name}`;
 
-  const usesVocab = ["meteor", "zombie", "vocab", "matching", "bomb", "trace"].includes(gameMode)
-    || (gameMode === "listen" && lisType === "word");
-
+  const validLevels = levelValidList();
   container.innerHTML = "";
-  cat.levels.forEach((lvl) => {
-    if (lvl.vocabOnly && !usesVocab) return;
+  validLevels.forEach((lvl) => {
     const btn = document.createElement("button");
     btn.className = "level-btn" + (lvl.vocabOnly ? " vocab-level" : "");
     btn.dataset.level = lvl.id;
     btn.textContent = lvl.label;
-    if (String(selectedLevel) === String(lvl.id)) {
-      btn.classList.add("selected");
-    }
     container.appendChild(btn);
   });
 
-  const validLevels = cat.levels.filter((l) => !l.vocabOnly || usesVocab);
-  const isValid = validLevels.some((l) => String(l.id) === String(selectedLevel));
-  if (!isValid) {
-    if (validLevels.length) {
-      selectedLevel = validLevels[0].id;
-      const b = container.querySelector(`.level-btn[data-level="${selectedLevel}"]`);
-      if (b) b.classList.add("selected");
-    } else {
-      selectedLevel = null;
-    }
-  }
+  // คงระดับที่ยังใช้ได้ไว้ (เช่นสลับโหมด/หมวดแล้วบางระดับหายไป) ถ้าไม่เหลือเลยค่อยใช้ค่าที่บันทึก/ค่าเริ่มต้น
+  selectedLevel = levelNormalize(selectedLevel, validLevels)
+    || levelNormalize(levelLoadSaved(currentCategory), validLevels)
+    || levelNormalize(cat.defaultLevel, validLevels)
+    || (validLevels.length ? String(validLevels[0].id) : null);
+  syncLevelButtons();
   updateStartBtn();
 }
 const DIFF = {

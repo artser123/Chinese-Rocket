@@ -623,6 +623,8 @@ function lisAdvance() {
   const it = lis.current;
   if (lis.type === "sent") renderListenSentence(it);
   else $("lisZh").textContent = it[0];
+  if (lis.type === "sent") crSetHskSentenceBadge($("lisHskBadge"), it);
+  else crSetHskBadge($("lisHskBadge"), it, lis.level);
   $("lisPy").textContent = it[1] || "";
   $("lisTh").textContent = it[2] || "";
   $("lisSub").textContent = lis.type === "sent" && it[3] ? `📐 จุดไวยากรณ์: ${it[3]}` : "";
@@ -688,6 +690,11 @@ $("lisReplayBtn").addEventListener("click", () => {
   sfx.click();
   lisReplayBtnClick();
 });
+$("lisPrevBtn").addEventListener("click", () => {
+  if (!lis) return;
+  sfx.click();
+  lisPreviousTrack();
+});
 $("lisSkipBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
@@ -711,7 +718,7 @@ $("lisQuitBtn").addEventListener("click", () => {
       navigator.mediaSession.playbackState = "none";
     }
   } catch (e) {}
-  switchScreen(menuEl);
+  exitToSetup("listen");
 });
 
 // จอหมุน/เปลี่ยนขนาด และฟอนต์โหลดเสร็จ → วัดใหม่ (ความสูงบรรทัดของฟอนต์เปลี่ยนได้หลังโหลด)

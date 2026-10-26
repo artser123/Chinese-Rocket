@@ -348,6 +348,10 @@ html, body {
 .card:nth-child(10) { animation-delay: 360ms; }
 .card:nth-child(11) { animation-delay: 400ms; }
 .card:nth-child(12) { animation-delay: 440ms; }
+.card:nth-child(13) { animation-delay: 480ms; }
+.card:nth-child(14) { animation-delay: 520ms; }
+.card:nth-child(15) { animation-delay: 560ms; }
+.card:nth-child(16) { animation-delay: 600ms; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
 /* แสงสะท้อนด้านบน (เหมือนขอบกระจกส่องแสง) */
 .card::before {
@@ -372,7 +376,6 @@ html, body {
 }
 .card-icon { font-size: clamp(36px, 10vw, 52px); filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .5)); }
 .card-title { font-size: clamp(16px, 4.5vw, 21px); font-weight: 800; color: #ffd76a; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
-.card-desc { font-size: clamp(12px, 3.4vw, 14px); color: #a9b3e0; line-height: 1.6; }
 .card.locked { opacity: .45; cursor: default; }
 
 .setup {
@@ -402,7 +405,6 @@ html, body {
 }
 /* ไอคอนโหมดตัวใหญ่ด้านบนหน้าตั้งค่า — คัดลอกมาจาก .card-icon ของการ์ดที่กด */
 #setupIcon { font-size: clamp(64px, 18vw, 96px); line-height: 1.2; }
-#setupIcon.bomb-card-icon { width: 110px; height: 110px; line-height: 1; font-size: clamp(48px, 13vw, 64px); }
 .setup-row { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .setup-label { color: #8fd3ff; font-size: clamp(14px, 3.8vw, 17px); font-weight: 700; }
 .cp-pen-note { max-width: min(520px, 90vw); color: var(--fg-dim); text-align: center; line-height: 1.45; }
@@ -641,6 +643,45 @@ html, body {
   line-height: 1.2;
   text-shadow: 0 0 30px rgba(120, 140, 255, .6);
   min-height: 1.2em;
+}
+.hsk-level-badge {
+  align-self: center;
+  display: inline-flex;
+  width: fit-content;
+  margin: 1px auto 0;
+  padding: 2px 8px;
+  border: 1px solid var(--hsk-line, #8fd3ff);
+  border-radius: 999px;
+  background: var(--hsk-fill, rgba(143, 211, 255, .12));
+  color: var(--hsk-ink, #cceeff);
+  font-size: clamp(11px, 2.8vw, 14px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  text-shadow: none;
+}
+.hsk-level-badge[hidden] { display: none; }
+.hsk-level-badge[data-hsk="1"] { --hsk-line: #58e6a4; --hsk-fill: rgba(88, 230, 164, .14); --hsk-ink: #baffdf; }
+.hsk-level-badge[data-hsk="2"] { --hsk-line: #56d9ff; --hsk-fill: rgba(86, 217, 255, .14); --hsk-ink: #bcefff; }
+.hsk-level-badge[data-hsk="3"] { --hsk-line: #82a6ff; --hsk-fill: rgba(130, 166, 255, .14); --hsk-ink: #d2ddff; }
+.hsk-level-badge[data-hsk="4"] { --hsk-line: #b38cff; --hsk-fill: rgba(179, 140, 255, .14); --hsk-ink: #e3d7ff; }
+.hsk-level-badge[data-hsk="5"] { --hsk-line: #ff86c8; --hsk-fill: rgba(255, 134, 200, .14); --hsk-ink: #ffd1e8; }
+.hsk-level-badge[data-hsk="6"] { --hsk-line: #ffb45c; --hsk-fill: rgba(255, 180, 92, .14); --hsk-ink: #ffe0b3; }
+.hsk-level-badge[data-hsk="7"] { --hsk-line: #ff7b7b; --hsk-fill: rgba(255, 123, 123, .14); --hsk-ink: #ffd0d0; }
+.hsk-level-badge[data-hsk="8"] { --hsk-line: #b7e45c; --hsk-fill: rgba(183, 228, 92, .14); --hsk-ink: #e3f7bd; }
+.hsk-level-badge[data-hsk="9"] { --hsk-line: #ffd76a; --hsk-fill: rgba(255, 215, 106, .14); --hsk-ink: #fff0b8; }
+.hsk-level-badge[data-hsk="7-9"] {
+  --hsk-line: #ff9a72;
+  --hsk-fill: rgba(255, 154, 114, .16);
+  --hsk-ink: #ffd5c4;
+  background: linear-gradient(90deg, rgba(255, 123, 123, .15), rgba(183, 228, 92, .15), rgba(255, 215, 106, .15));
+}
+.hsk-level-badge[data-hsk="multi"] {
+  --hsk-line: #a9b5ff;
+  --hsk-fill: rgba(169, 181, 255, .15);
+  --hsk-ink: #dce1ff;
+  background: linear-gradient(90deg, rgba(88, 230, 164, .13), rgba(130, 166, 255, .13), rgba(255, 215, 106, .13));
 }
 #quizHint { color: #8b95c9; font-size: clamp(14px, 4vw, 18px); }
 
@@ -1521,6 +1562,22 @@ button.fill-blank {
   touch-action: manipulation;
 }
 #cpWordPopup .cpw-btn:active { transform: scale(.96); }
+
+/* ข้อความจีนที่แตะเปิดบับเบิ้ลคำแปล/ดูเส้นขีดได้ */
+#quizWord,
+#spkZh,
+#lisZh,
+#tcZh,
+#bombWord,
+#bombWritingWord,
+#bombRevealWord,
+.fb-zh,
+.toast-zh,
+.vo-sent-zh,
+.r-zh:not(.cpw-zh) {
+  cursor: pointer;
+  -webkit-tap-highlight-color: rgba(143, 211, 255, .18);
+}
 
 /* ---------- Overlays ---------- */
 #pauseOverlay, .pause-overlay, #gameover {
@@ -4196,14 +4253,69 @@ button.fill-blank {
   box-shadow: 0 0 10px rgba(var(--c), .7);
   pointer-events: none;
 }
-.card-icon { filter: drop-shadow(0 0 14px rgba(var(--c), .55)) drop-shadow(0 6px 10px rgba(0, 0, 0, .6)); }
+/* หน้าแรกแสดงแค่ไอคอน + ชื่อเกม (ไม่มีคำอธิบายใต้ชื่อแล้ว): การ์ดทุกใบสูงเท่ากันทั้งแถว
+   ไอคอนเป็น SVG เส้นเดียวกันทั้งชุด (viewBox 48) วาดด้วย currentColor = สีประจำโหมด --c
+   คลาสในไอคอน: .t = พื้นจาง, .f = ทึบ, .k = ทึบสีพื้นการ์ด (บังเส้นข้างใต้), .kc = เส้นสีพื้น,
+   .d = เส้นประบาง, .d2 = กรอบประ */
+.cards {
+  /* อย่างน้อย 2 คอลัมน์บนมือถือ; จอกว้างได้การ์ด ≥180px พอให้ชื่อยาวสุด
+     ("เกมอ่านบทความ HSK") อยู่บรรทัดเดียว → 4 คอลัมน์บนแท็บเล็ต/มือถือแนวนอน */
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, calc(50% - 6px)), 1fr));
+  grid-auto-rows: 1fr;
+  width: min(800px, 94vw);
+}
+.card {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 0;
+}
+.card-icon {
+  flex: none;
+  width: 64px; height: 64px;
+  display: grid; place-items: center;
+  border-radius: var(--r-cut);
+  border: 1px solid rgba(var(--c), .5);
+  background: radial-gradient(circle at 50% 30%, rgba(var(--c), .26), rgba(var(--c), .06) 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 6px 14px rgba(0, 0, 0, .45);
+  color: rgb(var(--c));
+  font-size: 0;
+  filter: none;
+}
+.card-icon svg {
+  width: 68%; height: 68%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(var(--c), .55));
+}
+.card-icon .t { fill: currentColor; fill-opacity: .2; }
+.card-icon .f { fill: currentColor; stroke: none; }
+.card-icon .k { fill: #11143a; }
+.card-icon .kc { stroke: #11143a; stroke-width: 3.2; }
+.card-icon .d { stroke-width: 1.4; stroke-dasharray: 2.5 3; opacity: .6; }
+.card-icon .d2 { stroke-dasharray: 3.5 3.5; }
 .card-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(17px, 4.7vw, 22px);
+  font-size: clamp(15px, 4.4vw, 18px);
   line-height: 1.25;
   color: #fff;
   text-shadow: 0 0 12px rgba(var(--c), .55), 0 2px 0 rgba(0, 0, 0, .6);
+  overflow-wrap: anywhere;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+/* หน้าตั้งค่ายืมไอคอนจากการ์ดที่กด (js/12-trace.js คัดลอก SVG + --c มาให้) */
+#setupIcon.card-icon { width: clamp(84px, 22vw, 104px); height: clamp(84px, 22vw, 104px); }
+/* เว้นที่ท้ายรายการไม่ให้การ์ดแถวสุดท้ายจมใต้บับเบิ้ลภารกิจ 📖 (#missionFab มุมซ้ายล่าง) */
+#menu { padding-bottom: calc(92px + var(--safe-bottom)); }
+@media (max-width: 380px) {
+  .cards { gap: 10px; }
+  .card { padding: 14px 8px 16px; }
+  .card-icon { width: 56px; height: 56px; }
 }
 .card-title::after {
   content: "";
@@ -4215,7 +4327,6 @@ button.fill-blank {
   transform: skewX(-24deg);
   box-shadow: 0 0 8px rgba(var(--c), .8);
 }
-.card-desc { color: #a6addb; }
 .card:not(.locked):active { transform: scale(.95); filter: brightness(1.25); }
 .card:hover:not(.locked) {
   border-color: rgb(var(--c));
@@ -4907,6 +5018,18 @@ button.fill-blank {
 }/* บรรทัดย่อย (คำแปล/พินอินที่โผล่หลังตอบ) ว่างอยู่ = ไม่ต้องจองที่ — ไม่งั้นข้อความในปุ่มเตี้ยดูลอยค่อนบน ไม่อยู่กลาง */
 #quizOptions .qopt .sub:empty { display: none; }
 
+/* ---------- เกมทายประโยค: ตำแหน่งตัวเลือกตามขนาดจอ ----------
+   จอใหญ่ (กว้าง ≥ 1100px: คอม/แท็บเล็ตแนวนอน) → 4 ตัวเลือกเรียงแถวเดียวแนวนอน (ขยายกล่องเพราะคำตอบเป็นประโยคยาว)
+   จอกลาง (600–1099px: แท็บเล็ตแนวตั้ง/มือถือแนวนอน) → 2×2 ตามค่าเดิมของ #sentQuizOptions
+   โทรศัพท์แนวตั้ง (< 600px) → เรียงลงมาแนวตั้งคอลัมน์เดียว ปุ่มเตี้ยลงให้เห็นครบ 4 ตัวเลือก */
+@media (min-width: 1100px) {
+  #sentQuizOptions { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(1240px, 96vw); }
+}
+@media (max-width: 599.98px) {
+  #sentQuizOptions { grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(520px, 94vw); }
+  #sentQuizOptions .sqopt { min-height: clamp(56px, 9vh, 88px); padding: 8px 12px; }
+}
+
 /* ---------- หน้าต่างภารกิจประจำวัน: เลื่อนได้ + ย่อให้พอดีจอ ----------
    ธีม ACTION ด้านบนตั้ง .overlay-box { overflow: hidden } ซึ่งมาทีหลัง .ms-box { overflow-y: auto }
    เลยทำให้หน้าต่างภารกิจเลื่อนไม่ได้ — จอเตี้ยปุ่มด้านล่างหลุดจอ. ใช้ selector ที่เจาะจงกว่าเพื่อคืนการเลื่อน,
@@ -4959,3 +5082,98 @@ button.fill-blank {
 #backConfirm { z-index: 4700; }
 #backConfirm .ms-box h2 { line-height: 1.45; }
 #backConfirmTitle span { white-space: nowrap; } /* ไม่ให้ "ใช่หรือ | ไม่?" ขาดกลางวลีบนจอแคบ */
+
+/* ===========================================================
+   เลเวลวันเล่นต่อเนื่องของภารกิจประจำวัน (เฉพาะ APK) — js/16-missions.js msRenderStreak()
+   =========================================================== */
+#msOvText { white-space: pre-line; }
+.ms-fab-streak {
+  position: absolute;
+  bottom: -6px;
+  right: -10px;
+  min-width: 30px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd76a, #ff9f1c);
+  border: 2px solid #0d1330;
+  color: #2a1400;
+  font: 800 11px/16px var(--font-ui);
+  text-align: center;
+}
+.ms-fab-streak[hidden] { display: none; }
+.ms-fab-streak.zero { background: var(--surface-2); color: var(--fg-dim); border-color: var(--line-1); }
+.ms-streak[hidden] { display: none; }
+.ms-streak {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-cut, 14px);
+  border: 1px solid rgba(255, 190, 60, .55);
+  background:
+    radial-gradient(90% 120% at 0% 0%, rgba(255, 170, 40, .22), transparent 60%),
+    linear-gradient(180deg, #1d1840, #0f1230);
+  box-shadow: inset 0 -2px 0 rgba(255, 190, 60, .6), 0 8px 18px rgba(0, 0, 0, .4);
+  text-align: left;
+}
+.ms-streak-top { display: flex; align-items: center; gap: 12px; }
+.ms-streak-icon { font-size: 34px; line-height: 1; flex-shrink: 0; filter: drop-shadow(0 0 10px rgba(255, 170, 40, .5)); }
+.ms-streak-body { flex: 1; min-width: 0; }
+.ms-streak-name { font-family: var(--font-display, inherit); font-weight: 700; font-size: 16px; line-height: 1.3; color: #fff; }
+.ms-streak-lv {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #ffc928;
+  color: #2a1400;
+  font: 800 12px/18px var(--font-ui);
+  vertical-align: 2px;
+}
+.ms-streak-zh { color: #ffd76a; font-size: 14px; line-height: 1.4; }
+.ms-streak-zh [lang="zh"] { font-family: "Noto Sans SC", sans-serif; font-weight: 700; }
+.ms-streak-py { margin-left: 6px; font-family: var(--font-pinyin); color: var(--fg-dim); font-size: 12.5px; }
+.ms-streak-days { flex-shrink: 0; text-align: center; color: var(--fg-dim); font-size: 11px; line-height: 1.2; }
+.ms-streak-days b { display: block; font: 800 26px/1 var(--font-display, inherit); color: #ffd76a; }
+.ms-streak-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.ms-streak-bar span { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: linear-gradient(90deg, #ff7a18, #ffd76a); }
+.ms-streak-next, .ms-streak-warn { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--fg-dim); }
+.ms-streak-warn { color: #ffb25a; }
+.ms-streak-warn.ok { color: #58ff88; }
+
+/* ---------- ไอคอนเกมแบบรูปภาพ (ต.ค. 2026) ----------
+   การ์ดเมนูใช้รูป icons/modes/<mode>.webp (ตัดจาก icon_sheet/New Icon 2026.png) แทน SVG เส้น
+   รูปเต็มกรอบ .card-icon เดิม (ขอบสี --c + มุมเฉียง) — หน้าตั้งค่าคัดลอก <img> ไปทั้งก้อนเหมือนเดิม */
+.card-icon:has(> img) {
+  width: 84px; height: 84px;
+  padding: 0;
+  overflow: hidden;
+  background: #0b0e24;
+  border: 2px solid rgba(var(--c), .7);
+  box-shadow: 0 0 14px rgba(var(--c), .35), 0 6px 14px rgba(0, 0, 0, .5);
+}
+.card-icon > img {
+  display: block;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+#setupIcon.card-icon:has(> img) { width: clamp(96px, 26vw, 120px); height: clamp(96px, 26vw, 120px); }
+@media (max-width: 380px) {
+  .card-icon:has(> img) { width: 72px; height: 72px; }
+}
+
+/* โหมดฟัง: ปุ่มฟังซ้ำต้องเด่นกว่าปุ่มนำทางก่อนหน้า/ถัดไปที่เป็นสีเข้ม */
+#listen #lisReplayBtn {
+  background: linear-gradient(180deg, #ff72dc, #c92bb0);
+  border: 1px solid #ffc1ef;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(55, 0, 42, .65);
+  box-shadow: 0 4px 0 #7d176d, 0 8px 18px rgba(255, 72, 204, .42), inset 0 1px 0 rgba(255, 255, 255, .38);
+}
+#listen #lisReplayBtn:active { box-shadow: 0 1px 0 #7d176d, 0 4px 10px rgba(255, 72, 204, .3); }

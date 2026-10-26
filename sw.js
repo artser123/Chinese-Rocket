@@ -1,7 +1,7 @@
 /* Chinese Rocket service worker — PWA offline support
    Strategy: precache the app shell, stale-while-revalidate for everything
    else cacheable (audio clips, whisper model, CDN libs, fonts). */
-const CACHE = "cr-v119";
+const CACHE = "cr-v124";
 
 const CORE = [
   "./",
@@ -24,6 +24,22 @@ const CORE = [
   "./js/15-vocaboverview.js",
   "./js/16-missions.js",
   "./manifest.json",
+  "./icons/modes/dict.webp",
+  "./icons/modes/meteor.webp",
+  "./icons/modes/zombie.webp",
+  "./icons/modes/vocab.webp",
+  "./icons/modes/vocaboverview.webp",
+  "./icons/modes/sentence.webp",
+  "./icons/modes/sentencequiz.webp",
+  "./icons/modes/speak.webp",
+  "./icons/modes/fillblank.webp",
+  "./icons/modes/bomb.webp",
+  "./icons/modes/matching.webp",
+  "./icons/modes/listen.webp",
+  "./icons/modes/podcast.webp",
+  "./icons/modes/reader.webp",
+  "./icons/modes/copy.webp",
+  "./icons/modes/trace.webp",
   "./fonts/kanit-thai-700-normal.woff2",
   "./fonts/kanit-latin-700-normal.woff2",
   "./fonts/kanit-thai-800-italic.woff2",

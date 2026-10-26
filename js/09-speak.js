@@ -691,7 +691,7 @@ $("spkQuitBtn").addEventListener("click", () => {
   clearTimeout(spk && spk.nextTimer);
   spk = null;
   stopSpeech();
-  switchScreen(menuEl);
+  exitToSetup("speak");
   updateBestLine();
 });
 

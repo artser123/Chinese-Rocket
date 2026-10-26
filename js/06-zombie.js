@@ -599,6 +599,25 @@ function fireZOption(i) {
 }
 zoptBtns.forEach((btn, i) => btn.addEventListener("pointerdown", (e) => { e.preventDefault(); fireZOption(i); }));
 
+// คำจีนอยู่ในบับเบิ้ลที่วาดบน canvas เหนือหัวซอมบี้ — hit-test เฉพาะพื้นที่บับเบิ้ล
+zcanvas.addEventListener("click", (e) => {
+  if (!zb || zb.paused || zb.ending) return;
+  const r = zcanvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) * ZW / Math.max(1, r.width);
+  const y = (e.clientY - r.top) * ZH / Math.max(1, r.height);
+  const gy = zGroundY();
+  const target = [...zAlive()].reverse().find((z) => {
+    const bob = Math.sin(z.phase) * 3;
+    const b = z.bubble;
+    if (!b) return false;
+    const left = z.x - b.w * z.scale / 2;
+    const top = gy + (-120 + bob - b.ay) * z.scale;
+    return x >= left && x <= left + b.w * z.scale &&
+      y >= top && y <= top + b.h * z.scale;
+  });
+  if (target) crOpenCanvasTextBubble(target.word[0], e.clientX, e.clientY);
+});
+
 function killZombie(z) {
   z.dead = true; z.fall = 0;
   sfx.groan();

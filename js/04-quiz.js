@@ -56,6 +56,7 @@ function nextQuizQuestion() {
   }
   quiz.options = shuffle(opts);
   $("quizWord").textContent = quiz.word[0];
+  crSetHskBadge($("quizHskBadge"), quiz.word, currentLevel);
   $("quizHint").textContent = (quizMode === "pinyin" ? "เลือกพินอินที่ถูกต้อง" : "เลือกคำแปลภาษาไทยที่ถูกต้อง")
     + (quiz.isReview ? "  🔁 คำทบทวน" : "");
   qoptBtns.forEach((b, i) => {
@@ -256,6 +257,7 @@ function nextSentenceQuizQuestion() {
   } else {
     prompt.textContent = sentQuiz.current[2];
   }
+  crSetHskSentenceBadge($("sentQuizHskBadge"), sentQuiz.current);
   $("sentQuizHint").textContent = direction === "zh"
     ? "อ่านข้อความจีน แล้วเลือกคำแปลภาษาไทย • แตะคำเพื่อดูพินอินและความหมาย"
     : "อ่านข้อความไทย แล้วเลือกประโยคภาษาจีน";
@@ -369,7 +371,7 @@ $("sentQuizQuitBtn").addEventListener("click", () => {
   sentQuiz = null;
   music.stop();
   stopSpeech();
-  switchScreen(menuEl);
+  exitToSetup("sentencequiz");
   updateBestLine();
 });
 
@@ -432,6 +434,7 @@ function nextSentQuestion() {
   sent.pool = shuffled;
   sent.placed = [];
   $("sentTarget").textContent = (sent.isRetry ? "🔁 ลองอีกครั้ง: " : sent.isReview ? "🔁 ทบทวน: " : "") + sent.current[2];
+  crSetHskSentenceBadge($("sentHskBadge"), sent.current);
   renderSent();
 }
 
@@ -521,8 +524,22 @@ function showSentReveal(wrong) {
   const rv = $("sentReveal");
   rv.classList.remove("correct", "wrong");
   rv.classList.add(wrong ? "wrong" : "correct");
-  rv.innerHTML = `<div class="r-zh">${sent.current[0]}</div><div class="r-py">${sent.current[1]}</div>` +
-    (sent.current[3] ? `<div class="r-focus">📐 จุดไวยากรณ์: ${sent.current[3]}</div>` : "");
+  rv.replaceChildren();
+  const zh = document.createElement("div");
+  zh.className = "r-zh";
+  zh.lang = "zh";
+  renderZhTokens(zh, sent.current);
+  rv.appendChild(zh);
+  const py = document.createElement("div");
+  py.className = "r-py";
+  py.textContent = sent.current[1] || "";
+  rv.appendChild(py);
+  if (sent.current[3]) {
+    const focus = document.createElement("div");
+    focus.className = "r-focus";
+    focus.textContent = "📐 จุดไวยากรณ์: " + sent.current[3];
+    rv.appendChild(focus);
+  }
   rv.classList.add("show");
 }
 
@@ -630,7 +647,7 @@ $("sentQuitBtn").addEventListener("click", () => {
   sent = null;
   music.stop();
   stopSpeech();
-  switchScreen(menuEl);
+  exitToSetup("sentence");
   updateBestLine();
 });
 
@@ -704,6 +721,7 @@ function nextFillQuestion() {
   }
   fill.options = shuffle([fill.answer, ...opts]);
   $("fillTarget").textContent = (fill.isReview ? "🔁 ทบทวน: " : "") + fill.current[2];
+  crSetHskSentenceBadge($("fillHskBadge"), fill.current);
   renderFill();
 }
 
@@ -877,7 +895,7 @@ $("fillQuitBtn").addEventListener("click", () => {
   fill = null;
   music.stop();
   stopSpeech();
-  switchScreen(menuEl);
+  exitToSetup("fillblank");
   updateBestLine();
 });
 
@@ -893,7 +911,7 @@ $("quizQuitBtn").addEventListener("click", () => {
   quiz = null;
   music.stop();
   stopSpeech();
-  switchScreen(menuEl);
+  exitToSetup("vocab");
   updateBestLine();
 });
 

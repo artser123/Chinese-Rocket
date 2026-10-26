@@ -49,6 +49,7 @@ let voLastPlayedIndex = -1;   // กันไม่ให้รอบใหม�
 
 // Initialize on document ready / first call
 let voInitialized = false;
+let voStrokePopupWired = false;
 
 // ปุ่มสลับการแสดงผล (จำสถานะไว้ใน localStorage เหมือนโหมดอื่น)
 const VO_TOGGLES = [
@@ -172,33 +173,13 @@ function initVocabOverview() {
     });
   }
 
-  // Popup วิธีเขียน (แตะการ์ดคำศัพท์เพื่อเปิด) — ตั้งค่าครั้งเดียว
-  const strokePopup = $("voStrokePopup");
-  if (strokePopup) {
-    $("voStrokeClose").addEventListener("click", () => {
-      sfx.click();
-      voCloseStrokes();
-    });
-    $("voStrokeReplay").addEventListener("click", () => {
-      sfx.click();
-      voStrokePlayChar();
-    });
-    $("voStrokeSound").addEventListener("click", () => {
-      sfx.click();
-      if (voStrokeCurItem) voPlayWord(voStrokeCurItem, null);
-    });
-    // แตะพื้นหลังนอกการ์ด = ปิด (เหมือน lightbox)
-    strokePopup.addEventListener("click", (e) => {
-      if (e.target === strokePopup) voCloseStrokes();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !strokePopup.hidden) voCloseStrokes();
-    });
-  }
+  // Popup วิธีเขียน — ต้อง wire แม้เปิดจากบับเบิ้ลของเกมอื่น ไม่ใช่เฉพาะโหมดนี้
+  voEnsureStrokePopupWired();
 
   window.addEventListener("resize", () => {
     if (gameMode !== "vocaboverview") return;
     voFillViewport();
+    const strokePopup = $("voStrokePopup");
     if (strokePopup && !strokePopup.hidden) voStrokeFit();
   });
 }
@@ -289,7 +270,8 @@ function voSyncMenuCategory(catId) {
 
 // เลือกแท็บ HSK: ใช้แท็บล่าสุดในโหมดนี้ ถ้าไม่มีค่อยใช้ระดับที่เลือกในเมนู
 function voPickHskSubcat() {
-  for (const candidate of [voLastHskSubcat, String(selectedLevel || "")]) {
+  // เมนูเลือกได้หลายระดับ ("2+3") — แท็บของโหมดนี้รับได้ทีละระดับ จึงใช้ระดับแรก
+  for (const candidate of [voLastHskSubcat, levelParts(selectedLevel)[0] || ""]) {
     if (!candidate) continue;
     if (candidate === "all" || VO_HSK_LEVELS.includes(candidate)) return candidate;
   }
@@ -1175,6 +1157,32 @@ function voStrokeSize(box) {
   return Math.min(320, Math.max(160, (box && box.clientWidth) || 280));
 }
 
+function voEnsureStrokePopupWired() {
+  if (voStrokePopupWired) return;
+  const strokePopup = $("voStrokePopup");
+  if (!strokePopup) return;
+  voStrokePopupWired = true;
+  $("voStrokeClose").addEventListener("click", () => {
+    sfx.click();
+    voCloseStrokes();
+  });
+  $("voStrokeReplay").addEventListener("click", () => {
+    sfx.click();
+    voStrokePlayChar();
+  });
+  $("voStrokeSound").addEventListener("click", () => {
+    sfx.click();
+    if (voStrokeCurItem) voPlayWord(voStrokeCurItem, null);
+  });
+  // แตะพื้นหลังนอกการ์ด = ปิด (เหมือน lightbox)
+  strokePopup.addEventListener("click", (e) => {
+    if (e.target === strokePopup) voCloseStrokes();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !strokePopup.hidden) voCloseStrokes();
+  });
+}
+
 function voStrokeFit() {
   const box = $("voStrokeWriter");
   if (!box || !voStrokeWriter) return;
@@ -1185,6 +1193,7 @@ function voStrokeFit() {
 async function voOpenStrokes(item) {
   const popup = $("voStrokePopup");
   if (!popup) return;
+  voEnsureStrokePopupWired();
   if (voPlayAllActive) voStopPlayAll(); // กำลังจะดูเส้นขีดคำนี้ หยุดเล่นเสียงวนก่อน
   sfx.click();
   voStrokeCurItem = item;

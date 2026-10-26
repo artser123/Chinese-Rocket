@@ -35,6 +35,73 @@ function msState() {
 
 const msFmtClock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 
+/* ---------- เลเวลวันเล่นต่อเนื่อง (เฉพาะแอป APK; ?streakPreview=1 สำหรับทดสอบบนเว็บ) ----------
+   ทำภารกิจครบทั้ง 4 เกมในวันนั้น = สะสม 1 วัน → เลเวล = จำนวนวันติดต่อกัน (สูงสุด Lv 20 แต่นับวันต่อไปเรื่อยๆ)
+   วันไหนไม่ได้ทำครบ (ขาด 1 วัน) → กลับไปเริ่ม Lv 0 ใหม่
+   localStorage cr_mission_streak_v1 = { days: วันติดต่อกัน, last: วันล่าสุดที่ทำครบ YYYY-MM-DD, best, total } */
+const MS_STREAK_KEY = "cr_mission_streak_v1";
+const MS_STREAK_ON = !!window.CR_OFFLINE_APP || /[?&]streakPreview=1\b/.test(location.search);
+const MS_STREAK_LEVELS = [
+  { icon: "🛖", th: "จุดเริ่มต้น", zh: "起点", py: "qǐdiǎn" },
+  { icon: "🌱", th: "มือใหม่หัดบิน", zh: "新手", py: "xīnshǒu" },
+  { icon: "🔧", th: "ศิษย์ช่างจรวด", zh: "学徒", py: "xuétú" },
+  { icon: "🧑‍🚀", th: "นักบินฝึกหัด", zh: "学员", py: "xuéyuán" },
+  { icon: "🔥", th: "จุดระเบิดเครื่องยนต์", zh: "点火", py: "diǎnhuǒ" },
+  { icon: "🚀", th: "ทะยานขึ้นฟ้า", zh: "升空", py: "shēngkōng" },
+  { icon: "☁️", th: "ทะลุกลุ่มเมฆ", zh: "穿云", py: "chuānyún" },
+  { icon: "🌤️", th: "เหินฟ้าสูง", zh: "高空", py: "gāokōng" },
+  { icon: "🛰️", th: "ดาวเทียมโคจร", zh: "卫星", py: "wèixīng" },
+  { icon: "🌙", th: "นักสำรวจดวงจันทร์", zh: "探月", py: "tànyuè" },
+  { icon: "🌕", th: "ผู้พิชิตดวงจันทร์", zh: "登月", py: "dēngyuè" },
+  { icon: "🔴", th: "นักบุกเบิกดาวอังคาร", zh: "火星先锋", py: "huǒxīng xiānfēng" },
+  { icon: "☄️", th: "นักล่าอุกกาบาต", zh: "流星猎手", py: "liúxīng lièshǒu" },
+  { icon: "🪐", th: "นักเดินทางดาวเสาร์", zh: "土星旅人", py: "tǔxīng lǚrén" },
+  { icon: "🌌", th: "นักท่องทางช้างเผือก", zh: "银河旅人", py: "yínhé lǚrén" },
+  { icon: "⭐", th: "ผู้นำทางดวงดาว", zh: "星际领航", py: "xīngjì lǐngháng" },
+  { icon: "🌠", th: "อัศวินดาวหาง", zh: "彗星骑士", py: "huìxīng qíshì" },
+  { icon: "🐉", th: "มังกรอวกาศ", zh: "太空龙", py: "tàikōng lóng" },
+  { icon: "🏯", th: "จอมยุทธ์แห่งดวงดาว", zh: "星辰侠客", py: "xīngchén xiákè" },
+  { icon: "👑", th: "จักรพรรดิแห่งจักรวาล", zh: "宇宙之王", py: "yǔzhòu zhī wáng" },
+  { icon: "🏆", th: "ปรมาจารย์ภาษาจีน", zh: "中文大师", py: "zhōngwén dàshī" },
+];
+const MS_STREAK_MAX = MS_STREAK_LEVELS.length - 1; // 20
+
+function msPrevDayKey(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return msDayKey(new Date(y, m - 1, d - 1));
+}
+const msStreakLevel = (days) => Math.min(days, MS_STREAK_MAX);
+
+function msStreakSave(s) { try { localStorage.setItem(MS_STREAK_KEY, JSON.stringify(s)); } catch (e) {} }
+
+// อ่านสถิติ — ถ้าวันล่าสุดที่ทำครบไม่ใช่วันนี้หรือเมื่อวาน แปลว่าขาดไปแล้วอย่างน้อย 1 วัน → Lv 0
+function msStreak() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(MS_STREAK_KEY) || "null"); } catch (e) { s = null; }
+  if (!s || typeof s.days !== "number") s = { days: 0, last: "", best: 0, total: 0 };
+  const today = msDayKey();
+  if (s.days > 0 && s.last !== today && s.last !== msPrevDayKey(today)) {
+    s.days = 0;
+    msStreakSave(s);
+  }
+  return s;
+}
+
+// เรียกเมื่อภารกิจของวันนี้ครบทั้ง 4 เกม (นับวันละครั้ง) → { s, before, after }
+function msStreakRecord() {
+  const s = msStreak();
+  const today = msDayKey();
+  const before = msStreakLevel(s.days);
+  if (s.last !== today) {
+    s.days = s.last === msPrevDayKey(today) ? s.days + 1 : 1;
+    s.last = today;
+    s.best = Math.max(s.best || 0, s.days);
+    s.total = (s.total || 0) + 1;
+    msStreakSave(s);
+  }
+  return { s, before, after: msStreakLevel(s.days) };
+}
+
 /* ---------- นิยาม 4 ภารกิจของแต่ละวัน (ลำดับตามที่รัน) ---------- */
 const MS_GAMES = [
   {
@@ -197,9 +264,18 @@ function msPass() {
   const doneCount = MS_GAMES.filter((x) => st.done[x.id]).length;
   const nextIdx = MS_GAMES.findIndex((x) => !st.done[x.id]);
   if (nextIdx < 0) {
+    let title = "ภารกิจประจำวันครบแล้ว!";
+    let text = "ผ่านครบทั้ง 4 เกม — บับเบิ้ล 📖 จะเปลี่ยนเป็นสีทึบ กลับมาทำใหม่พรุ่งนี้หลังเที่ยงคืน";
+    let icon = "🎉";
+    if (MS_STREAK_ON) {
+      const { s, before, after } = msStreakRecord();
+      const lv = MS_STREAK_LEVELS[after];
+      if (after > before) { icon = lv.icon; title = `เลเวลอัป! Lv ${after} ${lv.th}`; }
+      text = `ผ่านครบทั้ง 4 เกม • สะสมต่อเนื่อง ${s.days} วัน — Lv ${after} ${lv.icon} ${lv.th} (${lv.zh})\n`
+        + "กลับมาทำให้ครบทุกวันเพื่อเลื่อนเลเวล — ขาด 1 วันจะกลับไปเริ่ม Lv 0";
+    }
     msShowOverlay({
-      icon: "🎉", title: "ภารกิจประจำวันครบแล้ว!",
-      text: "ผ่านครบทั้ง 4 เกม — บับเบิ้ล 📖 จะเปลี่ยนเป็นสีทึบ กลับมาทำใหม่พรุ่งนี้หลังเที่ยงคืน",
+      icon, title, text,
       btn: "กลับหน้าหลัก",
       onBtn() { msAbort(); },
     });
@@ -312,7 +388,94 @@ function msSyncFab() {
   fab.title = all
     ? "เกมภารกิจประจำวัน — ทำครบแล้ววันนี้ 🎉 (รีเซ็ตเที่ยงคืน)"
     : `เกมภารกิจประจำวัน — ผ่านแล้ว ${doneCount}/${MS_GAMES.length} (รีเซ็ตทุกวันเที่ยงคืน)`;
+  const streakEl = $("missionFabStreak");
+  if (MS_STREAK_ON && streakEl) {
+    // วันนี้ทำครบไปก่อนมีระบบเลเวล (หรือก่อนอัปเดต) → นับให้ย้อนหลังของวันนี้
+    if (all && msStreak().last !== st.d) msStreakRecord();
+    const s = msStreak();
+    const lv = msStreakLevel(s.days);
+    streakEl.hidden = false;
+    streakEl.textContent = `Lv${lv}`;
+    streakEl.classList.toggle("zero", lv === 0);
+    fab.title += ` • Lv ${lv} ${MS_STREAK_LEVELS[lv].th} (ต่อเนื่อง ${s.days} วัน)`;
+  }
   fab.setAttribute("aria-label", fab.title);
+}
+
+// การ์ดเลเวลในหน้าต่างภารกิจ
+function msRenderStreak(st) {
+  const box = $("missionStreak");
+  if (!box) return;
+  box.hidden = !MS_STREAK_ON;
+  if (!MS_STREAK_ON) return;
+  const s = msStreak();
+  const lvNum = msStreakLevel(s.days);
+  const lv = MS_STREAK_LEVELS[lvNum];
+  const doneToday = s.last === st.d;
+  box.replaceChildren();
+
+  const top = document.createElement("div");
+  top.className = "ms-streak-top";
+  const icon = document.createElement("span");
+  icon.className = "ms-streak-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = lv.icon;
+  const body = document.createElement("div");
+  body.className = "ms-streak-body";
+  const name = document.createElement("div");
+  name.className = "ms-streak-name";
+  const chip = document.createElement("span");
+  chip.className = "ms-streak-lv";
+  chip.textContent = `Lv ${lvNum}`;
+  name.append(chip, document.createTextNode(lv.th));
+  const zh = document.createElement("div");
+  zh.className = "ms-streak-zh";
+  const zhText = document.createElement("span");
+  zhText.lang = "zh";
+  zhText.textContent = lv.zh;
+  const py = document.createElement("span");
+  py.lang = "zh-Latn";
+  py.className = "ms-streak-py";
+  py.textContent = lv.py;
+  zh.append(zhText, py);
+  body.append(name, zh);
+  const days = document.createElement("div");
+  days.className = "ms-streak-days";
+  const num = document.createElement("b");
+  num.textContent = s.days;
+  days.append(num, document.createTextNode("วันติดต่อกัน"));
+  top.append(icon, body, days);
+
+  const bar = document.createElement("div");
+  bar.className = "ms-streak-bar";
+  bar.setAttribute("role", "progressbar");
+  bar.setAttribute("aria-label", `เลเวล ${lvNum} จาก ${MS_STREAK_MAX}`);
+  bar.setAttribute("aria-valuemin", "0");
+  bar.setAttribute("aria-valuemax", String(MS_STREAK_MAX));
+  bar.setAttribute("aria-valuenow", String(lvNum));
+  const fill = document.createElement("span");
+  fill.style.width = `${(lvNum / MS_STREAK_MAX) * 100}%`;
+  bar.appendChild(fill);
+
+  const next = document.createElement("p");
+  next.className = "ms-streak-next";
+  const nextLv = MS_STREAK_LEVELS[lvNum + 1];
+  let msg = nextLv
+    ? `${doneToday ? "พรุ่งนี้" : "วันนี้"}ทำครบ 4 เกม → Lv ${lvNum + 1} ${nextLv.icon} ${nextLv.th}`
+    : `🏆 เลเวลสูงสุดแล้ว! ทำครบทุกวันเพื่อสะสมวันต่อไปเรื่อยๆ`;
+  if (s.best) msg += ` • สถิติสูงสุด ${s.best} วัน`;
+  next.textContent = msg;
+
+  const warn = document.createElement("p");
+  warn.className = "ms-streak-warn";
+  warn.textContent = doneToday
+    ? "✅ วันนี้นับแล้ว — ขาด 1 วันจะกลับไปเริ่ม Lv 0"
+    : s.days > 0
+      ? `⚠️ วันนี้ยังไม่ครบ — ทำให้ครบก่อนเที่ยงคืน ไม่งั้นกลับไปเริ่ม Lv 0`
+      : "ทำภารกิจครบ 4 เกมในวันเดียว = สะสม 1 วัน (ขาด 1 วันกลับไป Lv 0)";
+  warn.classList.toggle("ok", doneToday);
+
+  box.append(top, bar, next, warn);
 }
 // โผล่เฉพาะหน้าหลัก — ตามการสลับ .active ของ #menu จากทุกทาง (switchScreen)
 new MutationObserver(msSyncFab).observe(menuEl, { attributes: true, attributeFilter: ["class"] });
@@ -349,6 +512,7 @@ function msRenderPanel() {
     list.appendChild(row);
   });
   const doneCount = MS_GAMES.filter((g) => st.done[g.id]).length;
+  msRenderStreak(st);
   $("missionPanelSub").textContent = `วันนี้ผ่านแล้ว ${doneCount}/${MS_GAMES.length} เกม • เล่นเกมที่ยังไม่ผ่านต่อเนื่องอัตโนมัติ`;
   const startBtn = $("missionStartBtn");
   startBtn.hidden = doneCount === MS_GAMES.length;

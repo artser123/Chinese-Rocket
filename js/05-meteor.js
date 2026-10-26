@@ -302,6 +302,16 @@ optBtns.forEach((btn, i) => {
   btn.addEventListener("pointerdown", (e) => { e.preventDefault(); fireOption(i); });
 });
 
+// คำจีนของอุกกาบาตอยู่ใน canvas: แตะบริเวณป้ายคำเพื่อเปิดบับเบิ้ลคำแปล/ดูเส้นขีด
+canvas.addEventListener("click", (e) => {
+  if (!running || paused || !meteors.length) return;
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) * W / Math.max(1, r.width);
+  const y = (e.clientY - r.top) * H / Math.max(1, r.height);
+  const target = [...meteors].reverse().find((m) => Math.hypot(x - m.x, y - m.y) <= Math.max(28, m.r * 2.2));
+  if (target) crOpenCanvasTextBubble(target.word[0], e.clientX, e.clientY);
+});
+
 
 /* ================= Effects ================= */
 // อนุภาค: จำกัดจำนวน + ใช้ object ซ้ำ (free list) ไม่สร้างใหม่ทุกครั้ง → GC ไม่สะดุดกลางเกม

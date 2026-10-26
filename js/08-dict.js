@@ -1154,7 +1154,13 @@ $("dictSearchBtn").addEventListener("click", () => {
 });
 $("dictBingBtn").addEventListener("click", () => {
   sfx.click();
-  crOpenWeb(dictBingUrl(dictInput.value.trim()));
+  const q = dictInput.value.trim();
+  if (!q) {
+    window.alert("กรุณาใส่คำหรือข้อความในช่องค้นหาก่อนเปิด Bing Translator");
+    dictInput.focus();
+    return;
+  }
+  crOpenWeb(dictBingUrl(q));
 });
 dictInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dictSearch(); } });
 dictInput.addEventListener("input", () => {

@@ -298,6 +298,17 @@ $("cpWordSpeakBtn").addEventListener("click", () => {
     playWordAudio(audioKey, [[spoken, "zh-CN"]]);
   }
 });
+$("cpWordStrokeBtn").addEventListener("click", () => {
+  sfx.click();
+  const word = cpPopupWord;
+  if (!word) return;
+  const info = cpLookupWord(word);
+  cpHideWordPopup();
+  // Reuse the vocabulary overview's centered HanziWriter popup and cache.
+  if (typeof voOpenStrokes === "function") {
+    voOpenStrokes({ zh: word, py: info.py || "", th: info.th || "" });
+  }
+});
 // ปุ่ม Bing ในป๊อปอัปคำศัพท์ (ใช้ร่วมทุกโหมดที่แตะคำได้) — เปิดในเว็บของแอพ (APK)
 // แล้วกดย้อนกลับกลับมาหน้าเกมเดิมได้; ปิดป๊อปอัปก่อนเพื่อไม่ให้ค้างระหว่างดูเว็บ
 $("cpWordBingBtn").addEventListener("click", () => {
@@ -427,6 +438,7 @@ async function cpWriteChar() {
         strokeHighlightSpeed: 0.7, strokeFadeDuration: 120,
         charDataLoader: (c) => bombCharData.get(c),
       });
+      hwEnhanceWriter(cpWriteWriter); // ขีดสั้น (จุด/ตะขอ) ติดง่ายขึ้นในช่องเขียนเล็ก — ดู js/03-helpers.js
     } else {
       cpWriteFit();
     }
@@ -1241,6 +1253,6 @@ $("cpQuitBtn").addEventListener("click", () => {
   cpHideStrokes();
   stopSpeech();
   music.stop();
-  switchScreen(menuEl);
+  exitToSetup("copy");
   updateBestLine();
 });

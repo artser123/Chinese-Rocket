@@ -884,6 +884,7 @@ async function beginBombCharacter() {
       highlightColor: "#26a477", highlightOnComplete: false, showHintAfterMisses: BOMB_HINT_AFTER_MISSES,
       strokeHighlightSpeed: 0.7, strokeFadeDuration: 120, charDataLoader: (char) => bombCharData.get(char)
     });
+    hwEnhanceWriter(bombWriter); // ขีดสั้น (จุด/ตะขอ) ติดง่ายขึ้น — ดู js/03-helpers.js
   }
   await bombWriter.setCharacter(s.chars[index]);
   if (bombGame !== s || s.phase !== "preparing" || s.charIndex !== index) return;

@@ -40,7 +40,7 @@ function quitTraceGame() {
   tc = null;
   stopSpeech();
   music.stop();
-  switchScreen(menuEl);
+  exitToSetup("trace");
   updateBestLine();
 }
 
@@ -86,6 +86,7 @@ function nextTraceWord() {
   tc.wrongSlots = [];
   $("tcRound").textContent = tc.rounds;
   $("tcZh").textContent = word[0];
+  crSetHskBadge($("tcHskBadge"), word, tc.level);
   $("tcPy").textContent = word[1] || "";
   $("tcTh").textContent = word[2] || "";
   $("tcResult").hidden = true;
@@ -185,6 +186,7 @@ async function tcActivateSlot(i) {
       $("tcStatus").textContent = "เปิดช่องเขียนไม่สำเร็จ — ลองใหม่หรือกด 'ข้ามคำ'";
       return;
     }
+    hwEnhanceWriter(writer); // ขีดสั้น (จุด/ตะขอ) ติดง่ายขึ้นในช่องเล็ก — ดู js/03-helpers.js
     tcAllWriters.push(writer);
     await writer.setCharacter(char);
     if (!tc || tc.seq !== seq) { try { writer.cancelQuiz(); } catch (e) {} return; }
@@ -413,10 +415,11 @@ $("cards").addEventListener("click", (e) => {
   document.querySelectorAll(".card").forEach((c) => c.classList.remove("selected"));
   card.classList.add("selected");
   gameMode = card.dataset.mode;
-  // ไอคอนตัวใหญ่บนหน้าตั้งค่า — คัดลอกข้อความ+คลาสจากไอคอนของการ์ด (เช่น bomb-card-icon)
+  // ไอคอนตัวใหญ่บนหน้าตั้งค่า — คัดลอก SVG ของการ์ด + สีประจำโหมด (--c อยู่บน .card ไม่ใช่บนไอคอน)
   const iconEl = card.querySelector(".card-icon");
   $("setupIcon").className = iconEl.className + " setup-icon-on";
-  $("setupIcon").textContent = iconEl.textContent;
+  $("setupIcon").innerHTML = iconEl.innerHTML;
+  $("setupIcon").style.setProperty("--c", getComputedStyle(card).getPropertyValue("--c").trim());
   if (gameMode === "dict") {
     // Dictionary mode: no setup panel needed, go straight in
     startDict();
@@ -475,9 +478,10 @@ $("levelSelect").addEventListener("click", (e) => {
   const btn = e.target.closest(".level-btn");
   if (!btn) return;
   sfx.click();
-  document.querySelectorAll(".level-btn").forEach((b) => b.classList.remove("selected"));
-  btn.classList.add("selected");
-  selectedLevel = btn.dataset.level;
+  // เลือกได้หลายระดับ/หมวดย่อย — กติกา "ทั้งหมด" ดู levelToggle() ใน 01-state.js
+  selectedLevel = levelToggle(selectedLevel, btn.dataset.level);
+  levelSave();
+  syncLevelButtons();
   updateStartBtn();
 });
 
@@ -750,6 +754,22 @@ function backConfirmPause(id) {
     lisPausePlayback();
     return () => { if (lis && !lis.playing) lisReplayBtnClick(); };
   }
+  if (id === "podcast" && typeof podPause === "function") {
+    const audio = $("podAudio");
+    const wasPlaying = Boolean(podWantPlay || podIntroPlayback || (audio && !audio.paused));
+    if (wasPlaying) {
+      podPause();
+      return () => { if (podcastState && wasPlaying) podPlay(); };
+    }
+  }
+  if (id === "reader" && typeof readerPause === "function") {
+    const audio = $("readerAudio");
+    const wasPlaying = Boolean(readerWantPlay || readerIntroPlayback || (audio && !audio.paused));
+    if (wasPlaying) {
+      readerPause();
+      return () => { if (readerState && wasPlaying) readerPlay(); };
+    }
+  }
   return null;
 }
 
@@ -833,23 +853,15 @@ window.__handleAndroidBack = function () {
     return true;
   }
 
-  // The podcast and the HSK story reader have two levels: the reading/player
-  // page and the episode/story list. Android back goes back to the list first
-  // (same as the header "เลือกบทอ่าน" button); only a further back leaves the
-  // mode for the home screen.
+  // On the podcast/reader player page, Back means leaving the article and must
+  // ask for confirmation here. The list page remains a simple exit to the menu.
   if (active === $("podcast") && !$("podPlayer").hidden) {
-    if (typeof podBackToList === "function") {
-      sfx.click();
-      podBackToList();
-      return true;
-    }
+    const quit = $("podQuitBtn");
+    if (quit) { backConfirmOpen(active, () => quit.click()); return true; }
   }
   if (active === $("reader") && !$("readerPlayer").hidden) {
-    if (typeof readerBackToList === "function") {
-      sfx.click();
-      readerBackToList();
-      return true;
-    }
+    const quit = $("readerQuitBtn");
+    if (quit) { backConfirmOpen(active, () => quit.click()); return true; }
   }
 
   // เกมรวมคำศัพท์: ถ้า popup วิธีเขียนเปิดอยู่ ให้ปิด popup ก่อน —
