@@ -781,5 +781,6 @@ function toggleMute() {
   $("lisMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("cpMuteBtn").textContent = muted ? "🔇" : "🔊";
   $("tcMuteBtn").textContent = muted ? "🔇" : "🔊";
+  $("fcMuteBtn").textContent = muted ? "🔇" : "🔊";
   if ($("voMuteBtn")) $("voMuteBtn").textContent = muted ? "🔇" : "🔊";
 }

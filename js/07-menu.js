@@ -1128,10 +1128,13 @@ MODE_TITLES.copy = "✍️ เกมเขียนเป็นประโย�
 MODE_TITLES.trace = "✍️ เกมคัดลายมือ";
 MODE_TITLES.podcast = "🎙️ ฟังพอดแคสต์จีน";
 MODE_TITLES.vocaboverview = "📑 เกมรวมคำศัพท์";
+MODE_TITLES.flashcards = "🎴 เกมทายแฟลชการ์ด";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
   ? matchingBestKey(selectedLevel, difficulty, quizMode, zDuration)
+  : gameMode === "flashcards"
+  ? fcBestKey()
   : gameMode === "vocab"
   ? `cr_best_${catPrefix()}${selectedLevel}_quiz_${quizMode}`
   : gameMode === "sentence"
@@ -1149,6 +1152,7 @@ const bestKey = () => gameMode === "bomb"
           : `cr_best_${catPrefix()}${selectedLevel}_${difficulty}`;
 
 const startLabel = () => {
+  if (gameMode === "flashcards") return `🎴 เริ่มทายการ์ด ${fcSelLabel()} (${fcPoolSize()} ใบ, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   const lvl = levelDisplayName(selectedLevel);
   if (gameMode === "bomb") return `เริ่มเขียนปลดระเบิด ${lvl} (${BOMB_DIFF[difficulty].label})`;
   if (gameMode === "matching") return `เริ่ม ${lvl} (${MATCH_DIFF[difficulty].label}, ${matchModeLabel(quizMode)}, ${matchTimeLabel(zDuration)})`;
@@ -1166,6 +1170,13 @@ const startLabel = () => {
 
 function updateStartBtn() {
   if (!gameMode) return;
+  // เกมทายแฟลชการ์ดเลือก "หมวดการ์ด" เอง (หลายหมวด / ทั้งหมด) — ไม่ใช้ระดับ HSK
+  if (gameMode === "flashcards") {
+    $("startBtn").disabled = fcPoolSize() < 4;
+    $("startBtn").textContent = startLabel();
+    updateBestLine();
+    return;
+  }
   const hasSentenceData = categoryHasSentences();
   const noSent = (gameMode === "copy" || (gameMode === "listen" && lisType === "sent") || gameMode === "sentence" || gameMode === "sentencequiz" || gameMode === "fillblank" || gameMode === "speak")
     && !hasSentenceData;
@@ -1179,6 +1190,11 @@ function updateBestLine() {
   if (!gameMode) { $("bestScoreLine").textContent = ""; return; }
   if (gameMode === "listen") { $("bestScoreLine").textContent = "🔁 เล่นวนไม่จำกัด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
   if (gameMode === "copy") { $("bestScoreLine").textContent = "✍️ คัดลงประโยคลงสมุด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
+  if (gameMode === "flashcards") {
+    const best = +localStorage.getItem(fcBestKey()) || 0;
+    $("bestScoreLine").textContent = best ? `สถิติ ${fcSelLabel()}: ${best} คะแนน` : "";
+    return;
+  }
   if (!selectedLevel) { $("bestScoreLine").textContent = ""; return; }
   const best = +localStorage.getItem(bestKey()) || 0;
   $("bestScoreLine").textContent = best ? `สถิติ ${levelDisplayName(selectedLevel)}: ${best} คะแนน` : "";

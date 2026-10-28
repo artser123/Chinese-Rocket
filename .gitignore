@@ -75,3 +75,6 @@ podcast_img_briefs/
 
 .claude/
 icon_sheet/
+
+# Flashcard picture quiz dev artifacts (crop tool output; transcriptions, sheets, reports)
+flashcards_build/

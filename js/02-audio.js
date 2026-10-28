@@ -429,6 +429,7 @@ const _ZOM = { wave: "sawtooth", bassWave: "sawtooth", melVol: 0.045, bassVol: 0
 const _MAT = { wave: "sine", bassWave: "sine", melVol: 0.05, bassVol: 0.06, kickVol: 0.1, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.05, pad: 0.032, arp: 0.028, detune: 5, base: 0.35 };
 const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09, kickVol: 0.24, mul: 1, kickEvery: 2, snare: true, hats: true, swing: 0.04, pad: 0.032, arp: 0.034, detune: 8, base: 0.5 };
 const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.08, pad: 0.034, arp: 0.026, detune: 4, base: 0.3 };
+const _FCD = { wave: "triangle", bassWave: "sine", melVol: 0.04, bassVol: 0.055, kickVol: 0.07, mul: 1, kickEvery: 8, snare: false, hats: false, swing: 0.1, pad: 0.038, arp: 0.02, detune: 3, base: 0.22 };
 const _SQUIZ = { wave: "sine", bassWave: "sine", melVol: 0.03, bassVol: 0.035, kickVol: 0.05, mul: 0.82, kickEvery: 0, snare: false, hats: false, swing: 0.1, pad: 0.026, arp: 0.014, detune: 2, base: 0.16 };
 const MUSIC_THEMES = {
   meteor: [
@@ -627,6 +628,31 @@ const MUSIC_THEMES = {
       melody: [12, 12, 12, 15, 14, 14, 14, 17, 15, 15, 15, 19, 17, 15, 14, 12,
                19, 19, 19, 17, 15, 15, 15, 14, 12, 14, 15, 17, 15, 14, 12, 10],
       roots: [0, 0, -2, -2, 0, 0, -4, -5] },
+  ],
+  // เกมทายแฟลชการ์ด — นุ่มเบาแบบเพลงเด็ก (โทนเดียวกับ _MAT) เมโลดี้ pentatonic
+  // เกมทายแฟลชการ์ด: เพลงสบาย ๆ แนวโลไฟ — ช้า (78–88 bpm) โน้ตห่าง สเกลเพนทาโทนิก A เมเจอร์
+  // คอร์ดหลัก I / IV / V / vi / ii, กลองเบามาก ไม่มีไฮแฮต/สแนร์, ความเข้มฐานต่ำ (arp ไม่โผล่ตอนเล่นปกติ)
+  flashcards: [
+    { ..._FCD, bpm: 84,
+      melody: [4, null, 7, null, 9, null, 7, 4, 2, null, 4, null, null, null, null, null,
+               9, null, 7, null, 5, null, 4, 2, 4, null, null, null, null, null, null, null],
+      roots: [0, 0, -3, -3, -7, -7, -5, -5] },
+    { ..._FCD, bpm: 80, wave: "sine",
+      melody: [12, null, null, 9, null, 7, null, null, 9, null, 7, null, 4, null, null, null,
+               7, null, 4, null, 2, null, 0, null, 2, null, 4, null, null, null, null, null],
+      roots: [0, 0, -5, -5, -3, -3, -7, -5] },
+    { ..._FCD, bpm: 88, kickEvery: 4, kickVol: 0.06,
+      melody: [0, null, 4, null, 7, null, 4, null, 9, null, 7, 4, null, null, 2, null,
+               2, null, 5, null, 9, null, 5, null, 4, null, 2, null, null, null, null, null],
+      roots: [0, 0, 0, 0, -10, -10, -5, -5] },
+    { ..._FCD, bpm: 78, wave: "sine", pad: 0.042, melVol: 0.036,
+      melody: [9, null, null, null, 7, null, 9, null, 12, null, null, null, 9, null, null, null,
+               7, null, null, 4, null, null, 2, null, 4, null, null, null, null, null, null, null],
+      roots: [-7, -7, -7, -7, 0, 0, 0, 0] },
+    { ..._FCD, bpm: 86,
+      melody: [0, null, 4, null, 9, null, null, 7, 4, null, null, null, 2, null, 0, null,
+               11, null, null, 7, null, 4, null, 2, 4, null, null, null, null, null, null, null],
+      roots: [-3, -3, -3, -3, -5, -5, -5, -5] },
   ],
 };
 // ปริมาณส่ง FX ของแต่ละ layer (โครงสร้างคงที่ — ตั้งครั้งเดียว ไม่ต้องแก้รายเพลง)

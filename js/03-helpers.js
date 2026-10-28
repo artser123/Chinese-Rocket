@@ -316,7 +316,7 @@ function startGame(level) {
 }
 
 function switchScreen(el) {
-  [menuEl, gameEl, overEl, $("quiz"), $("sentQuiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("podcast"), $("reader"), $("copy"), $("trace"), $("vocaboverview"), $("setup")].forEach((s) => s.classList.remove("active"));
+  [menuEl, gameEl, overEl, $("quiz"), $("sentQuiz"), $("sent"), $("fill"), $("zombie"), $("matching"), $("bomb"), $("dict"), $("speak"), $("listen"), $("podcast"), $("reader"), $("copy"), $("trace"), $("vocaboverview"), $("flashcards"), $("setup")].forEach((s) => s.classList.remove("active"));
   el.classList.add("active");
   // เลเยอร์ FX ของโหมดระเบิดเป็น fixed เต็มจอ — ซ่อนไว้เสมอถ้าไม่ได้อยู่หน้าเกมระเบิด
   const bombFxEl = $("bombFx");

@@ -461,6 +461,13 @@ $("cards").addEventListener("click", (e) => {
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
   cpSyncSetupUI();
   tcSyncSetupUI();
+  // เกมทายแฟลชการ์ด: ซ่อนแถวเลือกระดับ HSK แล้วโชว์หมวดการ์ด 20 หมวดแทน
+  const isFc = gameMode === "flashcards";
+  for (const id of ["fcCatRow", "fcPyRow", "fcThRow"]) $(id).style.display = isFc ? "" : "none";
+  $("levelSelect").style.display = isFc ? "none" : "";
+  $("setupLevelLabel").style.display = isFc ? "none" : "";
+  $("setupCategoryTag").style.display = isFc ? "none" : "";
+  if (isFc) fcRenderSetupCats();
   document.querySelectorAll(".diff-btn").forEach((b, i) => {
     b.textContent = isMatching ? MATCH_DIFF[b.dataset.diff].label : originalDiffLabels[i];
   });
@@ -661,6 +668,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "listen") startListenGame(selectedLevel);
   else if (gameMode === "copy") startCopyGame(selectedLevel);
   else if (gameMode === "trace") startTraceGame(selectedLevel);
+  else if (gameMode === "flashcards") startFlashcardGame();
   else startGame(selectedLevel);
 });
 
@@ -891,6 +899,7 @@ window.__handleAndroidBack = function () {
     vocaboverview: "voBackBtn",
     copy: "cpQuitBtn",
     trace: "tcQuitBtn",
+    flashcards: "fcQuitBtn",
   };
   const quit = $(quitByScreen[active.id]);
   // ทุกเกมถามยืนยันก่อนออก ยกเว้นพจนานุกรมและเกมรวมคำศัพท์ (ออกทันทีแบบเดิม)

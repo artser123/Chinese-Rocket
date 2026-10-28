@@ -121,6 +121,10 @@
       <div class="card-icon" aria-hidden="true"><img src="icons/modes/trace.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
       <div class="card-title">เกมคัดลายมือ</div>
     </button>
+    <button class="card" data-mode="flashcards">
+      <div class="card-icon" aria-hidden="true"><img src="icons/modes/flashcards.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
+      <div class="card-title">เกมทายแฟลชการ์ด</div>
+    </button>
   </div>
 
 </div>
@@ -281,6 +285,27 @@
       <p class="bomb-instructions">แตะลูกระเบิดเพื่อเขียน (100 คะแนน) หรือเลือกพินอินที่ถูกเพื่อรับโบนัสอีก 50 คะแนนเมื่อปลดสำเร็จ<br>ตอบผิด ตกถึงพื้น หรือเขียนไม่ทัน เสีย 1 ชีวิต • ยิ่งเล่นยิ่งเร็ว<br>เลือกความยาก: ง่าย = ระเบิดตกช้า + เวลาเขียนมาก • ยากมาก = ระเบิดตกเร็ว + เวลาเขียนน้อย<br>สุ่มไม่ซ้ำจนครบระดับ • ตรวจลำดับขีดทีละตัว • ต้องใช้อินเทอร์เน็ตโหลดเส้นอักษร</p>
     </div>
 
+    <div class="setup-row" id="fcCatRow" style="display:none">
+      <span class="setup-label">หมวดการ์ด (เลือกได้หลายหมวด)</span>
+      <div class="level-select" id="fcCatSelect"></div>
+    </div>
+
+    <div class="setup-row" id="fcPyRow" style="display:none">
+      <span class="setup-label">พินอินบนการ์ดคำ</span>
+      <div class="level-select" id="fcPySelect">
+        <button class="fcd-btn" data-fcshow="py" data-on="1">🔤 แสดงพินอิน</button>
+        <button class="fcd-btn" data-fcshow="py" data-on="0">🚫 ไม่แสดง</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="fcThRow" style="display:none">
+      <span class="setup-label">คำแปลไทยบนการ์ดคำ</span>
+      <div class="level-select" id="fcThSelect">
+        <button class="fcd-btn" data-fcshow="th" data-on="1">🇹🇭 แสดงคำแปลไทย</button>
+        <button class="fcd-btn" data-fcshow="th" data-on="0">🚫 ไม่แสดง</button>
+      </div>
+    </div>
+
     <button id="startBtn" class="big-btn" disabled>เลือกโหมดก่อน</button>
     <p id="bestScoreLine" class="best"></p>
   </div>
@@ -367,6 +392,31 @@
     <button class="sqopt"></button>
   </div>
   <button id="sentQuizNextBtn">ประโยคถัดไป ▶</button>
+</div>
+
+<!-- FLASHCARD PICTURE QUIZ SCREEN (เกมทายแฟลชการ์ด) -->
+<div id="flashcards" class="screen">
+  <div class="qhud">
+    <div class="qhud-side"><div id="fcScore">0</div><span id="fcProg" class="prog-tag">0%</span></div>
+    <div class="quiz-btns">
+      <button id="fcMuteBtn" class="icon-btn">🔊</button>
+      <button id="fcQuitBtn" class="icon-btn">✖️</button>
+    </div>
+  </div>
+  <div id="fcLives">❤️❤️❤️</div>
+
+  <div id="fcPrompt">
+    <div id="fcCatTag" class="fc-cat-tag"></div>
+    <div class="fc-word-row">
+      <div id="fcZh" lang="zh"></div>
+      <button id="fcSpeakBtn" class="fc-speak-btn" type="button" title="ฟังเสียงคำนี้" aria-label="ฟังเสียงคำนี้">🔊</button>
+    </div>
+    <div id="fcPy" lang="zh-Latn"></div>
+    <div id="fcTh" lang="th"></div>
+  </div>
+  <div id="fcHint" class="fc-hint">แตะรูปที่ตรงกับคำนี้</div>
+  <div id="fcOptions" role="group" aria-label="เลือกรูปที่ตรงกับคำ"></div>
+  <button id="fcNextBtn">คำถัดไป ▶</button>
 </div>
 
 <!-- SENTENCE ORDERING GAME SCREEN -->
@@ -1157,6 +1207,7 @@
 <script src="data/vocab_car.js"></script>
 <script src="data/sentences_car.js"></script>
 <script src="data/vocab_reading.js"></script>
+<script src="data/flashcards.js"></script>
 <script src="js/01-state.js"></script>
 <script src="js/02-audio.js"></script>
 <script src="js/03-helpers.js"></script>
@@ -1173,6 +1224,7 @@
 <script src="js/14-reader.js"></script>
 <script src="js/15-vocaboverview.js"></script>
 <script src="js/16-missions.js"></script>
+<script src="js/17-flashcards.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
