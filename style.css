@@ -272,7 +272,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -286,15 +286,15 @@ html, body {
               border-color var(--dur-fast), background var(--dur-fast);
 }
 .level-btn:active, .diff-btn:active, .ans-btn:active, .sqd-btn:active, .sqp-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
-.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active, .spks-btn:active, .fc-cat-btn:active, .fcd-btn:active { transform: translateY(1px) scale(.985); }
+.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active, .spks-btn:active, .fc-cat-btn:active, .fcd-btn:active, .fvo-btn:active { transform: translateY(1px) scale(.985); }
 .level-btn.selected, .fc-cat-btn.selected {
   background: linear-gradient(180deg, var(--accent-warm-1), var(--accent-warm-2));
   border-color: var(--accent-warm-3);
   color: #fff;
   box-shadow: var(--sh-glow-warm), var(--hi-top);
 }
-.diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fcd-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected {
+.diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fcd-btn, .fvo-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
   background: linear-gradient(180deg, var(--accent-green-1), var(--accent-green-2));
   border-color: #8fffb0;
   color: #fff;
@@ -1136,7 +1136,8 @@ button.fill-blank {
 #lisCard {
   width: min(680px, 94vw);
   min-height: 30vh;
-  --lis-fit: 1; /* ตัวคูณย่อข้อความของบัตรนี้ — fitListenCard() ใน game.js ปรับตอนข้อความยาวเกินจอ */
+  flex: 1 0 auto; /* ยืดเต็มพื้นที่ที่เหลือของจอ — fitListenCard() จะขยายตัวอักษรให้เต็มกรอบนี้ */
+  --lis-fit: 1; /* ตัวคูณขนาดข้อความ — fitListenCard() ใน js/10-listen.js ขยาย/ย่อให้พอดีกรอบ */
   background: rgba(19, 26, 61, .9);
   border: 2px solid #3d4a9e;
   border-radius: 16px;
@@ -1152,17 +1153,21 @@ button.fill-blank {
 #lisZh {
   font-family: "Noto Sans SC", sans-serif;
   font-size: calc(clamp(38px, 11vw, 60px) * var(--lis-fit));
-  font-weight: 800;
+  font-weight: 600; /* เดิม 800 (โหลดจริงเป็น 900) — ตัวใหญ่เต็มบัตรแล้วหนาจนเส้นติดกัน อ่านยาก */
+  line-height: 1.3;
   color: #fff;
 }
+/* โหมดคำศัพท์: คำจีน/พินอินอยู่บรรทัดเดียว (ตัวใหญ่ไม่ตัดกลางคำ) — ถ้าย่อสุดแล้วยังล้น fitListenCard() จะถอด class นี้ */
+#lisCard.lis-word #lisZh,
+#lisCard.lis-word #lisPy { white-space: nowrap; }
 #lisZh .lis-zh-tok { border-radius: .2em; transition: background-color .12s, color .12s; }
 #lisZh .lis-zh-tok.sq-karaoke-active {
   color: #ffe2a0;
   background: rgba(255, 196, 107, .22);
   box-shadow: 0 0 18px rgba(255, 196, 107, .2);
 }
-#lisPy { font-family: var(--font-pinyin); font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); color: #8fd3ff; }
-#lisTh { font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); color: #9dff9d; }
+#lisPy { font-family: var(--font-pinyin); font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); line-height: 1.4; color: #8fd3ff; }
+#lisTh { font-size: calc(clamp(20px, 5.6vw, 29px) * var(--lis-fit)); line-height: 1.5; color: #9dff9d; }
 #lisSub { font-size: clamp(12px, 3.4vw, 15px); color: #8b95c9; min-height: 1.2em; }
 #lisStatus {
   width: min(680px, 94vw);
@@ -4199,6 +4204,22 @@ button.fill-blank {
 /* ---------- โลโก้ ---------- */
 .title { font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: clamp(34px, 10vw, 56px); letter-spacing: .5px; line-height: 1.05; }
 .title-emoji { display: inline-block; animation: actRocket 2.4s ease-in-out infinite; }
+/* จรวดจากไอคอนแอป (icons/app-logo.webp — ตัดเฉพาะตัวจรวดพื้นโปร่งใส ไม่มีกรอบ จาก
+   icon_sheet/app_rocket_cutout.png) แทนอีโมจิ 🚀 หน้าชื่อเกม — ลอยขึ้นลงเบา ๆ */
+.title { display: flex; align-items: center; justify-content: center; gap: .28em; flex-wrap: wrap; }
+.title-logo {
+  width: 1.45em;
+  height: 1.45em;
+  flex: none;
+  object-fit: contain;
+  animation: actLogoBob 2.8s ease-in-out infinite;
+}
+@keyframes actLogoBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+/* มือถือ: "Chinese Rocket" กว้าง ~7.6em — ย่อตัวอักษร/โลโก้ให้อยู่บรรทัดเดียวกันถึงจอ 320px */
+@media (max-width: 480px) {
+  .title { font-size: clamp(26px, 8.8vw, 56px); flex-wrap: nowrap; }
+  .title-logo { width: 1.25em; height: 1.25em; }
+}
 @keyframes actRocket { 0%, 100% { transform: translate(0, 0) rotate(0); } 50% { transform: translate(2px, -5px) rotate(-6deg); } }
 @supports (-webkit-background-clip: text) or (background-clip: text) {
   .title-text {
@@ -4233,6 +4254,7 @@ button.fill-blank {
 .card[data-mode="copy"]          { --c: 255, 220, 120; }
 .card[data-mode="trace"]         { --c: 160, 255, 90; }
 .card[data-mode="flashcards"]    { --c: 255, 170, 60; }
+.card[data-mode="flashview"]     { --c: 255, 110, 150; }
 .card {
   background:
     linear-gradient(165deg, rgba(var(--c), .22) 0%, rgba(var(--c), .05) 38%, transparent 60%),
@@ -4402,7 +4424,7 @@ button.fill-blank {
 .setup-category-badge { border-radius: var(--r-cut-sm); background: rgba(10, 12, 30, .8); border-color: rgba(255, 201, 40, .35); }
 
 /* ---------- ปุ่มตัวเลือกในหน้าตั้งค่า ---------- */
-.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
   font-family: var(--font-display);
   font-weight: 700;
   border-radius: var(--r-cut-sm);
@@ -4418,7 +4440,7 @@ button.fill-blank {
   text-shadow: 0 1px 0 rgba(120, 30, 0, .7);
   box-shadow: 0 3px 0 #7a1e00, 0 0 18px rgba(255, 110, 20, .6), inset 0 1px 0 rgba(255, 255, 255, .45);
 }
-.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected {
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
   background: linear-gradient(180deg, #2affc0, #10a86a);
   border-color: #b4ffe0;
   color: #04241a;
@@ -4589,7 +4611,7 @@ button.fill-blank {
 .match-stats { font-family: var(--font-display); font-style: italic; font-weight: 800; }
 
 @media (prefers-reduced-motion: reduce) {
-  .title-emoji, .title-text, #setupIcon, .big-btn::after, .overlay-box, .final-score,
+  .title-emoji, .title-logo, .title-text, #setupIcon, .big-btn::after, .overlay-box, .final-score,
   .rocket-opt.flash-wrong, .zopt.flash-wrong, .qopt.wrong { animation: none; }
 }
 
@@ -4832,8 +4854,9 @@ button.fill-blank {
 #trace         { --mc: 160, 255, 90; }
 #dict          { --mc: 57, 230, 255; }
 #flashcards    { --mc: 255, 170, 60; }
+#flashview     { --mc: 255, 110, 150; }
 
-#quiz, #vocaboverview, #sent, #sentQuiz, #speak, #fill, #matching, #listen, #podcast, #reader, #copy, #trace, #dict, #flashcards {
+#quiz, #vocaboverview, #sent, #sentQuiz, #speak, #fill, #matching, #listen, #podcast, #reader, #copy, #trace, #dict, #flashcards, #flashview {
   background:
     radial-gradient(1.5px 1.5px at 24px 32px, rgba(255, 255, 255, .75), transparent) 0 0 / 220px 260px,
     radial-gradient(1.3px 1.3px at 132px 96px, rgba(207, 224, 255, .6), transparent) 0 0 / 220px 260px,
@@ -5201,8 +5224,10 @@ button.fill-blank {
 #flashcards {
   justify-content: flex-start;
   padding-top: calc(14px + var(--safe-top));
+  padding-bottom: calc(12px + var(--safe-bottom));
   gap: 10px;
 }
+#flashcards > :not(#fcOptions) { flex-shrink: 0; }
 #fcLives { font-size: clamp(16px, 4.5vw, 24px); letter-spacing: 3px; }
 #fcPrompt {
   position: relative;
@@ -5435,16 +5460,26 @@ button.fill-blank {
   font-size: clamp(13px, 3.6vw, 15px);
   color: rgba(205, 213, 255, .7);
 }
+/* ช่องตัวเลือกกินพื้นที่ที่เหลือของจอ (flex: 1) แล้วรูปย่อตามความสูงนั้น (100cqh ÷ จำนวนแถว)
+   — เดิมรูปสูงตาม 4:3 ของความกว้าง (จำกัดแค่ 30vh) จอเกือบจัตุรัสอย่าง Galaxy Z Fold ตอนกาง
+   (~750×760 CSS px, 2×2) แถวล่างจึงล้นจอและเลื่อนไม่ได้ */
 #fcOptions {
+  --fc-rows: 1;
+  --fc-gap: 14px;
+  --fc-pad: 7px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  align-content: start;
+  gap: var(--fc-gap);
   width: min(1080px, 94vw);
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
 }
 .fc-opt {
   position: relative;
   min-width: 0;
-  padding: 7px;
+  padding: var(--fc-pad);
   border: 2px solid rgba(var(--mc), .38);
   border-radius: var(--r-cut-sm);
   background: linear-gradient(180deg, #232a5c, #131839);
@@ -5457,7 +5492,8 @@ button.fill-blank {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  max-height: 34vh;
+  /* ความสูงต่อแถว = (ความสูงช่อง − ช่องว่างระหว่างแถว) ÷ แถว − padding/ขอบของการ์ด */
+  max-height: max(72px, calc((100cqh - (var(--fc-rows) - 1) * var(--fc-gap)) / var(--fc-rows) - var(--fc-pad) * 2 - 6px));
   object-fit: contain;
   border-radius: 8px;
   background: #fff;
@@ -5526,15 +5562,17 @@ button.fill-blank {
 #fcNextBtn:active { transform: translateY(2px) scale(.97); }
 /* แท็บเล็ตแนวตั้ง/จอกลาง: 2×2 */
 @media (max-width: 1099.98px) and (min-width: 600px) {
-  #fcOptions { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(760px, 94vw); }
-  #fcOptions .fc-opt img { max-height: 30vh; }
+  #fcOptions { --fc-rows: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(760px, 94vw); }
 }
 /* โทรศัพท์แนวตั้ง: เรียงลงมาแนวตั้ง — รูปเตี้ยลงให้ 4 ใบ + โจทย์อยู่ในจอ */
 @media (max-width: 599.98px) {
   #flashcards { gap: 8px; }
-  #fcOptions { grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(520px, 94vw); }
-  #fcOptions .fc-opt { padding: 5px; }
-  #fcOptions .fc-opt img { height: clamp(64px, 13vh, 120px); aspect-ratio: auto; max-height: none; }
+  #fcOptions { --fc-rows: 4; --fc-gap: 10px; --fc-pad: 5px; grid-template-columns: minmax(0, 1fr); width: min(520px, 94vw); }
+  #fcOptions .fc-opt img {
+    aspect-ratio: auto;
+    max-height: none;
+    height: clamp(56px, calc((100cqh - 3 * var(--fc-gap)) / 4 - var(--fc-pad) * 2 - 6px), 170px);
+  }
   #fcPrompt { padding: 8px 12px 10px; }
   .fc-speak-btn { width: 42px; height: 42px; font-size: 18px; }
   .fc-opt::after { top: 9px; right: 9px; width: 28px; height: 28px; font-size: 16px; }
@@ -5545,6 +5583,168 @@ button.fill-blank {
   #flashcards > * { flex-shrink: 0; }
   #fcZh { font-size: clamp(30px, 11vh, 54px); }
   .fc-hint { display: none; }
-  #fcOptions { margin-top: 2px; }
+  /* จอเตี้ยมาก (มือถือแนวนอน): ไม่บีบรูปให้พอดีจอ แต่ให้หน้าเลื่อนแทน */
+  #fcOptions { margin-top: 2px; flex: none; container-type: normal; }
   #fcOptions .fc-opt img { max-height: 24vh; }
+}
+
+/* ---------- เกมดูแฟลชการ์ด (สไลด์โชว์การ์ดรูป, js/18-flashview.js) ----------
+   การ์ดใบเดียวกินพื้นที่ที่เหลือของจอ (.fv-stage flex: 1) รูปย่อตามความสูงที่เหลือ (object-fit: contain)
+   การพลิกการ์ดทำใน JS (Web Animations: rotateY ทิศตามการเลื่อน) — .fv-stage ให้ perspective
+   จอเตี้ยแนวนอน: รูปซ้าย ข้อความขวา • แถบนับถอยหลังใต้การ์ด = เวลาก่อนเปลี่ยนใบ */
+#flashview {
+  justify-content: flex-start;
+  padding-top: calc(14px + var(--safe-top));
+  padding-bottom: calc(12px + var(--safe-bottom));
+  gap: 10px;
+  overflow: hidden;
+}
+#flashview > :not(.fv-stage) { flex-shrink: 0; }
+.fv-stage {
+  flex: 1 1 0;
+  min-height: 0;
+  width: min(560px, 94vw);
+  display: flex;
+  justify-content: center;
+  perspective: 1100px;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fv-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px 18px;
+  text-align: center;
+  border: 1px solid rgba(var(--mc), .5);
+  border-radius: var(--r-cut);
+  background:
+    linear-gradient(225deg, rgba(var(--mc), .9) 0 9px, transparent 9.5px) top right / 30px 30px no-repeat,
+    linear-gradient(45deg, rgba(var(--mc), .9) 0 9px, transparent 9.5px) bottom left / 30px 30px no-repeat,
+    radial-gradient(80% 60% at 50% 0%, rgba(var(--mc), .16), transparent 70%),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, .025) 0 2px, transparent 2px 9px),
+    linear-gradient(180deg, #1a1d42, #0b0e24);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55), inset 0 -3px 0 rgba(var(--mc), .7), inset 0 1px 0 rgba(255, 255, 255, .08);
+  backface-visibility: hidden;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  cursor: pointer;
+}
+.fv-card.speaking {
+  border-color: rgba(var(--mc), .95);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55), 0 0 26px rgba(var(--mc), .35), inset 0 -3px 0 rgb(var(--mc)), inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+.fv-card .fc-cat-tag { color: #ffc6d8; }
+.fv-pic {
+  flex: 1 1 auto;
+  min-height: 90px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px rgba(var(--mc), .35), 0 6px 16px rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+.fv-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+#fvZh {
+  margin-top: 4px;
+  font-family: var(--font-ui);
+  font-size: clamp(40px, 11vw, 68px);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 0 24px rgba(var(--mc), .45);
+  overflow-wrap: anywhere;
+}
+#fvPy {
+  font-family: var(--font-pinyin);
+  font-size: clamp(18px, 5vw, 26px);
+  font-weight: 600;
+  color: #ffd76a;
+}
+#fvTh {
+  font-size: clamp(16px, 4.4vw, 22px);
+  font-weight: 600;
+  color: #bde3ff;
+}
+#fvPy:empty, #fvTh:empty { display: none; }
+/* พินอิน/ไทยที่ตั้งค่าไม่แสดง: เห็นเป็นเงาเบลอ แตะการ์ดหรือรอเสียงจีนจบเพื่อเผย */
+#fvPy.fv-masked, #fvTh.fv-masked {
+  color: transparent;
+  text-shadow: 0 0 12px rgba(255, 255, 255, .6);
+}
+#fvPy.fc-revealed, #fvTh.fc-revealed { animation: fcReveal .3s var(--ease-out); }
+.fv-timer {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 7px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+#fvTimerBar {
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgb(var(--mc)), #ffd76a);
+}
+#fvStatus {
+  min-height: 1.3em;
+  font-size: clamp(12px, 3.5vw, 14px);
+  color: #9aa4d6;
+  text-align: center;
+}
+.fv-transport {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: min(560px, 94vw);
+}
+.fv-transport .big-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 0;
+  font-size: clamp(18px, 5vw, 22px);
+}
+#fvPlayBtn {
+  flex: 2.2 1 0;
+  min-width: 0;
+  padding: 12px 10px;
+  font-size: clamp(16px, 4.6vw, 20px);
+  white-space: nowrap;
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  #flashview { gap: 6px; padding-top: calc(8px + var(--safe-top)); }
+  .fv-stage { width: min(920px, 96vw); }
+  .fv-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto auto auto 1fr;
+    column-gap: 16px;
+    padding: 10px 12px 16px;
+  }
+  .fv-pic { grid-column: 1; grid-row: 1 / -1; height: 100%; min-height: 0; }
+  .fv-card .fc-cat-tag { grid-column: 2; grid-row: 1; justify-self: center; }
+  #fvZh { grid-column: 2; grid-row: 3; font-size: clamp(34px, 9vh, 56px); }
+  #fvPy { grid-column: 2; grid-row: 4; }
+  #fvTh { grid-column: 2; grid-row: 5; }
+  .fv-transport { width: min(920px, 96vw); }
+  .fv-transport .big-btn, #fvPlayBtn { padding-top: 8px; padding-bottom: 8px; }
+  #fvStatus { display: none; }
 }

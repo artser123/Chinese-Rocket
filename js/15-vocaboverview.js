@@ -1152,6 +1152,8 @@ let voStrokeCurItem = null;
 let voStrokeChars = [];
 let voStrokeCharIndex = 0;
 let voStrokeSeq = 0; // เพิ่มทุกครั้งที่เปิด/เล่น/ปิด — ยกเลิก chain async ที่ค้างอยู่
+// โหมดอื่นที่เปิด popup นี้ (เกมดูแฟลชการ์ด) ส่ง { onSound, onClose } มา — null = เกมรวมคำศัพท์
+let voStrokeHooks = null;
 
 function voStrokeSize(box) {
   return Math.min(320, Math.max(160, (box && box.clientWidth) || 280));
@@ -1172,7 +1174,9 @@ function voEnsureStrokePopupWired() {
   });
   $("voStrokeSound").addEventListener("click", () => {
     sfx.click();
-    if (voStrokeCurItem) voPlayWord(voStrokeCurItem, null);
+    if (!voStrokeCurItem) return;
+    if (voStrokeHooks && voStrokeHooks.onSound) voStrokeHooks.onSound(voStrokeCurItem);
+    else voPlayWord(voStrokeCurItem, null);
   });
   // แตะพื้นหลังนอกการ์ด = ปิด (เหมือน lightbox)
   strokePopup.addEventListener("click", (e) => {
@@ -1190,10 +1194,11 @@ function voStrokeFit() {
   voStrokeWriter.updateDimensions({ width: size, height: size, padding: 10 });
 }
 
-async function voOpenStrokes(item) {
+async function voOpenStrokes(item, hooks = null) {
   const popup = $("voStrokePopup");
   if (!popup) return;
   voEnsureStrokePopupWired();
+  voStrokeHooks = hooks;
   if (voPlayAllActive) voStopPlayAll(); // กำลังจะดูเส้นขีดคำนี้ หยุดเล่นเสียงวนก่อน
   sfx.click();
   voStrokeCurItem = item;
@@ -1258,6 +1263,9 @@ function voCloseStrokes() {
   popup.hidden = true;
   voStrokeSeq++; // chain async ที่กำลังโหลด/เล่นอยู่ต้องยอมแพ้
   voStrokeCurItem = null;
+  const hooks = voStrokeHooks;
+  voStrokeHooks = null;
+  if (hooks && hooks.onClose) hooks.onClose();
 }
 
 function voStrokeBuildChips() {

@@ -314,7 +314,7 @@ function updateSpkHUD() {
 
 function nextSpkQuestion() {
   if (!spk) return;
-  clearTimeout(spk.nextTimer);
+  spkCancelAdvance();
   const isRetry = !!(spk.repeat && spk.current);
   spk.repeat = false;
   if (!isRetry) spk.current = pick(pool);
@@ -371,7 +371,37 @@ function spkRearm() {
   else if ($("spkCard").classList.contains("wrong")) spkAdvance(true);
 }
 
-// ตั้งเวลา/ปุ่มไปต่อหลังตัดสิน — over=true เมื่อชีวิตหมด
+// ยกเลิกการไปต่อที่ค้างอยู่ทั้งหมด (ตัวตั้งเวลา + รอเสียงเฉลยจบ) — เรียกทุกครั้งที่ผู้เล่นทำอะไรเอง
+function spkCancelAdvance() {
+  if (!spk) return;
+  clearTimeout(spk.nextTimer);
+  clearTimeout(spk.audioGuard);
+  spk.afterAnswerAudio = null;
+}
+
+// เล่นประโยคที่ถูกต้องหลังตัดสิน แล้วค่อยไปต่อ "หลังเสียงจบ"
+// เดิมตั้งเวลาตายตัว 3.2/4.2 วินาทีนับจากเริ่มเล่น ประโยคยาวจึงโดนตัดกลางคันแล้วข้ามข้อไปเลย
+// • wordAudio.play ไม่เรียก onDone ถ้าเสียงถูกขัด → ปุ่ม 🔊 ฟังซ้ำส่ง callback เดิมต่อ (afterAnswerAudio)
+//   และมี audioGuard สำรองกันค้าง • โหมดกดเองแสดงปุ่ม "ถัดไป" ทันทีเหมือนเดิม
+function spkPlayAnswerThenAdvance(isWrong) {
+  const cur = spk;
+  spkCancelAdvance();
+  if (!autoNext) {
+    speakSentence(cur.current);
+    spkAdvance(isWrong);
+    return;
+  }
+  const go = () => {
+    if (spk !== cur || cur.afterAnswerAudio !== go) return;
+    spkCancelAdvance();
+    spkAdvance(isWrong);
+  };
+  cur.afterAnswerAudio = go;
+  speakSentence(cur.current, false, go);
+  cur.audioGuard = setTimeout(go, 30000);
+}
+
+// ตั้งเวลา/ปุ่มไปต่อหลังตัดสิน — over=true เมื่อชีวิตหมด (โหมดอัตโนมัติ: เรียกหลังเสียงเฉลยจบแล้ว)
 function spkAdvance(isWrong) {
   const over = quizLivesOn && spk.lives <= 0;
   if (autoNext) {
@@ -379,7 +409,7 @@ function spkAdvance(isWrong) {
       if (!spk) return;
       if (over) spkGameOver();
       else nextSpkQuestion();
-    }, isWrong ? 4200 : 3200);
+    }, isWrong ? 1500 : 900);
   } else {
     $("spkNextBtn").textContent = over ? "ดูผลคะแนน ▶" : isWrong ? "🔁 ลองอีกครั้ง ▶" : "ประโยคถัดไป ▶";
     $("spkNextBtn").classList.add("show");
@@ -411,7 +441,6 @@ function spkEvaluate(heardRaw) {
   const pct = Math.round(score * 100);
   $("spkCard").classList.remove("correct", "wrong");
   spkShowResult(ops);
-  speakSentence(spk.current); // เล่นประโยคที่ถูกต้องให้ฟังทั้งตอนถูกและผิด
   if (ok) {
     spk.score++;
     spk.done.add(spk.current[0]);
@@ -419,7 +448,7 @@ function spkEvaluate(heardRaw) {
     sfx.correct();
     confettiBurst($("speak"), 26);
     spkSetStatus(pct >= 100 || ops.every((o) => o.ok) ? "✅ พูดถูกต้อง!" : `✅ ผ่าน! ตรง ${pct}% — ตัวสีแดงคือจุดที่ยังพูดไม่ชัด`);
-    spkAdvance(false);
+    spkPlayAnswerThenAdvance(false); // เล่นประโยคที่ถูกต้องให้ฟังทั้งตอนถูกและผิด
   } else {
     spk.repeat = true; // พูดผิด: ให้ลองประโยคเดิมอีกครั้งหลังฟังเสียงที่ถูก
     if (quizLivesOn) spk.lives--;
@@ -428,7 +457,7 @@ function spkEvaluate(heardRaw) {
     spkSetStatus(rule.pass >= 1
       ? "❌ ยังไม่ตรง — ตัวสีแดงคือจุดที่ผิด ฟังเสียงที่ถูกแล้วลองใหม่"
       : `❌ ตรง ${pct}% (ต้อง ${Math.round(rule.pass * 100)}%) — ตัวสีแดงคือจุดที่ผิด ฟังเสียงที่ถูกแล้วลองใหม่`);
-    spkAdvance(true);
+    spkPlayAnswerThenAdvance(true);
   }
   updateSpkHUD();
 }
@@ -437,7 +466,7 @@ function spkSkip() {
   if (!spk || !spk.current) return;
   // มีผลตัดสินแสดงอยู่แล้ว -> ข้ามทำหน้าที่เหมือนปุ่ม "ถัดไป" ไม่หักชีวิตซ้ำ
   if ($("spkCard").classList.contains("correct") || $("spkCard").classList.contains("wrong")) {
-    clearTimeout(spk.nextTimer);
+    spkCancelAdvance();
     if (quizLivesOn && spk.lives <= 0) spkGameOver();
     else nextSpkQuestion();
     return;
@@ -449,15 +478,14 @@ function spkSkip() {
   $("spkHeard").classList.remove("listening");
   $("spkHeard").innerHTML = "";
   sfx.wrong();
-  speakSentence(spk.current);
   spkSetStatus("⏭ ข้ามประโยคนี้ — ฟังเสียงประโยคที่ถูกต้อง");
   updateSpkHUD();
-  spkAdvance(false);
+  spkPlayAnswerThenAdvance(false);
 }
 
 function spkGameOver() {
   spkStopAll();
-  clearTimeout(spk && spk.nextTimer);
+  spkCancelAdvance();
   const finalScore = spk ? spk.score : 0;
   spk = null;
   stopSpeech();
@@ -477,12 +505,12 @@ function spkStartMic() {
   // มีผลตัดสินค้างอยู่: ถูกแล้วกดพูด = ไปข้อถัดไป / ผิดแล้วกดพูด = ขอลองใหม่ทันที
   const card = $("spkCard");
   if (card.classList.contains("correct")) {
-    clearTimeout(spk.nextTimer);
+    spkCancelAdvance();
     if (quizLivesOn && spk.lives <= 0) spkGameOver();
     else nextSpkQuestion();
     return;
   }
-  clearTimeout(spk.nextTimer);
+  spkCancelAdvance();
   $("spkNextBtn").classList.remove("show");
   if (card.classList.contains("wrong")) {
     card.classList.remove("wrong");
@@ -672,7 +700,8 @@ async function spkStopMicWhisper(cancel) {
 
 $("spkListenBtn").addEventListener("click", () => {
   sfx.click();
-  if (spk && spk.current) speakSentence(spk.current);
+  // ระหว่างรอเสียงเฉลยจบ: ฟังซ้ำแล้วค่อยไปต่อหลังเสียงรอบนี้จบ
+  if (spk && spk.current) speakSentence(spk.current, false, spk.afterAnswerAudio || undefined);
 });
 $("spkMicBtn").addEventListener("click", () => { sfx.click(); spkStartMic(); });
 $("spkSkipBtn").addEventListener("click", () => { sfx.click(); spkSkip(); });
@@ -688,7 +717,7 @@ $("spkQuitBtn").addEventListener("click", () => {
   sfx.click();
   saveBest(`cr_best_${catPrefix()}${currentLevel}_speak`, spk ? spk.score : 0);
   spkStopAll();
-  clearTimeout(spk && spk.nextTimer);
+  spkCancelAdvance();
   spk = null;
   stopSpeech();
   exitToSetup("speak");

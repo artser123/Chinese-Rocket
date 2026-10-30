@@ -53,7 +53,7 @@
     </div>
   </div>
 
-  <h1 class="title"><span class="title-emoji">🚀</span> <span class="title-text">Chinese Rocket</span></h1>
+  <h1 class="title"><img class="title-logo" src="icons/app-logo.webp" alt="" width="192" height="192" decoding="async" draggable="false"> <span class="title-text">Chinese Rocket</span></h1>
   <p class="subtitle">เกมฝึกภาษาจีน — เลือกโหมดที่อยากเล่นได้เลย!</p>
 
   <div class="cards" id="cards">
@@ -124,6 +124,10 @@
     <button class="card" data-mode="flashcards">
       <div class="card-icon" aria-hidden="true"><img src="icons/modes/flashcards.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
       <div class="card-title">เกมทายแฟลชการ์ด</div>
+    </button>
+    <button class="card" data-mode="flashview">
+      <div class="card-icon" aria-hidden="true"><img src="icons/modes/flashview.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
+      <div class="card-title">เกมดูแฟลชการ์ด</div>
     </button>
   </div>
 
@@ -310,6 +314,33 @@
       </div>
     </div>
 
+    <div class="setup-row" id="fcAutoRow" style="display:none">
+      <span class="setup-label">อ่านเสียงจีนอัตโนมัติเมื่อขึ้นคำใหม่</span>
+      <div class="level-select" id="fcAutoSelect">
+        <button class="fcd-btn" data-fcshow="auto" data-on="1">🔊 เปิด (เสียงจีน)</button>
+        <button class="fcd-btn" data-fcshow="auto" data-on="0">🔇 ปิด</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="fvGapRow" style="display:none">
+      <span class="setup-label">เวลาก่อนเปลี่ยนการ์ด (นับหลังเสียงจบ)</span>
+      <div class="level-select" id="fvGapSelect">
+        <button class="fvo-btn" data-fvgap="0.5">⚡ 0.5 วิ</button>
+        <button class="fvo-btn" data-fvgap="1">🏃 1 วิ</button>
+        <button class="fvo-btn" data-fvgap="2">🙂 2 วิ</button>
+        <button class="fvo-btn" data-fvgap="3">🐢 3 วิ</button>
+      </div>
+    </div>
+
+    <div class="setup-row" id="fvVoiceRow" style="display:none">
+      <span class="setup-label">เสียงอ่านแต่ละการ์ด</span>
+      <div class="level-select" id="fvVoiceSelect">
+        <button class="fvo-btn" data-fvvoice="both">🔊 จีน + ไทย</button>
+        <button class="fvo-btn" data-fvvoice="zh">🀄 จีนอย่างเดียว</button>
+        <button class="fvo-btn" data-fvvoice="off">🔇 ไม่มีเสียง</button>
+      </div>
+    </div>
+
     <button id="startBtn" class="big-btn" disabled>เลือกโหมดก่อน</button>
     <p id="bestScoreLine" class="best"></p>
   </div>
@@ -421,6 +452,35 @@
   <div id="fcHint" class="fc-hint">แตะรูปที่ตรงกับคำนี้</div>
   <div id="fcOptions" role="group" aria-label="เลือกรูปที่ตรงกับคำ"></div>
   <button id="fcNextBtn">คำถัดไป ▶</button>
+</div>
+
+<!-- FLASHCARD VIEWER (เกมดูแฟลชการ์ด) — สไลด์โชว์การ์ดรูป เล่นอัตโนมัติ -->
+<div id="flashview" class="screen">
+  <div class="qhud">
+    <div class="qhud-side"><div id="fvCount">0</div><span id="fvProg" class="prog-tag">0%</span></div>
+    <div class="quiz-btns">
+      <button id="fvMuteBtn" class="icon-btn">🔊</button>
+      <button id="fvQuitBtn" class="icon-btn" title="กลับหน้าตั้งค่า" aria-label="กลับหน้าตั้งค่า">✖️</button>
+    </div>
+  </div>
+  <div id="fvStage" class="fv-stage">
+    <article id="fvCard" class="fv-card">
+      <div id="fvCatTag" class="fc-cat-tag"></div>
+      <div class="fv-pic"><img id="fvImg" alt="" draggable="false" decoding="async"></div>
+      <div id="fvZh" lang="zh"></div>
+      <div id="fvPy" lang="zh-Latn"></div>
+      <div id="fvTh" lang="th"></div>
+      <div class="fv-timer" aria-hidden="true"><div id="fvTimerBar"></div></div>
+    </article>
+  </div>
+  <div id="fvStatus" role="status" aria-live="polite"></div>
+  <div class="fv-transport">
+    <button id="fvPrevBtn" class="big-btn secondary fv-nav" type="button" title="การ์ดก่อนหน้า" aria-label="การ์ดก่อนหน้า">⏮</button>
+    <button id="fvSpeakBtn" class="big-btn secondary fv-tool" type="button" title="ฟังเสียงการ์ดนี้ซ้ำ" aria-label="ฟังเสียงการ์ดนี้ซ้ำ">🔊</button>
+    <button id="fvPlayBtn" class="lis-play" type="button">⏸ พัก</button>
+    <button id="fvStrokeBtn" class="big-btn secondary fv-tool" type="button" title="ดูวิธีเขียน (เส้นขีด)" aria-label="ดูวิธีเขียน (เส้นขีด)">✍️</button>
+    <button id="fvNextBtn" class="big-btn secondary fv-nav" type="button" title="การ์ดถัดไป" aria-label="การ์ดถัดไป">⏭</button>
+  </div>
 </div>
 
 <!-- SENTENCE ORDERING GAME SCREEN -->
@@ -1248,6 +1308,7 @@
 <script src="js/15-vocaboverview.js"></script>
 <script src="js/16-missions.js"></script>
 <script src="js/17-flashcards.js"></script>
+<script src="js/18-flashview.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

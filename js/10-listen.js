@@ -354,14 +354,15 @@ function lisSetMediaMetadata(item) {
     }
   } catch (e) {}
 }
-function lisPlayMediaItems(items, onDone, onProgress) {
+// alive() บอกว่าคิวนี้ยังควรเล่นต่อไหม — ค่าเริ่มต้นผูกกับโหมดฝึกฟัง; เกมดูแฟลชการ์ดส่งของตัวเองมา
+function lisPlayMediaItems(items, onDone, onProgress, alive = () => !!(lis && lis.playing)) {
   lisStopMedia();
   const token = lisMediaSeq;
   stopSpeech(); // Cancel any previous TTS/Web Audio fallback.
   let index = 0;
   let failed = false;
   const fallback = () => {
-    if (failed || lisMediaSeq !== token || !lis || !lis.playing) return;
+    if (failed || lisMediaSeq !== token || !alive()) return;
     failed = true;
     clearTimeout(lisMediaWatchTimer);
     lisMediaWatchTimer = null;
@@ -377,7 +378,7 @@ function lisPlayMediaItems(items, onDone, onProgress) {
     wordAudio.play(items.slice(index), onDone, onProgress);
   };
   const playNext = () => {
-    if (lisMediaSeq !== token || !lis || !lis.playing) return;
+    if (lisMediaSeq !== token || !alive()) return;
     if (index >= items.length) {
       lisSetMediaState("playing");
       if (onDone) onDone();
@@ -391,7 +392,7 @@ function lisPlayMediaItems(items, onDone, onProgress) {
     const armProgressWatch = () => {
       clearTimeout(lisMediaWatchTimer);
       lisMediaWatchTimer = setTimeout(() => {
-        if (failed || itemFinished || lisMediaSeq !== token || !lis || !lis.playing || lisMediaAudio.paused) return;
+        if (failed || itemFinished || lisMediaSeq !== token || !alive() || lisMediaAudio.paused) return;
         if (lisMediaAudio.currentTime <= lastProgressTime + 0.025) fallback();
         else {
           lastProgressTime = lisMediaAudio.currentTime;
@@ -636,20 +637,42 @@ function lisAdvance() {
   requestAnimationFrame(fitListenCard); // ย้ำอีกรอบเผื่อรอบแรกเลย์เอาต์/ฟอนต์ยังไม่นิ่ง
 }
 
-// ย่อข้อความในบัตรฟังให้พอดีจอ — ประโยคยาวๆ (เช่น HSK 5 ที่ยาวสุด 54 ตัวอักษร) จะได้ไม่ต้องเลื่อนจออ่าน
-// ลดตัวคูณ --lis-fit ทีละขั้น (ขั้นต่ำ 0.5 กันตัวจิ๋วเกินไป) จนกว่า #listen จะเลื่อนไม่ได้
-// ทุกครั้งที่เปลี่ยนคำ/ประโยคจะเริ่มจาก 1 ใหม่ ข้อความสั้นจึงกลับมาใหญ่เต็มขนาดเสมอ
+// ปรับขนาดข้อความในบัตรฟังให้เต็มกรอบพอดี — บัตรยืดเต็มพื้นที่ที่เหลือของจอ (flex ใน style.css)
+// แล้วค้นหาแบบแบ่งครึ่งหาตัวคูณ --lis-fit ที่ใหญ่ที่สุด (0.5–LIS_FIT_MAX) ที่ #listen ยังไม่ต้องเลื่อน
+// และคำจีน/พินอินของโหมดคำศัพท์ยังอยู่บรรทัดเดียวไม่ล้นกว้าง — คำสั้นจึงขยายเต็มกรอบ
+// ประโยคยาวๆ (เช่น HSK 5 ที่ยาวสุด 54 ตัวอักษร) ก็ย่อลงจนไม่ต้องเลื่อนจออ่านเหมือนเดิม
+const LIS_FIT_MIN = 0.5;
+const LIS_FIT_MAX = 3;
 function fitListenCard() {
   if (!lis) return;
   const list = $("listen");
   const card = $("lisCard");
-  if (!list || !card) return;
-  card.style.setProperty("--lis-fit", "1");
-  let scale = 1;
-  while (list.scrollHeight > list.clientHeight + 1 && scale > 0.5) {
-    scale = Math.round((scale - 0.05) * 100) / 100;
+  if (!list || !card || !list.classList.contains("active")) return;
+  const oneLine = [$("lisZh"), $("lisPy")];
+  card.classList.toggle("lis-word", lis.type !== "sent");
+  // จอเตี้ย (มือถือแนวนอน) ส่วนอื่นของจอก็ล้นอยู่แล้ว — วัดความสูงตอนตัวเล็กสุดไว้เป็นเพดาน
+  // ข้อความจะได้ขยายเต็มกรอบขั้นต่ำ (30vh) แทนที่จะโดนบีบเหลือ 0.5 ทุกคำ
+  card.style.setProperty("--lis-fit", String(LIS_FIT_MIN));
+  const maxH = Math.max(list.clientHeight, list.scrollHeight) + 1;
+  const fits = (scale) => {
     card.style.setProperty("--lis-fit", String(scale));
+    if (list.scrollHeight > maxH) return false;
+    if (card.scrollHeight > card.clientHeight + 1) return false;
+    return !card.classList.contains("lis-word") ||
+      oneLine.every((el) => el.scrollWidth <= el.clientWidth + 1);
+  };
+  if (!fits(LIS_FIT_MIN) && card.classList.contains("lis-word")) {
+    card.classList.remove("lis-word"); // คำยาวมากจนย่อสุดแล้วยังไม่พอ — ยอมให้ตัดบรรทัด
   }
+  let lo = LIS_FIT_MIN, hi = LIS_FIT_MAX;
+  if (fits(hi)) lo = hi;
+  else {
+    while (hi - lo > 0.02) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid; else hi = mid;
+    }
+  }
+  card.style.setProperty("--lis-fit", String(Math.floor(lo * 100) / 100));
 }
 
 function startListenGame(level) {

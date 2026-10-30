@@ -1516,6 +1516,12 @@ window.crNativeMediaAction = function crNativeMediaAction(action) {
       if (name === "nexttrack") { readerGoToAdjacentStory(1); return; }
       if (name === "previoustrack") { readerGoToAdjacentStory(-1); return; }
     }
+    if (typeof fv !== "undefined" && fv) {
+      if (name === "play") { if (!fv.playing) fvResume(); return; }
+      if (name === "pause" || name === "stop") { fvPause(); return; }
+      if (name === "nexttrack") { fvStep(1); return; }
+      if (name === "previoustrack") { fvStep(-1); return; }
+    }
     if (typeof lis !== "undefined" && lis) {
       if (name === "play") { if (!lis.playing) lisReplayBtnClick(); return; }
       if (name === "pause" || name === "stop") { lisPausePlayback(); return; }

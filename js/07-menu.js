@@ -1129,6 +1129,7 @@ MODE_TITLES.trace = "✍️ เกมคัดลายมือ";
 MODE_TITLES.podcast = "🎙️ ฟังพอดแคสต์จีน";
 MODE_TITLES.vocaboverview = "📑 เกมรวมคำศัพท์";
 MODE_TITLES.flashcards = "🎴 เกมทายแฟลชการ์ด";
+MODE_TITLES.flashview = "🎞️ เกมดูแฟลชการ์ด";
 const bestKey = () => gameMode === "bomb"
   ? bombBestKey(selectedLevel, difficulty)
   : gameMode === "matching"
@@ -1152,6 +1153,7 @@ const bestKey = () => gameMode === "bomb"
           : `cr_best_${catPrefix()}${selectedLevel}_${difficulty}`;
 
 const startLabel = () => {
+  if (gameMode === "flashview") return `🎞️ เริ่มดูการ์ด ${fcSelLabel()} (${fcPoolSize()} ใบ, ห่าง ${fvGap} วิ)`;
   if (gameMode === "flashcards") return `🎴 เริ่มทายการ์ด ${fcSelLabel()} (${fcPoolSize()} ใบ, ${quizLivesOn ? "3 ชีวิต" : "ไม่จำกัดชีวิต"})`;
   const lvl = levelDisplayName(selectedLevel);
   if (gameMode === "bomb") return `เริ่มเขียนปลดระเบิด ${lvl} (${BOMB_DIFF[difficulty].label})`;
@@ -1171,8 +1173,8 @@ const startLabel = () => {
 function updateStartBtn() {
   if (!gameMode) return;
   // เกมทายแฟลชการ์ดเลือก "หมวดการ์ด" เอง (หลายหมวด / ทั้งหมด) — ไม่ใช้ระดับ HSK
-  if (gameMode === "flashcards") {
-    $("startBtn").disabled = fcPoolSize() < 4;
+  if (gameMode === "flashcards" || gameMode === "flashview") {
+    $("startBtn").disabled = fcPoolSize() < (gameMode === "flashview" ? 1 : 4);
     $("startBtn").textContent = startLabel();
     updateBestLine();
     return;
@@ -1189,6 +1191,7 @@ function updateStartBtn() {
 function updateBestLine() {
   if (!gameMode) { $("bestScoreLine").textContent = ""; return; }
   if (gameMode === "listen") { $("bestScoreLine").textContent = "🔁 เล่นวนไม่จำกัด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
+  if (gameMode === "flashview") { $("bestScoreLine").textContent = "🔁 เล่นวนอัตโนมัติ สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน • ปัดซ้าย/ขวาเพื่อเลื่อนการ์ด"; return; }
   if (gameMode === "copy") { $("bestScoreLine").textContent = "✍️ คัดลงประโยคลงสมุด สุ่มไม่ซ้ำจนครบกอง — ไม่มีคะแนน"; return; }
   if (gameMode === "flashcards") {
     const best = +localStorage.getItem(fcBestKey()) || 0;

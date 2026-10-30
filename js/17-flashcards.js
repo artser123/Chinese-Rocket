@@ -16,6 +16,8 @@ let fcCats = (localStorage.getItem("cr_flashcards_cats") ?? localStorage.getItem
   .split("+").filter(Boolean);
 let fcShowPy = localStorage.getItem("cr_flashcards_py") !== "off";
 let fcShowTh = localStorage.getItem("cr_flashcards_th") !== "off";
+// อ่านเสียงจีน (เฉพาะจีน ไม่มีไทย) อัตโนมัติทุกครั้งที่ขึ้นคำใหม่ — ค่าเริ่มต้นปิด
+let fcAutoZh = localStorage.getItem("cr_flashcards_auto") === "on";
 
 const fcBaseCats = () => window.FLASHCARD_CATS || [];
 const fcNewCats = () => window.FLASHCARD_CATS_NEW || [];
@@ -30,7 +32,7 @@ function fcLoadNewDeck() {
   script.src = "data/flashcards_new.js";
   script.onload = () => {
     fcCats = (localStorage.getItem("cr_flashcards_cats") ?? FC_ALL).split("+").filter(Boolean);
-    if (gameMode === "flashcards" && $("setup").classList.contains("active")) {
+    if ((gameMode === "flashcards" || gameMode === "flashview") && $("setup").classList.contains("active")) {
       fcRenderSetupCats();
       updateStartBtn();
     }
@@ -139,7 +141,7 @@ function fcSyncSetup() {
   $("fcCatCount").textContent = `${n} ใบ`;
   $("fcPickerInfo").textContent = isAll ? `ทุกหมวด • ${n} ใบ` : `เลือก ${fcCats.length} หมวด • ${n} ใบ`;
   document.querySelectorAll(".fcd-btn").forEach((b) => {
-    const show = b.dataset.fcshow === "py" ? fcShowPy : fcShowTh;
+    const show = { py: fcShowPy, th: fcShowTh, auto: fcAutoZh }[b.dataset.fcshow];
     b.classList.toggle("selected", (b.dataset.on === "1") === show);
   });
 }
@@ -227,6 +229,7 @@ document.querySelectorAll(".fcd-btn").forEach((b) => b.addEventListener("click",
   sfx.click();
   const on = b.dataset.on === "1";
   if (b.dataset.fcshow === "py") fcShowPy = on;
+  else if (b.dataset.fcshow === "auto") fcAutoZh = on;
   else fcShowTh = on;
   localStorage.setItem(`cr_flashcards_${b.dataset.fcshow}`, on ? "on" : "off");
   fcSyncSetup();
@@ -289,6 +292,7 @@ function nextFcQuestion() {
   $("fcPy").textContent = fc.item.py || "";
   $("fcTh").textContent = fc.item.th || "";
   fcApplyDisplay();
+  if (fcAutoZh) fcSpeakZh(fc.item);
   const wrap = $("fcOptions");
   wrap.replaceChildren();
   fc.options.forEach((o, i) => {
@@ -359,6 +363,12 @@ function fcSpeakWord(item, onDone) {
     { url: `audio/zh/${key}.mp3`, tts: [item.zh, "zh-CN"] },
     { url: `audio/th_fc/${item.ta || key}.mp3`, tts: [item.th, "th-TH"], duck: true },
   ], onDone);
+}
+
+// เสียงจีนอย่างเดียว (ตั้งค่า "อ่านเสียงจีนอัตโนมัติ") — ไฟล์เดียวกับปุ่ม 🔊 แต่ไม่ต่อด้วยคำแปลไทย
+function fcSpeakZh(item) {
+  const key = wordAudioKey(item.zh, item.py);
+  wordAudio.play([{ url: `audio/zh/${key}.mp3`, tts: [item.zh, "zh-CN"] }]);
 }
 
 function fcFinish() {

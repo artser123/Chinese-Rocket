@@ -453,17 +453,21 @@ $("cards").addEventListener("click", (e) => {
   $("fmtRow").style.display = gameMode === "vocab" || isMatching ? "" : "none";
   $("sentQuizDirRow").style.display = gameMode === "sentencequiz" ? "" : "none";
   $("sentQuizPinyinRow").style.display = gameMode === "sentencequiz" ? "" : "none";
-  $("lifeRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
-  $("nextRow").style.display = arcade || isMatching || gameMode === "bomb" || gameMode === "listen" || gameMode === "copy" || gameMode === "trace" ? "none" : "";
+  const noLives = arcade || isMatching || ["bomb", "listen", "copy", "trace", "flashview"].includes(gameMode);
+  $("lifeRow").style.display = noLives ? "none" : "";
+  $("nextRow").style.display = noLives ? "none" : "";
   $("bombSetupRow").style.display = gameMode === "bomb" ? "" : "none";
   $("spkStrictRow").style.display = gameMode === "speak" ? "" : "none";
   $("lisTypeRow").style.display = gameMode === "listen" ? "" : "none";
   $("lisSpeedRow").style.display = gameMode === "listen" ? "" : "none";
   cpSyncSetupUI();
   tcSyncSetupUI();
-  // เกมทายแฟลชการ์ด: ซ่อนแถวเลือกระดับ HSK แล้วโชว์หมวดการ์ด 20 หมวดแทน
-  const isFc = gameMode === "flashcards";
+  // เกมทาย/ดูแฟลชการ์ด: ซ่อนแถวเลือกระดับ HSK แล้วโชว์หมวดการ์ดแทน (ใช้การเลือกหมวดชุดเดียวกัน)
+  const isFv = gameMode === "flashview";
+  const isFc = gameMode === "flashcards" || isFv;
   for (const id of ["fcCatRow", "fcPyRow", "fcThRow"]) $(id).style.display = isFc ? "" : "none";
+  $("fcAutoRow").style.display = gameMode === "flashcards" ? "" : "none";
+  for (const id of ["fvGapRow", "fvVoiceRow"]) $(id).style.display = isFv ? "" : "none";
   $("levelSelect").style.display = isFc ? "none" : "";
   $("setupLevelLabel").style.display = isFc ? "none" : "";
   $("setupCategoryTag").style.display = isFc ? "none" : "";
@@ -669,6 +673,7 @@ $("startBtn").addEventListener("click", () => {
   else if (gameMode === "copy") startCopyGame(selectedLevel);
   else if (gameMode === "trace") startTraceGame(selectedLevel);
   else if (gameMode === "flashcards") startFlashcardGame();
+  else if (gameMode === "flashview") startFlashview();
   else startGame(selectedLevel);
 });
 
@@ -761,6 +766,10 @@ function backConfirmPause(id) {
   if (id === "listen" && lis && lis.playing) {
     lisPausePlayback();
     return () => { if (lis && !lis.playing) lisReplayBtnClick(); };
+  }
+  if (id === "flashview" && fv && fv.playing) {
+    fvPause();
+    return () => { if (fv && !fv.playing) fvResume(); };
   }
   if (id === "podcast" && typeof podPause === "function") {
     const audio = $("podAudio");
@@ -874,9 +883,9 @@ window.__handleAndroidBack = function () {
     if (quit) { backConfirmOpen(active, () => quit.click()); return true; }
   }
 
-  // เกมรวมคำศัพท์: ถ้า popup วิธีเขียนเปิดอยู่ ให้ปิด popup ก่อน —
-  // กด back อีกครั้งจึงออกจากโหมดกลับหน้าหลัก
-  if (active === $("vocaboverview") && $("voStrokePopup") && !$("voStrokePopup").hidden) {
+  // popup วิธีเขียน (เกมรวมคำศัพท์ / เกมดูแฟลชการ์ด): ถ้าเปิดอยู่ ให้ปิด popup ก่อน —
+  // กด back อีกครั้งจึงออกจากโหมด
+  if ($("voStrokePopup") && !$("voStrokePopup").hidden) {
     if (typeof voCloseStrokes === "function") {
       sfx.click();
       voCloseStrokes();
@@ -902,6 +911,7 @@ window.__handleAndroidBack = function () {
     copy: "cpQuitBtn",
     trace: "tcQuitBtn",
     flashcards: "fcQuitBtn",
+    flashview: "fvQuitBtn",
   };
   const quit = $(quitByScreen[active.id]);
   // ทุกเกมถามยืนยันก่อนออก ยกเว้นพจนานุกรมและเกมรวมคำศัพท์ (ออกทันทีแบบเดิม)
