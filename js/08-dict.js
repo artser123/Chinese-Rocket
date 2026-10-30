@@ -842,7 +842,7 @@ async function dictStartMicWhisper() {
     dictResults.innerHTML = '<p class="dict-placeholder">🚫 เบราว์เซอร์ไม่อนุญาตให้ใช้ไมโครโฟน</p>';
     return;
   }
-  const ac = AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+  const ac = AC || (AC = newAudioCtx());
   if (ac.state === "suspended") ac.resume();
   const src = ac.createMediaStreamSource(stream);
   const proc = ac.createScriptProcessor(4096, 1, 1);

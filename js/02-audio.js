@@ -1,10 +1,20 @@
 "use strict";
 /* ================= Audio (WebAudio, no assets) ================= */
 let AC = null, muted = false;
+// มือถือ/แท็บเล็ต (และ APK): CPU ต่อคอร์ช้ากว่าคอมหลายเท่า แถมแย่งกับการวาดเกม → เธรดเสียงทำงานไม่ทัน
+// buffer เล็ก (latencyHint "interactive" ค่าเริ่มต้น ~10 ms) แล้ว "ขาดช่วง" ออกมาเป็นเสียงแตก/ซ่าเป็นพักๆ
+// ตลอดเพลง (บนคอมไม่เป็น) — จึงใช้ buffer ใหญ่ ("playback") และเพลงโหมดเบา (ดู music.revOn / tone)
+const AUDIO_LITE = !!(window.CR_OFFLINE_APP || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "") ||
+  (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent || ""))); // iPadOS แจ้งตัวเป็น Mac
+function newAudioCtx() {
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (AUDIO_LITE) { try { return new C({ latencyHint: "playback" }); } catch (e) {} }
+  return new C();
+}
 // หมายเหตุ: ปุ่มปิดเสียงสั่งปิดเฉพาะเพลงเบื้องหลัง (music.setMuted) — เสียงเอฟเฟกต์และเสียงเขียนยังเล่นปกติ
 function beep(freq, dur, type = "square", vol = 0.12, slide = 0, force = false) {
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    AC = AC || newAudioCtx();
     if (AC.state === "suspended") AC.resume();
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = type; o.frequency.value = freq;
@@ -17,7 +27,7 @@ function beep(freq, dur, type = "square", vol = 0.12, slide = 0, force = false) 
 }
 function noiseBurst(dur, vol, hp, lp, force = false) {
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    AC = AC || newAudioCtx();
     if (AC.state === "suspended") AC.resume();
     const buf = AC.createBuffer(1, Math.ceil(AC.sampleRate * dur), AC.sampleRate);
     const d = buf.getChannelData(0);
@@ -308,7 +318,7 @@ const wordAudio = {
     stopSpeech();
     const token = this.seq;
     (async () => {
-      const ac = AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+      const ac = AC || (AC = newAudioCtx());
       if (ac.state === "suspended") ac.resume();
       const clips = [];
       for (const it of items) {
@@ -665,6 +675,8 @@ const MUSIC_HP = 78;
 // วิ — เมื่อตัด rumble ออก เพลงจะดังขึ้น ~1.2 dB (limiter ทำงานน้อยลง) จึงชดเชยด้วย trim
 // เพื่อให้ระดับเสียง/พีคใกล้เคียงของเดิม (ไม่ให้ผู้เล่นรู้สึกว่าเพลงเปลี่ยนความดัง)
 const MUSIC_TRIM = 0.85;
+// ตั้งเวลาโน้ตล่วงหน้ากี่วิ — มือถือเผื่อมากขึ้น เพราะ setInterval ของเธรดหลักสะดุดนานกว่าบนเครื่องช้า
+const MUSIC_AHEAD = AUDIO_LITE ? 0.4 : 0.2;
 const LAYER_FX = {
   drums: { rev: 0.06, dly: 0 }, bass: { rev: 0.03, dly: 0 }, pad: { rev: 0.55, dly: 0.05 },
   arp: { rev: 0.3, dly: 0.45 }, lead: { rev: 0.22, dly: 0.32 }, perc: { rev: 0.16, dly: 0 },
@@ -677,8 +689,8 @@ const music = {
   intensity: 0.5, baseIntensity: 0.5,
   voices: [], // เสียงที่ยังดังอยู่ (gain + เวลาจบ) สำหรับตัดหางตอนเปลี่ยนเพลง
   human: () => (Math.random() - 0.5) * 0.008, // ขยับจังหวะกลองเล็กน้อยให้ไม่แข็งเหมือนเครื่อง
-  // convolver กิน CPU — ปิด reverb ถ้าเครื่องมี 4 คอร์หรือน้อยกว่า
-  revOn: () => !(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4),
+  // convolver กิน CPU — ปิด reverb บนมือถือ/แท็บเล็ต และเครื่องที่มี 4 คอร์หรือน้อยกว่า
+  revOn: () => !AUDIO_LITE && !(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4),
   // impulse response ของ reverb สร้างเองจาก noise (ไม่ใช้ไฟล์) — decay ยิ่งมาก หางยิ่งสั้น
   makeIR(dur, decay) {
     const ac = AC, len = Math.ceil(ac.sampleRate * dur);
@@ -706,13 +718,17 @@ const music = {
     this.hp2.connect(this.trim); this.trim.connect(this.limiter);
     this.limiter.connect(ac.destination);
 
-    this.rev = ac.createConvolver();
-    this.rev.buffer = this.makeIR(1.5, 3.4);
-    this.revLP = ac.createBiquadFilter();
-    this.revLP.type = "lowpass"; this.revLP.frequency.value = 3800;
-    this.revOut = ac.createGain();
-    this.revOut.gain.value = this.revOn() ? 0.8 : 0;
-    this.rev.connect(this.revLP); this.revLP.connect(this.revOut); this.revOut.connect(this.master);
+    // reverb ปิด = ไม่สร้าง convolver เลย (ตั้ง gain ขาออกเป็น 0 ไม่ช่วย — convolver ยังคำนวณเต็มทุกเฟรม)
+    this.rev = null;
+    if (this.revOn()) {
+      this.rev = ac.createConvolver();
+      this.rev.buffer = this.makeIR(1.5, 3.4);
+      this.revLP = ac.createBiquadFilter();
+      this.revLP.type = "lowpass"; this.revLP.frequency.value = 3800;
+      this.revOut = ac.createGain();
+      this.revOut.gain.value = 0.8;
+      this.rev.connect(this.revLP); this.revLP.connect(this.revOut); this.revOut.connect(this.master);
+    }
 
     this.dlyL = ac.createDelay(1); this.dlyR = ac.createDelay(1);
     this.dlyFB = ac.createGain(); this.dlyFB.gain.value = 0.32;
@@ -730,13 +746,13 @@ const music = {
     for (const name of Object.keys(LAYER_FX)) {
       const g = ac.createGain(), fx = LAYER_FX[name];
       g.connect(this.master);
-      if (fx.rev) { const s = ac.createGain(); s.gain.value = fx.rev; g.connect(s); s.connect(this.rev); }
+      if (fx.rev && this.rev) { const s = ac.createGain(); s.gain.value = fx.rev; g.connect(s); s.connect(this.rev); }
       if (fx.dly) { const s = ac.createGain(); s.gain.value = fx.dly; g.connect(s); s.connect(this.dlyIn); }
       this.layers[name] = g;
     }
   },
   getAC() {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    AC = AC || newAudioCtx();
     if (AC.state === "suspended") AC.resume();
     if (!this.master) this.buildGraph();
     return AC;
@@ -753,14 +769,19 @@ const music = {
     f.type = "lowpass"; f.Q.value = q;
     f.frequency.setValueAtTime(Math.min(12000, cutoff * 2.4), t);
     f.frequency.exponentialRampToValueAtTime(Math.max(180, cutoff), t + attack + Math.min(dur * 0.3, 0.22));
-    const n = 1 + (detune ? 2 : 0); // ออสซิลเลเตอร์หลักมีกี่ตัว → หารระดับเสียงให้ดังรวมเท่าเดิม
+    // ออสซิลเลเตอร์หลักมีกี่ตัว → หารระดับเสียงให้ดังรวมเท่าเดิม
+    // มือถือ: detune ใช้ 2 ตัว (+/−) แทน 3 ตัว — ยังกว้างเหมือนเดิมแต่ประหยัด CPU ราวหนึ่งในสี่ของเพลงทั้งเพลง
+    const n = detune ? (AUDIO_LITE ? 2 : 3) : 1;
     const peak = Math.max(0.0006, vol / Math.sqrt(n));
     const rel = Math.max(0.02, release);
+    // หยุดออสซิลเลเตอร์ที่ 6 time constant (หางเหลือ ~0.25% ≈ −52 dB ฟังไม่ออก) — เดิม 9 ทำให้ pad
+    // ค้างโหนดเงียบๆ ไว้อีกเกือบวินาทีทุกตัว ซ้อนกันหลายชุดโดยไม่ได้เสียงเพิ่ม
+    const end = t + dur + rel * 2 + 0.05;
     g.gain.setValueAtTime(0.0006, t);
     g.gain.exponentialRampToValueAtTime(peak, t + Math.max(0.004, attack));
     g.gain.exponentialRampToValueAtTime(Math.max(0.0006, peak * hold), t + attack + Math.min(dur * 0.35, 0.2));
     g.gain.setTargetAtTime(0.0006, t + dur, rel / 3);
-    this.reg(g, t, t + dur + rel * 3 + 0.05); // ลงทะเบียนไว้ตัดหางตอนเปลี่ยนเพลง
+    this.reg(g, t, end); // ลงทะเบียนไว้ตัดหางตอนเปลี่ยนเพลง
     f.connect(g);
     if (pan) { const p = ac.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(bus); }
     else g.connect(bus);
@@ -771,9 +792,9 @@ const music = {
       if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * mul + slide), t + dur);
       if (level === undefined) o.connect(f);
       else { const lg = ac.createGain(); lg.gain.value = level; o.connect(lg); lg.connect(f); }
-      o.start(t); o.stop(t + dur + rel * 3 + 0.05);
+      o.start(t); o.stop(end);
     };
-    mk(1, type, 0);
+    if (n !== 2) mk(1, type, 0);
     if (detune) { mk(1, type, detune + Math.random() * 1.5); mk(1, type, -detune - Math.random() * 1.5); }
     if (sub) mk(0.5, "sine", 0, sub);
   },
@@ -973,6 +994,13 @@ const music = {
     }
     this.loadSong();
   },
+  advanceStep(play) {
+    if (this.step === 0) this.loopCount++; // นับรอบลูป (ใช้เลือกจุด fill/แครช)
+    if (play) this.scheduleStep(this.step, this.nextTime);
+    this.nextTime += this.stepDur;
+    this.step = (this.step + 1) % this.theme.melody.length;
+    if (--this.stepsLeft <= 0) this.advanceSong();
+  },
   start(themeName) {
     if (themeName && themeName !== this.themeName) this.stop(); // สลับโหมด: รีสตาร์ทลูปให้ใช้เพลย์ลิสต์ใหม่
     if (this.playing) return;
@@ -987,13 +1015,11 @@ const music = {
     this.playing = true;
     this.nextTime = ac.currentTime + 0.1;
     this.timer = setInterval(() => {
-      while (this.nextTime < ac.currentTime + 0.2) {
-        if (this.step === 0) this.loopCount++; // นับรอบลูป (ใช้เลือกจุด fill/แครช)
-        this.scheduleStep(this.step, this.nextTime);
-        this.nextTime += this.stepDur;
-        this.step = (this.step + 1) % this.theme.melody.length;
-        if (--this.stepsLeft <= 0) this.advanceSong();
-      }
+      const now = ac.currentTime;
+      // เธรดหลักค้าง (GC / เปลี่ยนหน้าจอ / เฟรมเกมหนัก) จนเลยเวลาโน้ตไปแล้ว — ข้ามสเต็ปนั้นไปเลย
+      // โน้ตที่ตั้งเวลา "ย้อนหลัง" จะโผล่มากลาง envelope พร้อมกันทีละหลายตัว = เสียงแตก/คลิก
+      while (this.nextTime < now) this.advanceStep(false);
+      while (this.nextTime < now + MUSIC_AHEAD) this.advanceStep(true);
       // เก็บกวาดรายการเสียงที่จบไปแล้ว (ไม่ให้ voice list โตขึ้นเรื่อยๆ)
       if (this.voices.length) this.voices = this.voices.filter((v) => v.until > ac.currentTime);
     }, 30);

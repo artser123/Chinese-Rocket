@@ -651,7 +651,7 @@ async function spkStartMicWhisper() {
     return;
   }
   if (!spk) { stream.getTracks().forEach((t) => t.stop()); micBtn.classList.remove("listening"); return; }
-  const ac = AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+  const ac = AC || (AC = newAudioCtx());
   if (ac.state === "suspended") ac.resume();
   const src = ac.createMediaStreamSource(stream);
   const proc = ac.createScriptProcessor(4096, 1, 1);

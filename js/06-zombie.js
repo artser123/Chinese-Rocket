@@ -38,7 +38,8 @@ const zGroundY = () => {
   return (zGyCache = top - 28);
 };
 const zPoliceX = () => Math.max(70, ZW * 0.14);
-const zGunTip = () => ({ x: zPoliceX() + 56 - zb.recoil, y: zGroundY() - 75 });
+// ตำรวจแบบ sprite: ปลายกระบอกของเฟรมล่าสุดถูกเก็บไว้ใน zb.tip ตอนวาด
+const zGunTip = () => (zb.tip && zPoliceSprite() ? { x: zb.tip.x, y: zb.tip.y } : { x: zPoliceX() + 56 - zb.recoil, y: zGroundY() - 75 });
 // pre-generate twinkling stars + drifting fog puffs (regenerated on resize)
 // ดาวส่วนใหญ่ถูกอบไว้ในภาพท้องฟ้า (zSkyLayer) แล้ว — ที่นี่เหลือแค่ดวงที่กะพริบสด
 let zStars = [], zFog = [];
@@ -113,6 +114,45 @@ function zBuildCharacterStatics() {
 }
 
 const zSoftSprite = softSprite;
+
+// ซอมบี้จากโมเดล 3D: sprite sheet ที่เรนเดอร์ด้วย Blender (tools/zombie_sprites/render_sprites.py)
+// ข้อมูลเฟรมอยู่ใน ZOMBIE_SPRITES (data/zombie_sprites.js) — ถ้าไม่มี/โหลดรูปไม่สำเร็จ ใช้ซอมบี้วาดแบบเดิม
+const zSpriteSets = [];
+const Z_SPRITE_HEAD = 110;     // ความสูงถึงยอดหัว (หน่วยเดียวกับซอมบี้วาดเดิม) ที่ z.scale = 1
+const Z_DIE_MAX = 1.8;         // ท่าล้มยาวกว่านี้ถูกเร่งให้จบภายในเวลานี้
+const Z_DIE_FADE = 0.35;       // ค้างเฟรมสุดท้ายแล้วจางหายช่วงนี้
+let zPoliceSet = null, zWeaponSet = null;   // ตำรวจ 3D + อาวุธ 7 แบบ (tools/zombie_sprites/render_weapons.py)
+let zSpritesLoaded = false;
+function zLoadSprites() {
+  if (zSpritesLoaded || typeof ZOMBIE_SPRITES === "undefined") return;
+  zSpritesLoaded = true;
+  for (const m of Object.values(ZOMBIE_SPRITES)) {
+    const set = { m, img: new Image(), ok: false };
+    set.img.decoding = "async";
+    set.img.onload = () => { set.ok = true; };
+    set.img.src = m.src;
+    const role = m.role || "zombie";
+    if (role === "zombie") zSpriteSets.push(set);
+    else if (role === "police") zPoliceSet = set;
+    else if (role === "weapons") zWeaponSet = set;
+  }
+}
+// ตำรวจแบบ sprite ใช้เมื่อทั้งตัวและอาวุธโหลดเสร็จ (ไม่งั้นวาดแบบเดิมทั้งชุด)
+const zPoliceSprite = () => zPoliceSet && zPoliceSet.ok && zWeaponSet && zWeaponSet.ok;
+const Z_POLICE_DIE = 1.5;      // วินาทีที่ตำรวจล้มก่อนขึ้นหน้าจบเกม (แบบวาดเดิมใช้ 0.8)
+const Z_POLICE_FIRE_RATE = 0.6; // ท่ายืนยิงวนช้ากว่าความเร็วจริง ให้ดูนิ่งขึ้น
+const Z_WEAPON_SCALE = 1.3;     // อาวุธขนาดจริงเล็กไปบนจอ (ปืนสั้น/ระเบิดมือแทบมองไม่เห็น) — ขยายแบบเกมอาร์เคด
+const zDieAnimT = (z) => Math.min(Z_DIE_MAX, z.spr.m.anims.die.dur);
+const zDeathDur = (z) => (z.spr ? zDieAnimT(z) + Z_DIE_FADE : 0.7);
+function zSpriteFrame(z) {
+  const a = z.spr.m.anims;
+  if (z.dead) {
+    const d = a.die, t = Math.min(1, z.fall / zDieAnimT(z));
+    return d.start + Math.round(t * (d.n - 1));
+  }
+  const w = a.walk;   // phase เดิน +6/วินาที → เวลาในรอบเดิน = phase/6 (เริ่มสุ่มคนละจังหวะ)
+  return w.start + Math.floor((z.phase / 6 / w.dur) * w.n) % w.n;
+}
 
 function zBuildSky(gy) {
   const L = zMakeLayer(ZW, gy), c = L.c, r = zRng(11);
@@ -423,6 +463,7 @@ function startZombieGame(level) {
   pool = getVocabPool(level);
   if (!pool.length) pool = getVocabPool("1");
   lastStarter = () => startZombieGame(level);
+  zLoadSprites();
   zb = {
     score: 0, kills: 0, combo: 0, elapsed: 0, timeLeft: zDuration,
     spawnTimer: 0, nextSpawn: 1.0, stunUntil: 0,
@@ -491,6 +532,8 @@ function spawnZombie() {
   z.headGrad = zctx.createRadialGradient(-3, -98, 2, 0, -96, 15);
   z.headGrad.addColorStop(0, z.skin); z.headGrad.addColorStop(1, z.skinDark);
   z.bubble = makeZombieBubbleSprite(zFirst(w[0]));
+  const sets = zSpriteSets.filter((s) => s.ok);
+  z.spr = sets.length ? pick(sets) : null;
   zb.zombies.push(z);
 }
 
@@ -673,7 +716,7 @@ function zUpdate(dt) {
     // ซอมบี้ตัวหลังวิ่งเร็วกว่า → ไม่ให้แซงซ้อนตัวหน้า
     if (i > 0) z.x = Math.max(z.x, moving[i - 1].x + 64);
     if (z.x - 30 <= px + 22) {
-      zb.ending = true; zb.endTimer = 0.8; zb.shake = 0.5;
+      zb.ending = true; zb.endTimer = zb.endDur = zPoliceSprite() ? Z_POLICE_DIE : 0.8; zb.shake = 0.5;
       sfx.damage();
       const wf = $("zWrongFlash");
       wf.classList.remove("hide"); wf.classList.add("show");
@@ -681,7 +724,7 @@ function zUpdate(dt) {
   });
   for (let i = zb.zombies.length - 1; i >= 0; i--) {
     const z = zb.zombies[i];
-    if (z.dead && (z.fall += dt) > 0.7) zb.zombies.splice(i, 1);
+    if (z.dead && (z.fall += dt) > zDeathDur(z)) zb.zombies.splice(i, 1);
   }
   for (let i = zb.bullets.length - 1; i >= 0; i--) {
     const b = zb.bullets[i];
@@ -768,7 +811,78 @@ function zBlitStrip(c, s, scroll, y) {
   for (let x = -Math.round(off); x < ZW; x += s.w) c.drawImage(s.cv, x, y, s.w, s.h);
 }
 
+// แสงปากกระบอก + กรวยแสงไปทางซอมบี้ ที่จุด (fx, fy) ในพิกัดปัจจุบัน
+function zDrawMuzzleFlash(c, fx, fy) {
+  if (zb.flash <= 0) return;
+  const fa = zb.flash / 0.07;
+  // light cone toward zombies
+  c.globalAlpha = fa * 0.35;
+  const cone = c.createRadialGradient(fx, fy, 4, fx, fy, 120);
+  cone.addColorStop(0, "rgba(255,230,107,0.9)"); cone.addColorStop(1, "rgba(255,230,107,0)");
+  c.fillStyle = cone;
+  c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx + 120, fy - 20); c.lineTo(fx + 120, fy + 20); c.closePath(); c.fill();
+  // แสงฟุ้งรอบปากกระบอก (แทน bloom เต็มจอที่เอาออกไป)
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.globalAlpha = fa * 0.8;
+  c.drawImage(zGlowSprite, fx - 34, fy - 34, 68, 68);
+  c.restore();
+  c.globalAlpha = fa;
+  c.fillStyle = "#ffe66b";
+  c.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * 6.28, rad = i % 2 ? 6 : 15;
+    c.lineTo(fx + Math.cos(a) * rad, fy + Math.sin(a) * rad);
+  }
+  c.closePath(); c.fill();
+  c.globalAlpha = 1;
+}
+
+// ตำรวจ 3D: ท่ายืนยิงวนอยู่กับที่, ล้มลงตอนแพ้; อาวุธวางบนมือขวาและหมุนตามแนวมือขวา→มือซ้ายของเฟรมนั้น
+function zDrawPoliceSprite(c) {
+  const x = zPoliceX(), y = zGroundY();
+  const m = zPoliceSet.m, a = m.anims, s = Z_SPRITE_HEAD / m.head;
+  let f;
+  if (zb.ending) {
+    const t = Math.min(1, 1 - zb.endTimer / (zb.endDur || Z_POLICE_DIE));
+    f = a.die.start + Math.round(t * (a.die.n - 1));
+  } else {
+    f = a.fire.start + Math.floor((zb.elapsed * Z_POLICE_FIRE_RATE / a.fire.dur) * a.fire.n) % a.fire.n;
+  }
+  c.save();
+  c.fillStyle = "rgba(0,0,0,0.45)";
+  c.beginPath(); c.ellipse(x, y + 2, 26, 6, 0, 0, 6.28); c.fill();
+  c.translate(x, y);
+  c.drawImage(zPoliceSet.img, (f % m.cols) * m.cw, Math.floor(f / m.cols) * m.ch, m.cw, m.ch,
+    -m.ax * s, -m.ay * s, m.cw * s, m.ch * s);
+  if (!zb.ending && m.hands && m.hands[f]) {
+    const [R, L] = m.hands[f];
+    const rx = (R[0] - m.ax) * s, ry = (R[1] - m.ay) * s;
+    const wi = zWeaponSet.m.items[zWeapon().id];
+    const ws = s * m.ppm / zWeaponSet.m.ppm * Z_WEAPON_SCALE;
+    // ระเบิดมือไม่มีแนวด้าม (grip = support) → ถือตรง ๆ
+    const own = wi.support[0] === wi.grip[0] && wi.support[1] === wi.grip[1]
+      ? null : Math.atan2(wi.support[1] - wi.grip[1], wi.support[0] - wi.grip[0]);
+    const ang = own === null ? 0 : Math.atan2(L[1] - R[1], L[0] - R[0]) - own;
+    const kick = zb.recoil * 0.45;   // แรงถีบ: ดึงอาวุธถอยหลังตามแนวลำกล้อง
+    const ox = rx - Math.cos(ang) * kick, oy = ry - Math.sin(ang) * kick;
+    c.save();
+    c.translate(ox, oy); c.rotate(ang);
+    c.drawImage(zWeaponSet.img, wi.x, wi.y, wi.w, wi.h,
+      -wi.grip[0] * ws, -wi.grip[1] * ws, wi.w * ws, wi.h * ws);
+    c.restore();
+    // ปลายกระบอกในพิกัดฉาก → จุดออกของกระสุน/ควัน และแสงปากกระบอก
+    const mx = (wi.muzzle[0] - wi.grip[0]) * ws, my = (wi.muzzle[1] - wi.grip[1]) * ws;
+    const tx = ox + mx * Math.cos(ang) - my * Math.sin(ang);
+    const ty = oy + mx * Math.sin(ang) + my * Math.cos(ang);
+    zb.tip = { x: x + tx, y: y + ty };
+    zDrawMuzzleFlash(c, tx, ty);
+  }
+  c.restore();
+}
+
 function zDrawPolice(c) {
+  if (zPoliceSprite()) { zDrawPoliceSprite(c); return; }
   const x = zPoliceX(), y = zGroundY();
   const swing = zb.ending ? 0 : Math.sin(zb.walk);
   // ground shadow
@@ -853,31 +967,7 @@ function zDrawPolice(c) {
     c.fillStyle = "#5a5a5a"; c.fillRect(34 - r, -76, 12, 8); // grip
     c.fillStyle = "#222"; c.fillRect(70 - r, -78, 16, 8); // muzzle
   }
-  // muzzle flash + light cone
-  if (zb.flash > 0) {
-    const fa = zb.flash / 0.07;
-    // light cone toward zombies
-    c.globalAlpha = fa * 0.35;
-    const cone = c.createRadialGradient(60 - r, -75, 4, 60 - r, -75, 120);
-    cone.addColorStop(0, "rgba(255,230,107,0.9)"); cone.addColorStop(1, "rgba(255,230,107,0)");
-    c.fillStyle = cone;
-    c.beginPath(); c.moveTo(60 - r, -75); c.lineTo(60 - r + 120, -95); c.lineTo(60 - r + 120, -55); c.closePath(); c.fill();
-    // แสงฟุ้งรอบปากกระบอก (แทน bloom เต็มจอที่เอาออกไป)
-    c.save();
-    c.globalCompositeOperation = "lighter";
-    c.globalAlpha = fa * 0.8;
-    c.drawImage(zGlowSprite, 60 - r - 34, -75 - 34, 68, 68);
-    c.restore();
-    c.globalAlpha = fa;
-    c.fillStyle = "#ffe66b";
-    c.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * 6.28, rad = i % 2 ? 6 : 15;
-      c.lineTo(60 - r + Math.cos(a) * rad, -75 + Math.sin(a) * rad);
-    }
-    c.closePath(); c.fill();
-    c.globalAlpha = 1;
-  }
+  zDrawMuzzleFlash(c, 60 - r, -75);
   c.restore();
 }
 
@@ -888,6 +978,21 @@ function zDrawZombie(c, z) {
   c.fillStyle = "rgba(0,0,0,0.4)";
   c.beginPath(); c.ellipse(z.x, gy + 2, 22 * z.scale, 5, 0, 0, 6.28); c.fill();
   c.translate(z.x, gy);
+  if (z.spr) {
+    // sprite จากโมเดล 3D: drawImage เฟรมเดียวต่อตัว (ท่าเดิน/ท่าล้มอยู่ในรูปแล้ว)
+    const m = z.spr.m, f = zSpriteFrame(z);
+    if (z.dead) c.globalAlpha = 1 - Math.min(1, Math.max(0, (z.fall - zDieAnimT(z)) / Z_DIE_FADE));
+    c.scale(z.scale, z.scale);
+    const s = Z_SPRITE_HEAD / m.head;
+    c.drawImage(z.spr.img, (f % m.cols) * m.cw, Math.floor(f / m.cols) * m.ch, m.cw, m.ch,
+      -m.ax * s, -m.ay * s, m.cw * s, m.ch * s);
+    if (!z.dead) {
+      const b = z.bubble, bob = Math.sin(z.phase) * 3;
+      c.drawImage(b.cv, -b.w / 2, -120 + bob - b.ay, b.w, b.h);
+    }
+    c.restore();
+    return;
+  }
   if (z.dead) {
     const k = Math.min(1, z.fall / 0.5);
     c.globalAlpha = 1 - Math.max(0, (z.fall - 0.3) / 0.4);

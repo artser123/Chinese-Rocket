@@ -790,8 +790,15 @@ function backConfirmPause(id) {
   return null;
 }
 
+// จอเกม → gameMode ของหน้าตั้งค่า: กด "ตกลง" แล้วกลับไปหน้าตั้งค่าของเกมนั้น (ไม่ใช่หน้าหลัก)
+const BACK_SETUP_MODE = {
+  game: "meteor", quiz: "vocab", sentQuiz: "sentencequiz", sent: "sentence", fill: "fillblank",
+  zombie: "zombie", matching: "matching", bomb: "bomb", speak: "speak", listen: "listen",
+  copy: "copy", trace: "trace", flashcards: "flashcards", flashview: "flashview",
+};
+
 function backConfirmOpen(active, quit) {
-  backConfirmState = { quit, resume: backConfirmPause(active.id) };
+  backConfirmState = { quit, mode: BACK_SETUP_MODE[active.id], resume: backConfirmPause(active.id) };
   $("backConfirm").hidden = false;
   $("backConfirmCancel").focus();
 }
@@ -802,8 +809,15 @@ function backConfirmClose(ok) {
   backConfirmState = null;
   $("backConfirm").hidden = true;
   if (ok) {
-    st.quit(); // ปุ่มออกของโหมดเอง (บันทึกคะแนน/หยุดเสียง/กลับหน้าหลัก)
-    if (!menuEl.classList.contains("active")) { switchScreen(menuEl); updateBestLine(); }
+    st.quit(); // ปุ่มออกของโหมดเอง (บันทึกคะแนน/หยุดเสียง)
+    // เกมที่เข้าผ่านหน้าตั้งค่า → กลับหน้าตั้งค่าของเกมนั้น; พอดแคสต์/บทอ่าน (ไม่มีหน้าตั้งค่า) → หน้าหลัก
+    if (st.mode && gameMode === st.mode && !msRun) {
+      switchScreen($("setup"));
+      updateStartBtn();
+    } else if (!menuEl.classList.contains("active")) {
+      switchScreen(menuEl);
+    }
+    updateBestLine();
   } else {
     sfx.click();
     if (st.resume) st.resume();

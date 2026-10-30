@@ -401,7 +401,7 @@ const pencilSound = {
     if (!e.isPrimary || e.button !== 0 || !pencilAllowed()) return;
     this.stop();
     try {
-      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      AC = AC || newAudioCtx();
       if (AC.state === "suspended") AC.resume();
       if (!this.buffer) {
         this.buffer = AC.createBuffer(1, Math.ceil(AC.sampleRate * 0.5), AC.sampleRate);
