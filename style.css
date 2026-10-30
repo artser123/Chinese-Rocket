@@ -352,6 +352,17 @@ html, body {
 .card:nth-child(14) { animation-delay: 520ms; }
 .card:nth-child(15) { animation-delay: 560ms; }
 .card:nth-child(16) { animation-delay: 600ms; }
+/* การ์ดที่ 17+ (เกมทายแฟลชการ์ด ฯลฯ) ต้องมีดีเลย์ต่อด้วย — ไม่งั้นได้ 0ms แล้วโผล่พร้อมใบแรก
+   ก่อนการ์ดอื่นทั้งหมด • เผื่อไว้ถึงใบที่ 24 ใบหลังจากนั้นใช้ค่าสุดท้าย */
+.card:nth-child(17) { animation-delay: 640ms; }
+.card:nth-child(18) { animation-delay: 680ms; }
+.card:nth-child(19) { animation-delay: 720ms; }
+.card:nth-child(20) { animation-delay: 760ms; }
+.card:nth-child(21) { animation-delay: 800ms; }
+.card:nth-child(22) { animation-delay: 840ms; }
+.card:nth-child(23) { animation-delay: 880ms; }
+.card:nth-child(24) { animation-delay: 920ms; }
+.card:nth-child(n+25) { animation-delay: 960ms; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
 /* แสงสะท้อนด้านบน (เหมือนขอบกระจกส่องแสง) */
 .card::before {
@@ -5281,6 +5292,142 @@ button.fill-blank {
   color: #bde3ff;
 }
 #fcPy[hidden], #fcTh[hidden] { display: none; }
+/* ---- หน้าตั้งค่า: ปุ่มสรุปหมวด + หน้าต่างเลือกหมวด #fcCatPicker ----
+   แทนชิป ~80 อันที่เคยเรียงยาวในหน้าตั้งค่า: ปุ่มบรรทัดเดียวเปิดหน้าต่าง (มือถือ = bottom sheet,
+   จอกว้าง = กล่องกลางจอ) ที่มีช่องค้นหา + กลุ่ม + ตารางรายการแบบกระชับ */
+.fc-cat-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(520px, 100%);
+  min-height: 52px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 170, 60, .55);
+  border-radius: var(--r-cut-sm);
+  background: linear-gradient(180deg, var(--steel-1, #1b2450), var(--steel-2, #0f1534));
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: clamp(15px, 4vw, 18px);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #04050f, 0 0 14px rgba(255, 170, 60, .18), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.fc-cat-summary:active { transform: translateY(1px); }
+.fc-cat-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-cat-summary-count {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 170, 60, .18);
+  color: #ffd9a0;
+  font-size: .82em;
+}
+.fc-cat-summary-arrow { flex: none; color: #ffd9a0; }
+
+.fc-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(3, 5, 18, .72);
+}
+.fc-picker[hidden] { display: none; }
+.fc-picker-box {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(86dvh, 720px);
+  padding: 14px 14px calc(12px + var(--safe-bottom));
+  border: 1px solid rgba(255, 170, 60, .45);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(180deg, #1a1d42, #0b0e24);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, .6);
+  animation: fcSheetIn .22s var(--ease-out);
+}
+@keyframes fcSheetIn { from { transform: translateY(40px); opacity: 0; } }
+@media (min-width: 700px) {
+  .fc-picker { align-items: center; padding: 20px; }
+  .fc-picker-box { width: min(760px, 94vw); border-bottom: 1px solid rgba(255, 170, 60, .45); border-radius: var(--r-cut); padding-bottom: 14px; }
+}
+.fc-picker-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.fc-picker-head h3 { flex: 1; margin: 0; font-family: var(--font-display); font-size: clamp(18px, 5vw, 22px); color: var(--fire-2, #ffc928); }
+.fc-picker-x {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .06);
+  color: #fff; font-size: 18px; cursor: pointer;
+}
+.fc-picker-tools { display: flex; gap: 8px; margin-bottom: 10px; }
+.fc-picker-search {
+  flex: 1; min-width: 0; height: 44px; padding: 0 14px;
+  border: 1px solid rgba(255, 170, 60, .4); border-radius: 12px;
+  background: rgba(5, 8, 25, .85); color: #fff; font-size: 16px;
+}
+.fc-picker-search:focus { outline: none; border-color: rgb(255, 170, 60); box-shadow: 0 0 0 3px rgba(255, 170, 60, .2); }
+.fc-picker-all {
+  flex: none; height: 44px; padding: 0 14px; border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .06);
+  color: #e6e9ff; font-weight: 700; cursor: pointer;
+}
+.fc-picker-all.selected { background: linear-gradient(180deg, #ffb44d, #e8650f); border-color: #ffd28a; color: #fff; }
+.fc-picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px 6px;
+}
+.fc-pick-group + .fc-pick-group { margin-top: 12px; }
+.fc-pick-group[hidden] { display: none; }
+.fc-pick-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 2px; background: #141738;
+}
+.fc-pick-title { flex: 1; font-family: var(--font-display); font-weight: 700; color: #ffd9a0; font-size: 15px; }
+.fc-pick-groupbtn {
+  padding: 5px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  border: 1px solid rgba(255, 170, 60, .45); background: transparent; color: #ffd9a0; cursor: pointer;
+}
+.fc-pick-groupbtn[hidden] { display: none; }
+.fc-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.fc-pick-item {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 6px 10px;
+  border: 1px solid rgba(140, 150, 230, .28); border-radius: 10px;
+  background: rgba(255, 255, 255, .04); color: #dfe3ff;
+  font-size: 14px; text-align: left; cursor: pointer;
+}
+.fc-pick-item[hidden] { display: none; }
+.fc-pick-icon { flex: none; font-size: 18px; }
+.fc-pick-name { flex: 1; min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
+.fc-pick-n { flex: none; font-size: 12px; color: rgba(205, 213, 255, .6); }
+.fc-pick-check {
+  flex: none; display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 1.5px solid rgba(205, 213, 255, .35); color: transparent; font-size: 12px; font-weight: 800;
+}
+.fc-pick-item.selected { border-color: rgb(255, 170, 60); background: rgba(255, 170, 60, .16); color: #fff; }
+.fc-pick-item.selected .fc-pick-check { background: #ff9a2e; border-color: #ff9a2e; color: #fff; }
+.fc-picker-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.fc-picker-info { flex: 1; min-width: 0; color: #cdd5ff; font-size: 14px; }
+.fc-picker-done {
+  flex: none; min-width: 120px; height: 46px; padding: 0 22px;
+  border: none; border-radius: var(--r-cut-sm);
+  background: linear-gradient(180deg, #ffd23c, #ff7b1c); color: #301400;
+  font-family: var(--font-display); font-size: 17px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 0 #8a3a00;
+}
+@media (max-width: 380px) { .fc-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fc-pick-item { font-size: 13px; } }
 /* พินอิน/ไทยที่ตั้งให้ซ่อน: เผยหลังตอบถูก (จาง ๆ เพื่อบอกว่าเป็นเฉลย) */
 #fcPy.fc-revealed, #fcTh.fc-revealed { opacity: .82; animation: fcReveal .3s var(--ease-out); }
 @keyframes fcReveal { from { opacity: 0; transform: translateY(-4px); } }

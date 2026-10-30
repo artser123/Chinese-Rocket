@@ -78,3 +78,8 @@ icon_sheet/
 
 # Flashcard picture quiz dev artifacts (crop tool output; transcriptions, sheets, reports)
 flashcards_build/
+
+# Private flashcard deck from "New flashcard/" (kids-flashcards.com sets: personal use only, APK-only)
+New flashcard/
+flashcards_new/
+data/flashcards_new.js

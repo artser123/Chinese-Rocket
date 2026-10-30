@@ -287,7 +287,11 @@
 
     <div class="setup-row" id="fcCatRow" style="display:none">
       <span class="setup-label">หมวดการ์ด (เลือกได้หลายหมวด)</span>
-      <div class="level-select" id="fcCatSelect"></div>
+      <button id="fcCatOpen" class="fc-cat-summary" type="button" aria-haspopup="dialog" aria-controls="fcCatPicker">
+        <span id="fcCatSummary" class="fc-cat-summary-text">🌟 ทุกหมวด</span>
+        <span id="fcCatCount" class="fc-cat-summary-count"></span>
+        <span class="fc-cat-summary-arrow" aria-hidden="true">▾</span>
+      </button>
     </div>
 
     <div class="setup-row" id="fcPyRow" style="display:none">
@@ -1123,6 +1127,25 @@
 <div id="imgLightbox" class="img-lightbox" role="dialog" aria-modal="true" aria-label="รูปขนาดเต็ม" hidden>
   <button id="imgLightboxClose" class="img-lightbox-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
   <img id="imgLightboxImg" alt="">
+</div>
+
+<!-- เกมทายแฟลชการ์ด: หน้าต่างเลือกหมวด (อยู่นอก .screen เหมือน #imgLightbox เพื่อไม่ให้ switchScreen ซ่อน) -->
+<div id="fcCatPicker" class="fc-picker" role="dialog" aria-modal="true" aria-labelledby="fcPickerTitle" hidden>
+  <div class="fc-picker-box">
+    <div class="fc-picker-head">
+      <h3 id="fcPickerTitle">เลือกหมวดการ์ด</h3>
+      <button id="fcPickerClose" class="fc-picker-x" type="button" title="ปิด" aria-label="ปิด">✕</button>
+    </div>
+    <div class="fc-picker-tools">
+      <input id="fcPickerSearch" class="fc-picker-search" type="search" placeholder="🔍 ค้นหาหมวด เช่น สัตว์ ผลไม้ 水果" autocomplete="off" aria-label="ค้นหาหมวด">
+      <button id="fcPickerAll" class="fc-picker-all" type="button">🌟 ทั้งหมด</button>
+    </div>
+    <div id="fcCatSelect" class="fc-picker-list"></div>
+    <div class="fc-picker-foot">
+      <span id="fcPickerInfo" class="fc-picker-info"></span>
+      <button id="fcPickerDone" class="fc-picker-done" type="button">ตกลง</button>
+    </div>
+  </div>
 </div>
 
 <!-- DAILY MISSIONS (เกมภารกิจประจำวัน) — บับเบิ้ลหนังสือมุมซ้ายล่างของหน้าหลัก -->

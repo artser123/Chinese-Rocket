@@ -817,6 +817,8 @@ window.__handleAndroidBack = function () {
   const active = document.querySelector(".screen.active");
   if (!active || active === menuEl) return false;
 
+  // หน้าต่างเลือกหมวดของเกมทายแฟลชการ์ด (อยู่นอก .screen) ปิดก่อน
+  if (fcClosePicker()) return true;
   // Back ซ้ำขณะหน้าต่างยืนยันเปิดอยู่ = ยกเลิก
   if (backConfirmState) {
     backConfirmClose(false);

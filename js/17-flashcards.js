@@ -4,7 +4,10 @@
    ข้อมูล: window.FLASHCARD_CATS (data/flashcards.js) — 20 หมวด หมวดละ ~20 ใบ
    เลือกได้หลายหมวดพร้อมกัน / "ทั้งหมด" = ทุกหมวด • เล่นเรียงสุ่มไม่ซ้ำจนครบกอง
    ชีวิต 3 (ตามตั้งค่า) • เสียงคำ audio/zh + audio/th_fc (TTS สำรอง)
-   เปิด/ปิดพินอิน + คำแปลไทยบนการ์ดคำได้ (ที่ปิดไว้จะเผยให้ดูหลังตอบถูก) */
+   เปิด/ปิดพินอิน + คำแปลไทยบนการ์ดคำได้ (ที่ปิดไว้จะเผยให้ดูหลังตอบถูก)
+   ชุดภาพถ่ายใหม่ 59 ชุด (window.FLASHCARD_CATS_NEW, data/flashcards_new.js จาก
+   tools/build_flashcard_new.py) เป็นข้อมูลส่วนตัว — โหลดเฉพาะใน APK หรือ localhost ?fcNewPreview=1
+   (ภาพจากชุดของ kids-flashcards.com ใช้ส่วนตัวได้แต่ห้ามเผยแพร่ เหมือนพอดแคสต์ MaoMi) */
 let fc = null;
 const FC_ALL = "all";
 const FC_SCORE_PER_CARD = 10;
@@ -14,7 +17,26 @@ let fcCats = (localStorage.getItem("cr_flashcards_cats") ?? localStorage.getItem
 let fcShowPy = localStorage.getItem("cr_flashcards_py") !== "off";
 let fcShowTh = localStorage.getItem("cr_flashcards_th") !== "off";
 
-const fcAllCats = () => window.FLASHCARD_CATS || [];
+const fcBaseCats = () => window.FLASHCARD_CATS || [];
+const fcNewCats = () => window.FLASHCARD_CATS_NEW || [];
+const fcAllCats = () => fcBaseCats().concat(fcNewCats());
+const FC_NEW_ON = !!window.CR_OFFLINE_APP ||
+  (POD_PREVIEW_HOST.test(location.hostname) && new URLSearchParams(location.search).get("fcNewPreview") === "1");
+
+// โหลดชุดใหม่ครั้งเดียวตอนเปิดแอป แล้วอ่านหมวดที่เลือกไว้ใหม่ (id n01… ยังไม่รู้จักก่อนโหลดเสร็จ)
+function fcLoadNewDeck() {
+  if (!FC_NEW_ON || Array.isArray(window.FLASHCARD_CATS_NEW)) return;
+  const script = document.createElement("script");
+  script.src = "data/flashcards_new.js";
+  script.onload = () => {
+    fcCats = (localStorage.getItem("cr_flashcards_cats") ?? FC_ALL).split("+").filter(Boolean);
+    if (gameMode === "flashcards" && $("setup").classList.contains("active")) {
+      fcRenderSetupCats();
+      updateStartBtn();
+    }
+  };
+  document.head.appendChild(script);
+}
 
 // ตัด id ที่ไม่มีจริงออก • ว่าง หรือเลือกครบทุกหมวด = "ทั้งหมด"
 function fcNormalizeCats() {
@@ -51,33 +73,82 @@ function fcPool(cats = fcSelectedCats()) {
 }
 const fcPoolSize = () => fcPool().length;
 
+// ---- เลือกหมวด: ปุ่มสรุปบรรทัดเดียวในหน้าตั้งค่า + หน้าต่างเลือก #fcCatPicker ----
+// (เดิมเป็นชิป 80 อันเรียงยาวในหน้าตั้งค่า) — ค้นหา, แบ่งกลุ่มชุดหลัก/ชุดภาพถ่าย, เลือกทั้งกลุ่ม
+// สถานะ "ทั้งหมด" แสดงที่ปุ่ม 🌟 (รายการหมวดไม่ติ๊ก = ไม่กรอง) เลือกหมวดใดหมวดหนึ่งแล้วออกจากโหมดทั้งหมด
+function fcCatGroups() {
+  const groups = [{ key: "base", label: "📚 ชุดการ์ดหลัก", cats: fcBaseCats() }];
+  if (fcNewCats().length) groups.push({ key: "new", label: "📷 ชุดภาพถ่ายเพิ่มเติม", cats: fcNewCats() });
+  return groups;
+}
+
 function fcRenderSetupCats() {
   const wrap = $("fcCatSelect");
   wrap.replaceChildren();
-  const add = (id, text) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "fc-cat-btn" + (id === FC_ALL ? " fc-cat-all" : "");
-    b.dataset.cat = id;
-    b.textContent = text;
-    wrap.appendChild(b);
-  };
-  add(FC_ALL, "🌟 ทั้งหมด");
-  for (const c of fcAllCats()) add(c.id, `${c.icon} ${c.th}`);
+  for (const g of fcCatGroups()) {
+    const sec = document.createElement("section");
+    sec.className = "fc-pick-group";
+    sec.dataset.group = g.key;
+    const head = document.createElement("div");
+    head.className = "fc-pick-head";
+    const title = document.createElement("span");
+    title.className = "fc-pick-title";
+    title.textContent = `${g.label} (${g.cats.length})`;
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "fc-pick-groupbtn";
+    all.dataset.group = g.key;
+    head.append(title, all);
+    const grid = document.createElement("div");
+    grid.className = "fc-pick-grid";
+    for (const c of g.cats) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "fc-pick-item";
+      b.dataset.cat = c.id;
+      b.dataset.search = `${c.th} ${c.zh} ${c.id}`.toLowerCase();
+      b.innerHTML = `<span class="fc-pick-icon" aria-hidden="true">${c.icon}</span>` +
+        `<span class="fc-pick-name"></span><span class="fc-pick-n">${c.items.length}</span>` +
+        `<span class="fc-pick-check" aria-hidden="true">✓</span>`;
+      b.querySelector(".fc-pick-name").textContent = c.th;
+      grid.appendChild(b);
+    }
+    sec.append(head, grid);
+    wrap.appendChild(sec);
+  }
+  fcFilterPicker();
   fcSyncSetup();
 }
 
 function fcSyncSetup() {
   fcNormalizeCats();
-  document.querySelectorAll("#fcCatSelect .fc-cat-btn").forEach((b) => {
-    const on = fcCats.includes(b.dataset.cat);
+  const isAll = fcCats[0] === FC_ALL;
+  document.querySelectorAll("#fcCatSelect .fc-pick-item").forEach((b) => {
+    const on = !isAll && fcCats.includes(b.dataset.cat);
     b.classList.toggle("selected", on);
     b.setAttribute("aria-pressed", String(on));
   });
+  for (const g of fcCatGroups()) {
+    const btn = document.querySelector(`#fcCatSelect .fc-pick-groupbtn[data-group="${g.key}"]`);
+    if (btn) btn.textContent = !isAll && g.cats.every((c) => fcCats.includes(c.id)) ? "ล้างกลุ่มนี้" : "เลือกทั้งกลุ่ม";
+  }
+  $("fcPickerAll").classList.toggle("selected", isAll);
+  $("fcPickerAll").setAttribute("aria-pressed", String(isAll));
+  const label = fcSelLabel(), n = fcPoolSize();
+  $("fcCatSummary").textContent = isAll ? "🌟 ทุกหมวด" : label;
+  $("fcCatCount").textContent = `${n} ใบ`;
+  $("fcPickerInfo").textContent = isAll ? `ทุกหมวด • ${n} ใบ` : `เลือก ${fcCats.length} หมวด • ${n} ใบ`;
   document.querySelectorAll(".fcd-btn").forEach((b) => {
     const show = b.dataset.fcshow === "py" ? fcShowPy : fcShowTh;
     b.classList.toggle("selected", (b.dataset.on === "1") === show);
   });
+}
+
+function fcSaveCats() {
+  fcNormalizeCats();
+  localStorage.setItem("cr_flashcards_cats", fcCats.join("+"));
+  fcSyncSetup();
+  updateStartBtn();
 }
 
 // "ทั้งหมด" ใช้แทนการเลือกทีละหมวด (เหมือน levelToggle ของระดับ HSK)
@@ -86,14 +157,67 @@ function fcToggleCat(id) {
   if (id === FC_ALL) fcCats = [FC_ALL];
   else if (fcCats[0] === FC_ALL) fcCats = [id];
   else fcCats = fcCats.includes(id) ? fcCats.filter((c) => c !== id) : [...fcCats, id];
-  fcNormalizeCats();
-  localStorage.setItem("cr_flashcards_cats", fcCats.join("+"));
-  fcSyncSetup();
-  updateStartBtn();
+  fcSaveCats();
 }
 
+// เลือก/ล้างทั้งกลุ่ม (ล้างจนว่าง = กลับเป็นทั้งหมด ผ่าน fcNormalizeCats)
+function fcToggleGroup(key) {
+  fcNormalizeCats();
+  const g = fcCatGroups().find((x) => x.key === key);
+  if (!g) return;
+  const ids = g.cats.map((c) => c.id);
+  const cur = fcCats[0] === FC_ALL ? [] : fcCats;
+  fcCats = ids.every((id) => cur.includes(id)) ? cur.filter((id) => !ids.includes(id))
+    : [...new Set([...cur, ...ids])];
+  fcSaveCats();
+}
+
+function fcFilterPicker() {
+  const q = $("fcPickerSearch").value.trim().toLowerCase();
+  document.querySelectorAll("#fcCatSelect .fc-pick-group").forEach((sec) => {
+    let shown = 0;
+    sec.querySelectorAll(".fc-pick-item").forEach((b) => {
+      const hit = !q || b.dataset.search.includes(q);
+      b.hidden = !hit;
+      if (hit) shown++;
+    });
+    sec.hidden = !shown;
+    sec.querySelector(".fc-pick-groupbtn").hidden = !!q; // ปุ่มทั้งกลุ่มตอนค้นหาจะกำกวม
+  });
+}
+
+let fcPickerReturn = null;
+function fcOpenPicker() {
+  const pk = $("fcCatPicker");
+  if (!pk.hidden) return;
+  fcPickerReturn = document.activeElement;
+  $("fcPickerSearch").value = "";
+  fcRenderSetupCats();
+  pk.hidden = false;
+  $("fcCatOpen").setAttribute("aria-expanded", "true");
+  $("fcPickerDone").focus({ preventScroll: true });
+}
+
+function fcClosePicker() {
+  const pk = $("fcCatPicker");
+  if (pk.hidden) return false;
+  pk.hidden = true;
+  $("fcCatOpen").setAttribute("aria-expanded", "false");
+  (fcPickerReturn || $("fcCatOpen")).focus?.({ preventScroll: true });
+  return true;
+}
+
+$("fcCatOpen").addEventListener("click", () => { sfx.click(); fcOpenPicker(); });
+$("fcPickerClose").addEventListener("click", () => { sfx.click(); fcClosePicker(); });
+$("fcPickerDone").addEventListener("click", () => { sfx.click(); fcClosePicker(); });
+$("fcPickerAll").addEventListener("click", () => { sfx.click(); fcToggleCat(FC_ALL); });
+$("fcPickerSearch").addEventListener("input", fcFilterPicker);
+$("fcCatPicker").addEventListener("click", (e) => { if (e.target === e.currentTarget) fcClosePicker(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fcClosePicker()) e.preventDefault(); });
 $("fcCatSelect").addEventListener("click", (e) => {
-  const btn = e.target.closest(".fc-cat-btn");
+  const group = e.target.closest(".fc-pick-groupbtn");
+  if (group) { sfx.click(); fcToggleGroup(group.dataset.group); return; }
+  const btn = e.target.closest(".fc-pick-item");
   if (!btn) return;
   sfx.click();
   fcToggleCat(btn.dataset.cat);
@@ -109,6 +233,7 @@ document.querySelectorAll(".fcd-btn").forEach((b) => b.addEventListener("click",
 }));
 
 function startFlashcardGame() {
+  fcClosePicker();
   const cats = fcSelectedCats();
   const pool = fcPool(cats);
   if (pool.length < 4) return;
@@ -232,7 +357,7 @@ function fcSpeakWord(item, onDone) {
   const key = wordAudioKey(item.zh, item.py);
   wordAudio.play([
     { url: `audio/zh/${key}.mp3`, tts: [item.zh, "zh-CN"] },
-    { url: `audio/th_fc/${key}.mp3`, tts: [item.th, "th-TH"], duck: true },
+    { url: `audio/th_fc/${item.ta || key}.mp3`, tts: [item.th, "th-TH"], duck: true },
   ], onDone);
 }
 
@@ -278,3 +403,4 @@ $("fcSpeakBtn").addEventListener("click", () => {
   if (fc && fc.item) fcSpeakWord(fc.item);
 });
 $("fcNextBtn").addEventListener("click", () => { sfx.click(); nextFcQuestion(); });
+fcLoadNewDeck();
