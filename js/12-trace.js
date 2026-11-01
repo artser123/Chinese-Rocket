@@ -580,6 +580,17 @@ $("spkStrictSelect").addEventListener("click", (e) => {
 });
 document.querySelectorAll(".spks-btn").forEach((b) => b.classList.toggle("selected", b.dataset.strict === spkStrict));
 
+// ตัวเลือก "ประโยค HSK 3.0" (APK เท่านั้น) — เปิด = ต่อประโยคตัวอย่างจากการ์ดเข้าคลังประโยค HSK
+$("sentHsk30Select").addEventListener("click", (e) => {
+  const btn = e.target.closest(".sh30-btn");
+  if (!btn) return;
+  sfx.click();
+  sentHsk30On = btn.dataset.sh30 === "on";
+  localStorage.setItem("cr_sent_hsk30", sentHsk30On ? "on" : "off");
+  sentHsk30SyncRow();
+  updateStartBtn();
+});
+
 // โหมดฝึกฟัง: เลือกคำศัพท์ (HSK 1-9) หรือประโยค (HSK 1-5 เท่านั้น)
 $("lisTypeSelect").addEventListener("click", (e) => {
   const btn = e.target.closest(".lis-btn");

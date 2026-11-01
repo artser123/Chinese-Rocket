@@ -505,8 +505,8 @@ function speakSentence(s, withTh = false, onDone, onProgress) {
   const zh = s[0].trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
   wordAudio.play([
-    { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], duck: withTh },
-    ...(withTh && th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }] : []),
+    { url: sentAudioUrl("zh", zh), tts: [zh, "zh-CN"], duck: withTh },
+    ...(withTh && th ? [{ url: sentAudioUrl("th", zh), tts: [th, "th-TH"], duck: true }] : []),
   ], onDone, onProgress);
 }
 
@@ -514,9 +514,9 @@ function speakSentencePrompt(s, language, onProgress, onDone) {
   const zh = (s[0] || "").trim().split(/[｜|]/)[0];
   const th = (s[2] || "").trim();
   if (language === "th" && th) {
-    wordAudio.play([{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], duck: true }], onDone);
+    wordAudio.play([{ url: sentAudioUrl("th", zh), tts: [th, "th-TH"], duck: true }], onDone);
   } else if (zh) {
-    wordAudio.play([{ url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"] }], onDone, onProgress);
+    wordAudio.play([{ url: sentAudioUrl("zh", zh), tts: [zh, "zh-CN"] }], onDone, onProgress);
   }
 }
 

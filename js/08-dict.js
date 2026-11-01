@@ -159,7 +159,7 @@ function dictSpeakZh(zh, pinyin) {
   if (!base) return;
   const key = wordAudioKey(base, pinyin);
   const spoken = key === "了-le" ? "le" : base;
-  wordAudio.play([{ url: `audio/zh/${key}.mp3`, tts: [spoken, "zh-CN"] }], null);
+  wordAudio.play([{ url: sentAudioUrl("zh", key), tts: [spoken, "zh-CN"] }], null);
 }
 
 // free MyMemory translation API (no key needed; falls back to Bing link on failure)
@@ -524,14 +524,16 @@ function dictEsc(s) {
 }
 
 function dictFindExamples(zh, lvl) {
-  const examples = [];
+  // 0) ประโยคตัวอย่างของคำนี้จากการ์ด HSK 3.0 (เฉพาะ APK) — ตรงกับคำที่สุด จึงมาก่อน
+  const examples = vexExamples(zh).slice(0, 3);
+  const has = (s) => examples.some((e) => e[0] === s[0]);
   // 1) SENTENCES data (HSK 1-9): [zh, pinyin, th, grammar, tokens]
   if (SENT_OK) {
     for (const sl of ["1", "2", "3", "4", "5", "6", "7-9"]) {
       const sents = SENTENCES[sl] || [];
       for (const s of sents) {
         const tokens = s[4] || [];
-        if (tokens.includes(zh)) {
+        if (tokens.includes(zh) && !has(s)) {
           examples.push(s);
           if (examples.length >= 3) return examples;
         }

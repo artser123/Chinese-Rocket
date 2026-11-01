@@ -402,6 +402,91 @@ function wordAudioKey(zh, pinyin) {
   return base === "了" && String(pinyin || "").trim().toLowerCase() === "le" ? "了-le" : base;
 }
 
+// ประโยคตัวอย่างของคำศัพท์จากการ์ด HSK 3.0 (window.VOCAB_EXAMPLES, data/vocab_examples.js)
+// เป็นข้อมูลส่วนตัว (ใช้ส่วนตัวเท่านั้น) — gitignore และโหลดเฉพาะ APK หรือ ?vexPreview=1
+// เสียงอยู่แยกใน audio/ex/zh|th/<ประโยค>.mp3 (CozyVoice / VoiceClone) ไม่ปนกับ audio/zh|th
+let vexSentSet = null;
+let vexPoolCache = null;   // {level: [[zh, py, th, grammar, tokens], …]} — สร้างครั้งแรกที่ใช้
+// เปิดใช้ได้เฉพาะ APK หรือ localhost ?vexPreview=1 (ตัวเดียวกับที่ใช้โหลดไฟล์)
+const vexAvailable = () => !!window.CR_OFFLINE_APP ||
+  (typeof POD_PREVIEW_HOST !== "undefined" && POD_PREVIEW_HOST.test(location.hostname) &&
+    new URLSearchParams(location.search).get("vexPreview") === "1");
+function vexLoad() {
+  if (!vexAvailable() || window.VOCAB_EXAMPLES) return;
+  const script = document.createElement("script");
+  script.src = "data/vocab_examples.js";
+  script.onload = () => {
+    vexSentSet = null;
+    vexPoolCache = null;
+    if (typeof voSentCache !== "undefined") voSentCache.clear();
+    if (typeof sentHsk30SyncRow === "function") sentHsk30SyncRow();
+    if ($("setup").classList.contains("active")) updateStartBtn();
+  };
+  document.head.appendChild(script);
+}
+// [[zh, pinyin, th], …] ของคำนี้ (ว่างถ้ายังไม่โหลด/ไม่มี)
+function vexExamples(zh) {
+  const ex = window.VOCAB_EXAMPLES;
+  const base = String(zh || "").split(/[｜|]/)[0].trim();
+  return (ex && ex[base]) || [];
+}
+// ตัวเลือก "ประโยค HSK 3.0" ในเกมประโยค: ประโยคตัวอย่างจากการ์ดเป็นคลังประโยคแยกต่อระดับ HSK
+// ระดับ = ระดับต่ำสุดของคำที่ประโยคนั้นเป็นตัวอย่าง • ตัดคำแบบ greedy จากคลังคำ VOCAB (ยาวสุด 4 ตัว)
+// เพื่อให้เกมเรียงประโยค/เติมคำมี tokens เหมือนประโยคปกติ (ตัดเครื่องหมายวรรคตอนทิ้ง)
+function vexSegment(zh, dict) {
+  const out = [];
+  const runs = zh.match(/[㐀-鿿]+|[0-9A-Za-z.%]+/g) || [];
+  for (const run of runs) {
+    if (!/[㐀-鿿]/.test(run)) { out.push(run); continue; }
+    for (let i = 0; i < run.length;) {
+      let n = Math.min(4, run.length - i);
+      while (n > 1 && !dict.has(run.slice(i, i + n))) n--;
+      out.push(run.slice(i, i + n));
+      i += n;
+    }
+  }
+  return out;
+}
+function vexSentencePool(level) {
+  if (!window.VOCAB_EXAMPLES || typeof VOCAB === "undefined") return [];
+  if (!vexPoolCache) {
+    const lvOf = new Map(), dict = new Set(), order = Object.keys(VOCAB);
+    for (const lv of order) {
+      for (const w of VOCAB[lv]) {
+        for (const z of w[0].split("｜")) {
+          const k = z.trim();
+          dict.add(k);
+          if (!lvOf.has(k)) lvOf.set(k, lv);
+        }
+      }
+    }
+    const best = new Map();   // zh ประโยค → [ระดับ, คำ, py, th]
+    for (const [word, list] of Object.entries(window.VOCAB_EXAMPLES)) {
+      const lv = lvOf.get(word);
+      if (!lv) continue;
+      for (const [zh, py, th] of list) {
+        const prev = best.get(zh);
+        if (!prev || order.indexOf(lv) < order.indexOf(prev[0])) best.set(zh, [lv, word, py, th]);
+      }
+    }
+    vexPoolCache = {};
+    for (const [zh, [lv, word, py, th]] of best) {
+      (vexPoolCache[lv] = vexPoolCache[lv] || []).push(
+        [zh, py, th, `ประโยคตัวอย่างของคำ ${word} (การ์ด HSK 3.0)`, vexSegment(zh, dict)]);
+    }
+  }
+  return level === "all" ? Object.values(vexPoolCache).flat() : (vexPoolCache[level] || []);
+}
+
+// URL เสียงของประโยค: ประโยคจากการ์ดใช้ audio/ex/, ที่เหลือใช้ audio/<lang>/
+function sentAudioUrl(lang, zh) {
+  if (!vexSentSet && window.VOCAB_EXAMPLES) {
+    vexSentSet = new Set();
+    for (const list of Object.values(window.VOCAB_EXAMPLES)) for (const e of list) vexSentSet.add(e[0]);
+  }
+  return `audio/${vexSentSet && vexSentSet.has(zh) ? "ex/" : ""}${lang}/${zh}.mp3`;
+}
+
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
 function speakWordHit(w, onDone) {
   const zh = w[0].split(/[｜|]/)[0].trim();

@@ -56,6 +56,8 @@ const zDurLabel = () => zDuration ? `${zDuration} วิ` : "ไม่จำก�
 let lastStarter = null;
 let metDone = new Set();    // meteor: คำที่ยิงโดนสำเร็จในเซสชันนี้ (สำหรับแถบ % ความก้าวหน้า)
 const SENT_OK = typeof SENTENCES !== "undefined";
+// ตัวเลือก "ประโยค HSK 3.0" ในหน้าตั้งค่าเกมประโยค (APK เท่านั้น) — ดู vexSentencePool() ใน 02-audio.js
+let sentHsk30On = localStorage.getItem("cr_sent_hsk30") === "on";
 // merge ประโยคเพิ่มเติมที่เขียนโดย LLM เข้ากับฐานประโยคหลัก — แยกไฟล์ไว้เพื่อให้
 // re-generate sentences.js จาก xlsx ได้โดยไม่ลบประโยคพวกนี้ทิ้ง
 if (SENT_OK && typeof SENTENCES_EXTRA !== "undefined") {
@@ -69,6 +71,30 @@ if (SENT_OK && typeof SENTENCES_HSK69 !== "undefined") {
   for (const lvl in SENTENCES_HSK69) {
     SENTENCES[lvl] = (SENTENCES[lvl] || []).concat(SENTENCES_HSK69[lvl]);
   }
+}
+
+// merge คำศัพท์ HSK 3.0 ที่มีในการ์ดคำศัพท์แต่ไม่มีใน vocab.js (data/vocab_added.js) —
+// ข้ามคำที่มีอยู่แล้ว เผื่อ vocab.js ถูกสร้างใหม่แล้วมีคำนั้นเข้ามา
+if (typeof VOCAB !== "undefined" && typeof VOCAB_ADDED !== "undefined") {
+  const have = new Set(Object.values(VOCAB).flat().flatMap((w) => w[0].split("｜").map((z) => z.trim())));
+  for (const lvl in VOCAB_ADDED) {
+    VOCAB[lvl] = (VOCAB[lvl] || []).concat(VOCAB_ADDED[lvl].filter((w) => !have.has(w[0])));
+  }
+}
+
+// แถว "ประโยค HSK 3.0": เฉพาะ APK, หมวด HSK, เกมที่ใช้ประโยค (ฟังเฉพาะแบบประโยค)
+const SENT_HSK30_MODES = ["sentence", "sentencequiz", "fillblank", "speak", "copy"];
+function sentHsk30SyncRow() {
+  const row = $("sentHsk30Row");
+  if (!row || typeof vexAvailable !== "function") return;  // 02-audio.js ยังไม่โหลด
+  const show = vexAvailable() && currentCategory === "hsk" &&
+    (SENT_HSK30_MODES.includes(gameMode) || (gameMode === "listen" && lisType === "sent"));
+  row.style.display = show ? "" : "none";
+  row.querySelectorAll(".sh30-btn").forEach((b) => {
+    const on = (b.dataset.sh30 === "on") === sentHsk30On;
+    b.classList.toggle("selected", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
 }
 
 /* ================= Vocabulary Categories ================= */
@@ -605,7 +631,12 @@ function getVocabPool(level) {
 
 function getSentencePool(level) {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
-  return levelPoolUnion(level || selectedLevel || currentLevel, (l) => cat.getSentencePool(l));
+  // ตัวเลือก "ประโยค HSK 3.0" (APK เท่านั้น): ใช้เฉพาะประโยคตัวอย่างจากการ์ดแทนคลังประโยคเดิมของระดับนั้น
+  // เฉพาะหมวด HSK และต้องโหลดข้อมูลการ์ดแล้ว — หมวดเฉพาะทางทั้ง 11 หมวด และภารกิจประจำวันไม่ถูกแตะ
+  const cardsOnly = sentHsk30On && currentCategory === "hsk" && vexAvailable() && !!window.VOCAB_EXAMPLES &&
+    !(typeof msRun !== "undefined" && msRun);
+  return levelPoolUnion(level || selectedLevel || currentLevel,
+    (l) => cardsOnly ? vexSentencePool(l) : cat.getSentencePool(l));
 }
 
 // ทะเบียนคลังคำศัพท์ของทุกหมวดที่ไม่ใช่ HSK (ใช้ร่วมกันในพจนานุกรม 08-dict.js
@@ -727,6 +758,7 @@ function renderLevelSelect() {
   const cat = CATEGORIES[currentCategory] || CATEGORIES.hsk;
   const container = $("levelSelect");
   if (!container) return;
+  sentHsk30SyncRow();
 
   const labelEl = $("setupLevelLabel");
   if (labelEl) labelEl.textContent = `${cat.levelLabel} (แตะเลือกได้หลาย${currentCategory === "hsk" ? "ระดับ" : "หมวด"})`;

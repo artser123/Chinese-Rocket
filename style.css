@@ -272,7 +272,7 @@ html, body {
 .disabled-label { color: #666; }
 
 .level-select { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .sh30-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
   min-width: 72px;
   padding: 12px 14px;
   font-size: clamp(15px, 4vw, 18px);
@@ -286,15 +286,15 @@ html, body {
               border-color var(--dur-fast), background var(--dur-fast);
 }
 .level-btn:active, .diff-btn:active, .ans-btn:active, .sqd-btn:active, .sqp-btn:active, .life-btn:active, .next-btn:active, .time-btn:active,
-.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active, .spks-btn:active, .fc-cat-btn:active, .fcd-btn:active, .fvo-btn:active { transform: translateY(1px) scale(.985); }
+.lis-btn:active, .spd-btn:active, .cpw-btn:active, .cpo-btn:active, .tco-btn:active, .tcs-btn:active, .spks-btn:active, .sh30-btn:active, .fc-cat-btn:active, .fcd-btn:active, .fvo-btn:active { transform: translateY(1px) scale(.985); }
 .level-btn.selected, .fc-cat-btn.selected {
   background: linear-gradient(180deg, var(--accent-warm-1), var(--accent-warm-2));
   border-color: var(--accent-warm-3);
   color: #fff;
   box-shadow: var(--sh-glow-warm), var(--hi-top);
 }
-.diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fcd-btn, .fvo-btn { min-width: 96px; }
-.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
+.diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .sh30-btn, .fcd-btn, .fvo-btn { min-width: 96px; }
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .sh30-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
   background: linear-gradient(180deg, var(--accent-green-1), var(--accent-green-2));
   border-color: #8fffb0;
   color: #fff;
@@ -2590,7 +2590,7 @@ button.fill-blank {
   #menu::before, #menu::after, #setup::before, #setup::after { animation: none !important; }
   .card { animation: none !important; }
   .screen.active { animation: none !important; }
-  .card, .level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .tc-slot {
+  .card, .level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .sh30-btn, .tc-slot {
     transition: none !important;
   }
 }
@@ -4424,7 +4424,7 @@ button.fill-blank {
 .setup-category-badge { border-radius: var(--r-cut-sm); background: rgba(10, 12, 30, .8); border-color: rgba(255, 201, 40, .35); }
 
 /* ---------- ปุ่มตัวเลือกในหน้าตั้งค่า ---------- */
-.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
+.level-btn, .diff-btn, .ans-btn, .sqd-btn, .sqp-btn, .life-btn, .next-btn, .time-btn, .lis-btn, .spd-btn, .cpw-btn, .cpo-btn, .tco-btn, .tcs-btn, .spks-btn, .sh30-btn, .fc-cat-btn, .fcd-btn, .fvo-btn {
   font-family: var(--font-display);
   font-weight: 700;
   border-radius: var(--r-cut-sm);
@@ -4440,7 +4440,7 @@ button.fill-blank {
   text-shadow: 0 1px 0 rgba(120, 30, 0, .7);
   box-shadow: 0 3px 0 #7a1e00, 0 0 18px rgba(255, 110, 20, .6), inset 0 1px 0 rgba(255, 255, 255, .45);
 }
-.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
+.diff-btn.selected, .ans-btn.selected, .sqd-btn.selected, .sqp-btn.selected, .life-btn.selected, .next-btn.selected, .time-btn.selected, .lis-btn.selected, .spd-btn.selected, .cpw-btn.selected, .cpo-btn.selected, .tco-btn.selected, .tcs-btn.selected, .spks-btn.selected, .sh30-btn.selected, .fcd-btn.selected, .fvo-btn.selected {
   background: linear-gradient(180deg, #2affc0, #10a86a);
   border-color: #b4ffe0;
   color: #04241a;

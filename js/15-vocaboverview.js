@@ -401,6 +401,17 @@ function voFindSentencesForWord(catId, zhWord, max = 2) {
     });
   }
 
+  // 0) ประโยคตัวอย่างของคำนี้จากการ์ด HSK 3.0 (เฉพาะ APK, window.VOCAB_EXAMPLES)
+  if (catId === "hsk") {
+    for (const e of vexExamples(clean)) {
+      addSent(e, "การ์ดคำศัพท์");
+      if (results.length >= max) {
+        voSentCache.set(cacheKey, results);
+        return results;
+      }
+    }
+  }
+
   // 1) Match tokens
   const tokenMatches = index.tokenMap.get(clean) || [];
   for (const s of tokenMatches) {
@@ -901,11 +912,11 @@ function voPlaySentence(sent, isThai, btn) {
   voSetPlayingBtn(btn);
 
   if (isThai) {
-    wordAudio.play([{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"] }], () => {
+    wordAudio.play([{ url: sentAudioUrl("th", zh), tts: [th, "th-TH"] }], () => {
       voClearPlayingBtn(btn);
     });
   } else {
-    wordAudio.play([{ url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"] }], () => {
+    wordAudio.play([{ url: sentAudioUrl("zh", zh), tts: [zh, "zh-CN"] }], () => {
       voClearPlayingBtn(btn);
     });
   }
@@ -1311,3 +1322,6 @@ async function voStrokePlayChar(index = null) {
     }
   }
 }
+
+// ประโยคตัวอย่างจากการ์ด HSK 3.0 (เฉพาะ APK / ?vexPreview=1) — ต้องเรียกหลัง 13-podcast.js (POD_PREVIEW_HOST)
+vexLoad();

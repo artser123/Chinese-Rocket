@@ -7,7 +7,10 @@
    เปิด/ปิดพินอิน + คำแปลไทยบนการ์ดคำได้ (ที่ปิดไว้จะเผยให้ดูหลังตอบถูก)
    ชุดภาพถ่ายใหม่ 59 ชุด (window.FLASHCARD_CATS_NEW, data/flashcards_new.js จาก
    tools/build_flashcard_new.py) เป็นข้อมูลส่วนตัว — โหลดเฉพาะใน APK หรือ localhost ?fcNewPreview=1
-   (ภาพจากชุดของ kids-flashcards.com ใช้ส่วนตัวได้แต่ห้ามเผยแพร่ เหมือนพอดแคสต์ MaoMi) */
+   (ภาพจากชุดของ kids-flashcards.com ใช้ส่วนตัวได้แต่ห้ามเผยแพร่ เหมือนพอดแคสต์ MaoMi)
+   ชุดการ์ดคำศัพท์ HSK 1–9 (window.FLASHCARD_CATS_HSK, data/flashcards_hsk.js จาก
+   tools/build_flashcard_hsk.py — ภาพประกอบประโยคตัวอย่างของการ์ด Mookmpp "ใช้ส่วนตัวเท่านั้น")
+   ก็เป็นข้อมูลส่วนตัวแบบเดียวกัน โหลดพร้อมกับชุดภาพถ่าย */
 let fc = null;
 const FC_ALL = "all";
 const FC_SCORE_PER_CARD = 10;
@@ -21,23 +24,27 @@ let fcAutoZh = localStorage.getItem("cr_flashcards_auto") === "on";
 
 const fcBaseCats = () => window.FLASHCARD_CATS || [];
 const fcNewCats = () => window.FLASHCARD_CATS_NEW || [];
-const fcAllCats = () => fcBaseCats().concat(fcNewCats());
+const fcHskCats = () => window.FLASHCARD_CATS_HSK || [];
+const fcAllCats = () => fcBaseCats().concat(fcNewCats(), fcHskCats());
 const FC_NEW_ON = !!window.CR_OFFLINE_APP ||
   (POD_PREVIEW_HOST.test(location.hostname) && new URLSearchParams(location.search).get("fcNewPreview") === "1");
 
 // โหลดชุดใหม่ครั้งเดียวตอนเปิดแอป แล้วอ่านหมวดที่เลือกไว้ใหม่ (id n01… ยังไม่รู้จักก่อนโหลดเสร็จ)
 function fcLoadNewDeck() {
-  if (!FC_NEW_ON || Array.isArray(window.FLASHCARD_CATS_NEW)) return;
-  const script = document.createElement("script");
-  script.src = "data/flashcards_new.js";
-  script.onload = () => {
-    fcCats = (localStorage.getItem("cr_flashcards_cats") ?? FC_ALL).split("+").filter(Boolean);
-    if ((gameMode === "flashcards" || gameMode === "flashview") && $("setup").classList.contains("active")) {
-      fcRenderSetupCats();
-      updateStartBtn();
-    }
-  };
-  document.head.appendChild(script);
+  if (!FC_NEW_ON) return;
+  for (const [file, global] of [["data/flashcards_new.js", "FLASHCARD_CATS_NEW"], ["data/flashcards_hsk.js", "FLASHCARD_CATS_HSK"]]) {
+    if (Array.isArray(window[global])) continue;
+    const script = document.createElement("script");
+    script.src = file;
+    script.onload = () => {
+      fcCats = (localStorage.getItem("cr_flashcards_cats") ?? FC_ALL).split("+").filter(Boolean);
+      if ((gameMode === "flashcards" || gameMode === "flashview") && $("setup").classList.contains("active")) {
+        fcRenderSetupCats();
+        updateStartBtn();
+      }
+    };
+    document.head.appendChild(script);
+  }
 }
 
 // ตัด id ที่ไม่มีจริงออก • ว่าง หรือเลือกครบทุกหมวด = "ทั้งหมด"
@@ -81,6 +88,7 @@ const fcPoolSize = () => fcPool().length;
 function fcCatGroups() {
   const groups = [{ key: "base", label: "📚 ชุดการ์ดหลัก", cats: fcBaseCats() }];
   if (fcNewCats().length) groups.push({ key: "new", label: "📷 ชุดภาพถ่ายเพิ่มเติม", cats: fcNewCats() });
+  if (fcHskCats().length) groups.push({ key: "hsk", label: "🈶 การ์ดคำศัพท์ HSK 1–9", cats: fcHskCats() });
   return groups;
 }
 

@@ -83,4 +83,10 @@ flashcards_build/
 New flashcard/
 flashcards_new/
 data/flashcards_new.js
+flashcards_hsk/
+data/flashcards_hsk.js
 mixamo/
+
+# Private example sentences from the Mookmpp HSK 3.0 cards (personal use only; APK-only)
+data/vocab_examples.js
+audio/ex/

@@ -577,8 +577,8 @@ function lisPlayCurrent() {
     const zh = it[0].trim().split(/[｜|]/)[0];
     const th = (it[2] || "").trim();
     lisPlayMediaItems([
-      { url: `audio/zh/${zh}.mp3`, tts: [zh, "zh-CN"], playbackRate: 0.9, ...LIS_SENTENCE_ZH_TRIM },
-      ...(th ? [{ url: `audio/th/${zh}.mp3`, tts: [th, "th-TH"], ...LIS_VOICECLONE_TRIM }] : []),
+      { url: sentAudioUrl("zh", zh), tts: [zh, "zh-CN"], playbackRate: 0.9, ...LIS_SENTENCE_ZH_TRIM },
+      ...(th ? [{ url: sentAudioUrl("th", zh), tts: [th, "th-TH"], ...LIS_VOICECLONE_TRIM }] : []),
     ], done, (progress) => updateListenKaraoke(it, progress));
   } else {
     const zh = it[0].split(/[｜|]/)[0].trim();
