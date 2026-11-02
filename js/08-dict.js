@@ -369,7 +369,7 @@ function dictRenderResults(results, query) {
           <div class="dict-example-zh" lang="zh">${dictEsc(ex[0])}</div>
           <div class="dict-example-pinyin">${dictEsc(ex[1])}</div>
           <div class="dict-example-th">${dictEsc(ex[2])}</div>
-          <div class="dict-example-actions"><button class="dict-ex-speak-btn" data-zh="${dictEsc(ex[0])}">🔊 ฟัง</button></div>
+          <div class="dict-example-actions"><button class="dict-ex-speak-btn" data-zh="${dictEsc(ex[0])}">🔊 ฟัง</button>${AI_ON ? `<button class="dict-ex-ai-btn" data-zh="${dictEsc(ex[0])}" data-py="${dictEsc(ex[1])}" data-th="${dictEsc(ex[2])}" data-lvl="${dictEsc(r.lvl)}" title="ให้ AI อธิบายทั้งประโยค">📖 อธิบายทั้งประโยค</button>` : ""}</div>
         </div>`;
       }
       html += `</div>`;
@@ -382,6 +382,19 @@ function dictRenderResults(results, query) {
   // wire up speak buttons
   dictResults.querySelectorAll(".dict-speak-btn, .dict-ex-speak-btn").forEach((btn) => {
     btn.addEventListener("click", () => dictSpeakZh(btn.dataset.zh, btn.dataset.py));
+  });
+  // 📖 อธิบายทั้งประโยค (ประโยคตัวอย่าง) → หน้าต่าง AI
+  dictResults.querySelectorAll(".dict-ex-ai-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sfx.click();
+      const d = btn.dataset;
+      aiOpenWith({
+        mode: "sentence",
+        sentence: d.zh,
+        sub: [d.py, d.th].filter(Boolean).join(" · "),
+        level: /^(\d|7-9)$/.test(d.lvl || "") ? d.lvl : "",
+      });
+    });
   });
   // wire up copy buttons
   dictResults.querySelectorAll(".dict-copy-btn").forEach((btn) => {
@@ -1153,6 +1166,28 @@ $("dictSearchBtn").addEventListener("click", () => {
   sfx.click();
   dictWritePanel.hidden = true;
   dictSearch();
+});
+// 🤖 ค้นหาด้วย AI: ไทย → แปลเป็นจีนพร้อมอธิบาย, จีน → อธิบายเป็นไทย, อื่น ๆ (พินอิน) → บอกว่าเป็นคำอะไร
+// เปิดหน้าต่าง #aiPanel (js/11-copy.js) โดยส่งข้อความในช่อง sentence — คำถามต่อจึงยังรู้ว่าคุยเรื่องอะไร
+const DICT_AI_MAX = 300;
+function dictAskAi() {
+  const text = dictInput.value.trim().slice(0, DICT_AI_MAX);
+  if (!text) {
+    window.alert("กรุณาพิมพ์คำหรือประโยค (ไทยหรือจีน) ในช่องค้นหาก่อนกด 🤖");
+    dictInput.focus();
+    return;
+  }
+  const isZh = /[㐀-鿿]/.test(text);
+  const isTh = !isZh && /[฀-๿]/.test(text);
+  const kind = isZh ? "🤖 ค้นหาด้วย AI · จีน → ไทย" : isTh ? "🤖 ค้นหาด้วย AI · ไทย → จีน" : "🤖 ค้นหาด้วย AI · พินอิน";
+  const firstQ = isZh ? AI_DICT_ZH_Q : isTh ? AI_DICT_TH_Q : AI_DICT_PY_Q;
+  dictInput.blur(); // หุบคีย์บอร์ดมือถือ
+  aiOpenWith({ mode: "sentence", sentence: text, kind, firstQ, sub: "" });
+}
+$("dictAiBtn").hidden = !AI_ON; // เฉพาะ APK
+$("dictAiBtn").addEventListener("click", () => {
+  sfx.click();
+  dictAskAi();
 });
 $("dictBingBtn").addEventListener("click", () => {
   sfx.click();

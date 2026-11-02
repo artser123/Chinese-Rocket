@@ -2,6 +2,10 @@
 
 /* ================= State & DOM ================= */
 const $ = (id) => document.getElementById(id);
+// ปุ่ม AI (🤖 ถาม AI / 📖 อธิบายทั้งประโยค / 🤖 ค้นหาด้วย AI) มีเฉพาะในแอป APK — เว็บ GitHub Pages ไม่แสดง
+// ทดสอบบนเครื่องตัวเองได้ด้วย ?aiPreview=1 (เฉพาะ localhost — บนเว็บจริงใส่พารามิเตอร์ก็ไม่ขึ้น)
+const AI_ON = !!window.CR_OFFLINE_APP ||
+  (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && /[?&]aiPreview=1\b/.test(location.search));
 const canvas = $("canvas");
 const ctx = canvas.getContext("2d");
 const menuEl = $("menu"), gameEl = $("game"), overEl = $("gameover");

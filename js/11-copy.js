@@ -265,7 +265,7 @@ function cpShowWordPopup(word, chip) {
   chip.classList.add("active");
   // "อธิบายทั้งประโยค": ซ่อนเมื่อไม่มีประโยครอบคำ และในเกมเติมคำก่อนตอบ (คำแปลทั้งประโยคจะเฉลยช่องว่าง)
   const sent = typeof cpPopupSentence === "function" ? cpPopupSentence() : "";
-  $("cpWordAiSentBtn").hidden = !sent || sent === word || sent.includes("＿");
+  $("cpWordAiSentBtn").hidden = !AI_ON || !sent || sent === word || sent.includes("＿");
   const pop = $("cpWordPopup");
   pop.hidden = false;
   cpPlaceWordPopup(chip); // วัดขนาดหลัง unhide เพื่อวางกล่องให้พ้นขอบจอ
@@ -323,16 +323,42 @@ $("cpWordBingBtn").addEventListener("click", () => {
 
 // ===== ถาม AI ในป๊อปอัปคำศัพท์ (Cloudflare Worker → Gemini Flash) =====
 // URL ของ Worker และ APP_TOKEN เก็บใน localStorage ของเครื่องเท่านั้น — repo เป็นสาธารณะ
-// (GitHub Pages) จึงห้ามเขียนลงโค้ด; คำตอบแคชไว้ในเครื่อง ถามซ้ำไม่เสียเงิน
-const AI_CACHE_KEY = "cr_ai_cache_v1";
-const AI_CACHE_MAX = 300;
+// (GitHub Pages) จึงห้ามเขียนลงโค้ด; คำตอบแคชไว้ในเครื่อง (IndexedDB) ถามซ้ำไม่เสียเงิน
+// แคชคำตอบ AI ใน IndexedDB (ฐาน cr_ai, store answers: {k, a, t}) — จำได้ AI_CACHE_MAX รายการล่าสุด
+// ไม่ใช้ localStorage แล้ว: เพดาน ~5–10 MB ใช้ร่วมกับคะแนน/ภารกิจ (เต็มแล้วข้อมูลพวกนั้นบันทึกไม่ได้)
+// และต้อง parse ทั้งก้อนทุกครั้ง; ของเก่าใน cr_ai_cache_v1 ถูกย้ายมาเองครั้งแรกที่เปิดฐาน
+const AI_CACHE_LEGACY = "cr_ai_cache_v1";
+const AI_CACHE_MAX = 10000;
+const AI_DB = "cr_ai";
+const AI_STORE = "answers";
+let aiDbPromise = null;
+const aiMemCache = new Map(); // สำรองเมื่อเปิด IndexedDB ไม่ได้ (โหมดส่วนตัวบางเบราว์เซอร์) — จำแค่ระหว่างเปิดแอป
 const AI_DEFAULT_Q = "อธิบายความหมายและการใช้คำนี้ในประโยคนี้";
+// คำเดี่ยวที่ไม่มีประโยคประกอบ (ปุ่ม 🤖 ในเกมรวมคำศัพท์)
+const AI_WORD_ONLY_Q = "อธิบายความหมายและการใช้คำนี้ คำที่มักใช้คู่กัน และยกตัวอย่างประโยค 2 ประโยค";
+// ปุ่ม 🤖 ค้นหาด้วย AI ในพจนานุกรม — ข้อความที่พิมพ์ส่งไปในช่อง sentence (คำถามต่อจึงยังเห็นบริบท)
+const AI_DICT_TH_Q = `ข้อความในบรรทัด "ประโยค" เป็นภาษาไทย ให้แปลเป็นภาษาจีน:
+1) คำแปลภาษาจีนที่เป็นธรรมชาติ พร้อม pinyin (ถ้าพูดได้หลายแบบ ให้ 2–3 แบบ และบอกว่าต่างกันอย่างไร)
+2) แยกคำศัพท์สำคัญ พร้อม pinyin และความหมาย
+3) โครงสร้างไวยากรณ์ที่ใช้ อธิบายสั้น ๆ
+4) บริบทการใช้และข้อควรระวัง`;
+const AI_DICT_ZH_Q = `ข้อความในบรรทัด "ประโยค" เป็นภาษาจีน ให้อธิบายเป็นภาษาไทย:
+1) pinyin และคำแปลภาษาไทยที่เป็นธรรมชาติ
+2) แยกคำศัพท์ทีละคำ พร้อม pinyin และความหมาย
+3) โครงสร้างไวยากรณ์ที่ใช้ อธิบายสั้น ๆ
+4) บริบทการใช้ และยกตัวอย่างประโยคเพิ่ม 1–2 ประโยค`;
+const AI_DICT_PY_Q = `ข้อความในบรรทัด "ประโยค" น่าจะเป็นพินอินหรือภาษาอื่น ให้บอกว่าเป็นคำ/ประโยคจีนอะไร (ตัวจีน + pinyin ที่ถูกต้อง ถ้าเป็นไปได้หลายคำ ให้บอกคำที่พบบ่อย 2–3 คำ) แปลเป็นภาษาไทย อธิบายการใช้ และยกตัวอย่างประโยค`;
 // โหมดทั้งประโยค: ส่ง word ว่าง ให้ AI โฟกัสที่ประโยค (คำตอบยาวกว่าปกติ — ต้องตั้ง maxOutputTokens ใน Worker ≥ 2048)
 const AI_SENTENCE_Q = `อธิบายภาพรวมของประโยคนี้อย่างละเอียด:
 1) แปลทั้งประโยคเป็นภาษาไทยที่เป็นธรรมชาติ
 2) แยกคำศัพท์ทีละคำ พร้อม pinyin และความหมายในประโยคนี้
 3) โครงสร้างไวยากรณ์/รูปประโยคที่ใช้ อธิบายสั้น ๆ
 4) บริบท: ใช้ในสถานการณ์แบบไหน น้ำเสียงทางการหรือไม่ และข้อควรระวัง`;
+// คำถามสำเร็จรูป → รหัสสั้นในคีย์แคช (ต้องอยู่หลังค่าคงที่ทุกตัวที่อ้างถึง: const ใช้ก่อนประกาศไม่ได้)
+const AI_CANNED_Q = new Map([
+  [AI_DEFAULT_Q, "#w"], [AI_SENTENCE_Q, "#s"], [AI_WORD_ONLY_Q, "#v"],
+  [AI_DICT_TH_Q, "#dt"], [AI_DICT_ZH_Q, "#dz"], [AI_DICT_PY_Q, "#dp"],
+]);
 
 function aiConfig() {
   try {
@@ -342,24 +368,101 @@ function aiConfig() {
   } catch { return null; }
 }
 
-function aiCacheGet(key) {
-  try { return JSON.parse(localStorage.getItem(AI_CACHE_KEY) || "{}")[key] || null; } catch { return null; }
+// คำถามสำเร็จรูปสองแบบยาวหลายร้อยตัวอักษร — ใช้รหัสสั้นในคีย์แทน (คำถามพิมพ์เองใช้ข้อความเต็ม)
+function aiCacheKey(word, sentence, q) {
+  const qid = AI_CANNED_Q.get(q) || q;
+  return JSON.stringify([word || "", sentence || "", qid]);
 }
 
-function aiCacheSet(key, answer) {
+function aiReq(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function aiDb() {
+  if (aiDbPromise) return aiDbPromise;
+  aiDbPromise = new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(AI_DB, 1); } catch { resolve(null); return; }
+    req.onupgradeneeded = () => {
+      const store = req.result.createObjectStore(AI_STORE, { keyPath: "k" });
+      store.createIndex("t", "t");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  }).then(async (db) => {
+    if (db) await aiMigrateLegacy(db);
+    return db;
+  });
+  return aiDbPromise;
+}
+
+// ย้ายคำตอบเดิมจาก localStorage (คีย์ [word, sentence, คำถามเต็ม]) แล้วลบของเดิมทิ้ง
+async function aiMigrateLegacy(db) {
+  let old;
+  try { old = localStorage.getItem(AI_CACHE_LEGACY); } catch { return; }
+  if (!old) return;
+  let map = {};
+  try { map = JSON.parse(old) || {}; } catch {}
   try {
-    const c = JSON.parse(localStorage.getItem(AI_CACHE_KEY) || "{}");
-    delete c[key];
-    c[key] = answer; // ใส่ท้ายสุด = ใหม่สุด; ตัดของเก่าสุดเมื่อเกินโควตา
-    const keys = Object.keys(c);
-    for (let i = 0; i < keys.length - AI_CACHE_MAX; i++) delete c[keys[i]];
-    localStorage.setItem(AI_CACHE_KEY, JSON.stringify(c));
+    const tx = db.transaction(AI_STORE, "readwrite");
+    const store = tx.objectStore(AI_STORE);
+    const now = Date.now();
+    Object.entries(map).forEach(([k, a], i) => {
+      try {
+        const [w, s, q] = JSON.parse(k);
+        if (typeof a === "string" && a) store.put({ k: aiCacheKey(w, s, q), a, t: now - (1e6 - i) }); // คงลำดับเก่า→ใหม่
+      } catch {}
+    });
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+    localStorage.removeItem(AI_CACHE_LEGACY);
+  } catch {}
+}
+
+async function aiCacheGet(key) {
+  const db = await aiDb();
+  if (!db) return aiMemCache.get(key) || null;
+  try {
+    const store = db.transaction(AI_STORE, "readwrite").objectStore(AI_STORE);
+    const rec = await aiReq(store.get(key));
+    if (!rec) return null;
+    rec.t = Date.now(); // ใช้ล่าสุด = ถูกลบทีหลังสุด
+    store.put(rec);
+    return rec.a;
+  } catch { return null; }
+}
+
+async function aiCacheSet(key, answer) {
+  const db = await aiDb();
+  if (!db) { aiMemCache.set(key, answer); return; }
+  try {
+    const store = db.transaction(AI_STORE, "readwrite").objectStore(AI_STORE);
+    await aiReq(store.put({ k: key, a: answer, t: Date.now() }));
+    const extra = (await aiReq(store.count())) - AI_CACHE_MAX;
+    if (extra > 0) aiCachePrune(db, extra);
+  } catch {}
+}
+
+// ลบรายการที่ใช้นานที่สุด extra รายการ (ไล่ index t จากเก่าสุด)
+function aiCachePrune(db, extra) {
+  try {
+    const req = db.transaction(AI_STORE, "readwrite").objectStore(AI_STORE).index("t").openCursor();
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur || extra <= 0) return;
+      cur.delete();
+      extra--;
+      cur.continue();
+    };
   } catch {}
 }
 
 async function askAi(payload) {
-  const key = JSON.stringify([payload.word, payload.sentence, payload.q]);
-  const hit = aiCacheGet(key);
+  const key = aiCacheKey(payload.word, payload.sentence, payload.q);
+  const hit = await aiCacheGet(key);
   if (hit) return hit;
   const cfg = aiConfig();
   if (!cfg) throw new Error("ยังไม่ได้ตั้งค่า AI");
@@ -379,8 +482,14 @@ async function askAi(payload) {
     throw new Error("APP_TOKEN ไม่ถูกต้อง — กด 🤖 อีกครั้งเพื่อตั้งค่าใหม่");
   }
   if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-  // Worker ส่ง truncated: true เมื่อ Gemini หยุดเพราะชน maxOutputTokens — ไม่แคช จะได้ถามใหม่ได้
-  if (data.truncated) return data.answer + "…\n\n✂️ คำตอบถูกตัด (เกินความยาวที่ตั้งไว้ใน Worker)";
+  // Worker ส่ง truncated/finishReason มา: หยุดเพราะชน maxOutputTokens หรือเหตุอื่นที่ไม่ใช่จบปกติ
+  // (SAFETY, RECITATION…) — ไม่แคช จะได้ถามใหม่ได้
+  if (data.truncated || data.finishReason === "MAX_TOKENS") {
+    return data.answer + "…\n\n✂️ คำตอบถูกตัด (เกินความยาวที่ตั้งไว้ใน Worker)";
+  }
+  if (data.finishReason && data.finishReason !== "STOP") {
+    return data.answer + `\n\n⚠️ AI หยุดตอบก่อนจบ (${data.finishReason})`;
+  }
   aiCacheSet(key, data.answer);
   return data.answer;
 }
@@ -426,13 +535,14 @@ function aiRenderAnswer(el, text) {
 // สำหรับคำตอบยาว ๆ; คำถามต่อในช่องพิมพ์ใช้บริบทเดิมและโหมดเดิม ต่อท้ายเป็นบทสนทนา
 let aiCtx = null; // { mode: "word"|"sentence", word, py, th, sentence, shown, level, pendingQ }
 
+// เปิดจากฟองคำศัพท์: ดึงคำ/ประโยค/ระดับจากคำที่แตะ แล้วปิดฟองคำ
 function aiPanelOpen(mode) {
   const word = cpPopupWord;
   if (!word) return;
   const info = cpLookupWord(word);
   const sentence = cpPopupSentence();
-  const whole = mode === "sentence";
-  aiCtx = {
+  cpHideWordPopup();
+  aiOpenWith({
     mode,
     word,
     py: info.py || "",
@@ -440,17 +550,43 @@ function aiPanelOpen(mode) {
     sentence,
     shown: sentence.replace(/ \(＿＿.*$/, ""), // ตัดหมายเหตุสำหรับ AI ออกตอนแสดงหัวหน้าต่าง
     level: cpPopupLevel(),
+  });
+}
+
+// เปิดหน้าต่าง AI ด้วยบริบทที่ส่งมาเอง (ใช้จากที่อื่นได้ เช่น ปุ่ม 🤖/📖 ในเกมรวมคำศัพท์)
+// ctx: { mode: "word"|"sentence", word, py?, th?, sentence?, shown?, level?, sub?, kind?, firstQ? }
+// kind = ป้ายบนหัวหน้าต่าง, firstQ = คำถามแรกแทนคำถามตามโหมด
+// sub = บรรทัดรองใต้หัวหน้าต่าง (ไม่ใส่: โหมดคำ = pinyin · คำแปล, โหมดประโยค = ว่าง)
+function aiOpenWith(ctx) {
+  if (!AI_ON) return; // ปุ่ม AI มีเฉพาะ APK (ดู AI_ON ใน js/01-state.js)
+  const whole = ctx.mode === "sentence";
+  aiCtx = {
+    mode: ctx.mode,
+    word: ctx.word || "",
+    py: ctx.py || "",
+    th: ctx.th || "",
+    sentence: ctx.sentence || "",
+    shown: ctx.shown || ctx.sentence || "",
+    level: ctx.level || "",
+    firstQ: ctx.firstQ || "",
     pendingQ: null,
   };
-  cpHideWordPopup();
-  $("aiPanelKind").textContent = whole ? "📖 อธิบายทั้งประโยค" : "🤖 อธิบายคำนี้";
-  $("aiPanelTitle").textContent = whole ? aiCtx.shown : word;
-  $("aiPanelSub").textContent = whole ? "" : [aiCtx.py, aiCtx.th].filter(Boolean).join(" · ");
+  $("aiPanelKind").textContent = ctx.kind || (whole ? "📖 อธิบายทั้งประโยค" : "🤖 อธิบายคำนี้");
+  $("aiPanelTitle").textContent = whole ? aiCtx.shown : aiCtx.word;
+  $("aiPanelSub").textContent = ctx.sub != null ? ctx.sub
+    : whole ? "" : [aiCtx.py, aiCtx.th].filter(Boolean).join(" · ");
   $("aiPanelTitle").classList.toggle("is-sentence", whole);
   $("aiThread").replaceChildren();
   $("aiPanelBody").scrollTop = 0;
   $("aiPanel").hidden = false;
-  aiAsk(whole ? AI_SENTENCE_Q : AI_DEFAULT_Q);
+  aiAsk(aiFirstQuestion());
+}
+
+// คำถามแรกตามโหมด: ทั้งประโยค / คำในประโยค / คำเดี่ยว
+function aiFirstQuestion() {
+  if (aiCtx.firstQ) return aiCtx.firstQ;
+  if (aiCtx.mode === "sentence") return AI_SENTENCE_Q;
+  return aiCtx.sentence ? AI_DEFAULT_Q : AI_WORD_ONLY_Q;
 }
 
 // คืน true เมื่อปิดหน้าต่างไปจริง (ใช้กับปุ่ม Back ของ Android)
@@ -483,7 +619,7 @@ async function aiAsk(question) {
   const whole = ctx.mode === "sentence";
   const entry = document.createElement("div");
   entry.className = "ai-entry";
-  if (question !== AI_DEFAULT_Q && question !== AI_SENTENCE_Q) {
+  if (!AI_CANNED_Q.has(question)) {
     const q = document.createElement("div");
     q.className = "ai-q";
     q.textContent = "❓ " + question;
@@ -515,6 +651,7 @@ async function aiAsk(question) {
   aiRenderAnswer(ans, text);
 }
 
+$("cpWordAiBtn").hidden = !AI_ON;
 $("cpWordAiBtn").addEventListener("click", () => {
   sfx.click();
   aiPanelOpen("word");
@@ -524,7 +661,16 @@ $("cpWordAiSentBtn").addEventListener("click", () => {
   aiPanelOpen("sentence");
 });
 $("aiPanelClose").addEventListener("click", () => { sfx.click(); aiPanelClose(); });
-$("aiPanel").addEventListener("click", (e) => { if (e.target === e.currentTarget) aiPanelClose(); });
+// แตะพื้นหลัง = ปิด — แต่ต้องเริ่มกดที่พื้นหลังด้วย: ลากเลือกข้อความจากในการ์ดแล้วไปปล่อยนอกการ์ด
+// click จะเกิดที่ #aiPanel (บรรพบุรุษร่วม) ซึ่งเคยทำให้หน้าต่างปิดระหว่างเลือกข้อความเพื่อก็อปปี้
+let aiDownOnBackdrop = false;
+$("aiPanel").addEventListener("pointerdown", (e) => { aiDownOnBackdrop = e.target === e.currentTarget; });
+$("aiPanel").addEventListener("click", (e) => {
+  if (e.target !== e.currentTarget || !aiDownOnBackdrop) return;
+  const sel = window.getSelection && window.getSelection();
+  if (sel && !sel.isCollapsed) return; // กำลังเลือกข้อความอยู่
+  aiPanelClose();
+});
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aiPanelClose()) e.preventDefault(); });
 $("aiSetup").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -538,7 +684,7 @@ $("aiSetup").addEventListener("submit", (e) => {
     localStorage.setItem("cr_ai_url", url);
     localStorage.setItem("cr_ai_token", token);
   } catch {}
-  if (aiCtx) aiAsk(aiCtx.pendingQ || (aiCtx.mode === "sentence" ? AI_SENTENCE_Q : AI_DEFAULT_Q));
+  if (aiCtx) aiAsk(aiCtx.pendingQ || aiFirstQuestion());
 });
 $("aiAskForm").addEventListener("submit", (e) => {
   e.preventDefault();

@@ -734,6 +734,21 @@ function voCreateCardElement(item, index) {
   });
   actions.appendChild(soundBtn);
 
+  if (AI_ON) { // ปุ่ม AI มีเฉพาะ APK
+    // 🤖 ถาม AI เรื่องคำนี้ (หน้าต่าง #aiPanel จาก js/11-copy.js) — ไม่มีประโยคประกอบ ให้อธิบายคำโดยรวม
+    const aiBtn = document.createElement("button");
+    aiBtn.type = "button";
+    aiBtn.className = "vo-item-ai-btn";
+    aiBtn.title = `ให้ AI อธิบายคำว่า ${item.zh}`;
+    aiBtn.setAttribute("aria-label", `ให้ AI อธิบายคำว่า ${item.zh}`);
+    aiBtn.textContent = "🤖";
+    aiBtn.addEventListener("click", () => {
+      sfx.click();
+      voOpenAi({ mode: "word", word: voPrimaryZh(item.zh), py: item.py, th: item.th, level: voAiLevel(item) });
+    });
+    actions.appendChild(aiBtn);
+  }
+
   header.appendChild(actions);
   card.appendChild(header);
 
@@ -815,6 +830,26 @@ function voCreateCardElement(item, index) {
         zhLine.appendChild(sThBtn);
       }
 
+      if (AI_ON) {
+        // 📖 ให้ AI อธิบายทั้งประโยค (คำแปล แยกคำ ไวยากรณ์ บริบท)
+        const sAiBtn = document.createElement("button");
+        sAiBtn.type = "button";
+        sAiBtn.className = "vo-sent-ai-btn";
+        sAiBtn.title = "ให้ AI อธิบายทั้งประโยค";
+        sAiBtn.setAttribute("aria-label", "ให้ AI อธิบายทั้งประโยค");
+        sAiBtn.textContent = "📖 อธิบาย";
+        sAiBtn.addEventListener("click", () => {
+          sfx.click();
+          voOpenAi({
+            mode: "sentence",
+            sentence: sent.zh,
+            sub: [sent.py, sent.th].filter(Boolean).join(" · "),
+            level: voAiLevel(item),
+          });
+        });
+        zhLine.appendChild(sAiBtn);
+      }
+
       sCard.appendChild(zhLine);
 
       if (sent.py) {
@@ -871,6 +906,23 @@ function voCreateCardElement(item, index) {
   });
 
   return card;
+}
+
+// ปุ่ม AI ในการ์ด: หยุดเล่นเสียงวนก่อน (ไม่งั้นเสียงเล่นต่อหลังหน้าต่าง AI) แล้วเปิด #aiPanel
+function voOpenAi(ctx) {
+  if (voPlayAllActive) voStopPlayAll();
+  if (typeof aiOpenWith === "function") aiOpenWith(ctx);
+}
+
+// คำในคลังบางคำเป็นคู่ "爸爸｜爸" — ส่งให้ AI เฉพาะรูปแรก
+function voPrimaryZh(zh) {
+  return String(zh || "").split(/[｜|]/)[0].trim();
+}
+
+// ระดับ HSK ของคำ (เฉพาะหมวด HSK: subcat = "HSK 3" / "HSK 7-9") ให้ AI อธิบายพอดีระดับ
+function voAiLevel(item) {
+  const m = /^HSK\s+(\S+)$/.exec(item.subcat || "");
+  return m ? m[1] : "";
 }
 
 // ปุ่มลำโพง: wordAudio.play() เรียก stop() ตัวเก่าก่อน — onDone ของตัวเก่าจะไม่ถูกเรียก
