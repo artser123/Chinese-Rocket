@@ -1190,6 +1190,38 @@
     <button id="cpWordSpeakBtn" class="cpw-btn" type="button">🔊 ฟังเสียงคำนี้</button>
     <button id="cpWordStrokeBtn" class="cpw-btn" type="button" title="เปิดหน้าต่างอนิเมชันลำดับเส้นขีด">✍️ ดูเส้นขีด</button>
     <button id="cpWordBingBtn" class="cpw-btn" type="button" title="แปลคำนี้ด้วย Bing Translator">🌐 แปลด้วย Bing</button>
+    <button id="cpWordAiBtn" class="cpw-btn" type="button" title="ให้ AI อธิบายคำนี้ในประโยค">🤖 อธิบายคำนี้</button>
+    <button id="cpWordAiSentBtn" class="cpw-btn" type="button" title="ให้ AI อธิบายภาพรวมทั้งประโยค: ความหมาย คำศัพท์ ไวยากรณ์ และบริบท">📖 อธิบายทั้งประโยค</button>
+  </div>
+</div>
+
+<!-- AI PANEL — หน้าต่างเกือบเต็มจอของปุ่ม 🤖/📖 ในฟองคำศัพท์ (Cloudflare Worker → Gemini).
+     อยู่นอกทุก .screen (เหมือน #imgLightbox) ปิดได้ด้วย ✕ / แตะพื้นหลัง / Escape / ปุ่ม Back ของ Android.
+     URL/token ของ Worker เก็บใน localStorage ของเครื่อง ไม่อยู่ใน repo -->
+<div id="aiPanel" class="ai-panel" role="dialog" aria-modal="true" aria-labelledby="aiPanelTitle" hidden>
+  <div class="ai-card">
+    <div class="ai-head">
+      <div class="ai-head-text">
+        <div id="aiPanelKind" class="ai-kind"></div>
+        <div id="aiPanelTitle" class="ai-title" lang="zh"></div>
+        <div id="aiPanelSub" class="ai-sub"></div>
+      </div>
+      <button id="aiPanelClose" class="ai-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
+    </div>
+    <div id="aiPanelBody" class="ai-body">
+      <form id="aiSetup" class="ai-setup" hidden>
+        <div class="ai-note">ตั้งค่า AI ครั้งแรก (เก็บไว้ในเครื่องนี้เท่านั้น)</div>
+        <input id="aiSetupUrl" type="url" placeholder="URL ของ Worker เช่น https://rocket-ai.xxx.workers.dev" autocomplete="off" spellcheck="false">
+        <input id="aiSetupToken" type="password" placeholder="APP_TOKEN" autocomplete="off" spellcheck="false">
+        <button class="cpw-btn" type="submit">💾 บันทึก</button>
+        <div id="aiSetupMsg" class="ai-note-warn"></div>
+      </form>
+      <div id="aiThread" class="ai-thread"></div>
+    </div>
+    <form id="aiAskForm" class="ai-ask" hidden>
+      <input id="aiAskInput" type="text" maxlength="300" placeholder="ถามต่อ เช่น ใช้ต่างจาก 已经 ยังไง?" autocomplete="off">
+      <button class="cpw-btn" type="submit">ส่ง</button>
+    </form>
   </div>
 </div>
 

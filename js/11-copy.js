@@ -263,6 +263,9 @@ function cpShowWordPopup(word, chip) {
   if (cpPopupChip && cpPopupChip !== chip) cpPopupChip.classList.remove("active");
   cpPopupChip = chip;
   chip.classList.add("active");
+  // "อธิบายทั้งประโยค": ซ่อนเมื่อไม่มีประโยครอบคำ และในเกมเติมคำก่อนตอบ (คำแปลทั้งประโยคจะเฉลยช่องว่าง)
+  const sent = typeof cpPopupSentence === "function" ? cpPopupSentence() : "";
+  $("cpWordAiSentBtn").hidden = !sent || sent === word || sent.includes("＿");
   const pop = $("cpWordPopup");
   pop.hidden = false;
   cpPlaceWordPopup(chip); // วัดขนาดหลัง unhide เพื่อวางกล่องให้พ้นขอบจอ
@@ -317,6 +320,235 @@ $("cpWordBingBtn").addEventListener("click", () => {
   cpHideWordPopup();
   if (word) crOpenWeb(dictBingUrl(word));
 });
+
+// ===== ถาม AI ในป๊อปอัปคำศัพท์ (Cloudflare Worker → Gemini Flash) =====
+// URL ของ Worker และ APP_TOKEN เก็บใน localStorage ของเครื่องเท่านั้น — repo เป็นสาธารณะ
+// (GitHub Pages) จึงห้ามเขียนลงโค้ด; คำตอบแคชไว้ในเครื่อง ถามซ้ำไม่เสียเงิน
+const AI_CACHE_KEY = "cr_ai_cache_v1";
+const AI_CACHE_MAX = 300;
+const AI_DEFAULT_Q = "อธิบายความหมายและการใช้คำนี้ในประโยคนี้";
+// โหมดทั้งประโยค: ส่ง word ว่าง ให้ AI โฟกัสที่ประโยค (คำตอบยาวกว่าปกติ — ต้องตั้ง maxOutputTokens ใน Worker ≥ 2048)
+const AI_SENTENCE_Q = `อธิบายภาพรวมของประโยคนี้อย่างละเอียด:
+1) แปลทั้งประโยคเป็นภาษาไทยที่เป็นธรรมชาติ
+2) แยกคำศัพท์ทีละคำ พร้อม pinyin และความหมายในประโยคนี้
+3) โครงสร้างไวยากรณ์/รูปประโยคที่ใช้ อธิบายสั้น ๆ
+4) บริบท: ใช้ในสถานการณ์แบบไหน น้ำเสียงทางการหรือไม่ และข้อควรระวัง`;
+
+function aiConfig() {
+  try {
+    const url = localStorage.getItem("cr_ai_url") || "";
+    const token = localStorage.getItem("cr_ai_token") || "";
+    return url && token ? { url, token } : null;
+  } catch { return null; }
+}
+
+function aiCacheGet(key) {
+  try { return JSON.parse(localStorage.getItem(AI_CACHE_KEY) || "{}")[key] || null; } catch { return null; }
+}
+
+function aiCacheSet(key, answer) {
+  try {
+    const c = JSON.parse(localStorage.getItem(AI_CACHE_KEY) || "{}");
+    delete c[key];
+    c[key] = answer; // ใส่ท้ายสุด = ใหม่สุด; ตัดของเก่าสุดเมื่อเกินโควตา
+    const keys = Object.keys(c);
+    for (let i = 0; i < keys.length - AI_CACHE_MAX; i++) delete c[keys[i]];
+    localStorage.setItem(AI_CACHE_KEY, JSON.stringify(c));
+  } catch {}
+}
+
+async function askAi(payload) {
+  const key = JSON.stringify([payload.word, payload.sentence, payload.q]);
+  const hit = aiCacheGet(key);
+  if (hit) return hit;
+  const cfg = aiConfig();
+  if (!cfg) throw new Error("ยังไม่ได้ตั้งค่า AI");
+  let r;
+  try {
+    r = await fetch(cfg.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error("เชื่อมต่อ AI ไม่ได้ — ตรวจอินเทอร์เน็ตหรือ URL ของ Worker");
+  }
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    try { localStorage.removeItem("cr_ai_token"); } catch {}
+    throw new Error("APP_TOKEN ไม่ถูกต้อง — กด 🤖 อีกครั้งเพื่อตั้งค่าใหม่");
+  }
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  // Worker ส่ง truncated: true เมื่อ Gemini หยุดเพราะชน maxOutputTokens — ไม่แคช จะได้ถามใหม่ได้
+  if (data.truncated) return data.answer + "…\n\n✂️ คำตอบถูกตัด (เกินความยาวที่ตั้งไว้ใน Worker)";
+  aiCacheSet(key, data.answer);
+  return data.answer;
+}
+
+// ประโยคที่คำนั้นอยู่: คำแต่ละคำเป็นปุ่มแยกในกล่องเดียวกัน — เก็บเฉพาะอักษรจีน/วรรคตอนจีน
+// (บางโหมดมี pinyin อยู่ในปุ่มคำด้วย)
+function cpPopupSentence() {
+  const box = cpPopupChip && cpPopupChip.parentElement;
+  if (!box) return "";
+  const zh = box.textContent.replace(/[^㐀-鿿　-〿＀-￯]/g, "").slice(0, 150);
+  // เกมเติมคำก่อนตอบ: ประโยคยังมีช่อง ＿＿ — บอก AI ไม่ให้เดา/เฉลยคำในช่อง
+  return /＿/.test(zh) ? zh.replace(/＿+/g, "＿＿") + " (＿＿ คือช่องว่างของแบบฝึกหัดที่ผู้เรียนยังไม่ได้ตอบ ห้ามเดาหรือบอกคำที่หายไป)" : zh;
+}
+
+function cpPopupLevel() {
+  if (typeof currentCategory !== "undefined" && currentCategory !== "hsk") return "";
+  const first = String(typeof selectedLevel !== "undefined" ? selectedLevel : "").split(LEVEL_SEP)[0];
+  return /^\d$/.test(first) ? first : "";
+}
+
+// Gemini ใส่ markdown มาแม้ prompt จะห้าม: **ตัวหนา** → <b>, หัวข้อ # และบูลเล็ต * → ข้อความธรรมดา
+// สร้างด้วย text node ทั้งหมด (ไม่ใช้ innerHTML) เพื่อไม่ให้ข้อความจาก AI กลายเป็น HTML
+function aiRenderAnswer(el, text) {
+  el.replaceChildren();
+  const clean = String(text)
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^(\s*)[*•]\s+/gm, "$1• ")
+    .replace(/^(\s*)-\s+/gm, "$1• ");
+  for (const part of clean.split(/(\*\*[^*\n]+\*\*)/)) {
+    if (!part) continue;
+    if (/^\*\*[^*\n]+\*\*$/.test(part)) {
+      const b = document.createElement("b");
+      b.textContent = part.slice(2, -2);
+      el.appendChild(b);
+    } else {
+      el.appendChild(document.createTextNode(part.replace(/\*\*/g, "")));
+    }
+  }
+}
+
+// ----- หน้าต่าง AI เกือบเต็มจอ (#aiPanel, อยู่นอกทุก .screen) -----
+// ปุ่ม 🤖/📖 ในฟองคำศัพท์จับบริบท (คำ/ประโยค/ระดับ) เก็บไว้ใน aiCtx แล้วปิดฟองคำ — ฟองเล็กเกินไป
+// สำหรับคำตอบยาว ๆ; คำถามต่อในช่องพิมพ์ใช้บริบทเดิมและโหมดเดิม ต่อท้ายเป็นบทสนทนา
+let aiCtx = null; // { mode: "word"|"sentence", word, py, th, sentence, shown, level, pendingQ }
+
+function aiPanelOpen(mode) {
+  const word = cpPopupWord;
+  if (!word) return;
+  const info = cpLookupWord(word);
+  const sentence = cpPopupSentence();
+  const whole = mode === "sentence";
+  aiCtx = {
+    mode,
+    word,
+    py: info.py || "",
+    th: info.th || "",
+    sentence,
+    shown: sentence.replace(/ \(＿＿.*$/, ""), // ตัดหมายเหตุสำหรับ AI ออกตอนแสดงหัวหน้าต่าง
+    level: cpPopupLevel(),
+    pendingQ: null,
+  };
+  cpHideWordPopup();
+  $("aiPanelKind").textContent = whole ? "📖 อธิบายทั้งประโยค" : "🤖 อธิบายคำนี้";
+  $("aiPanelTitle").textContent = whole ? aiCtx.shown : word;
+  $("aiPanelSub").textContent = whole ? "" : [aiCtx.py, aiCtx.th].filter(Boolean).join(" · ");
+  $("aiPanelTitle").classList.toggle("is-sentence", whole);
+  $("aiThread").replaceChildren();
+  $("aiPanelBody").scrollTop = 0;
+  $("aiPanel").hidden = false;
+  aiAsk(whole ? AI_SENTENCE_Q : AI_DEFAULT_Q);
+}
+
+// คืน true เมื่อปิดหน้าต่างไปจริง (ใช้กับปุ่ม Back ของ Android)
+function aiPanelClose() {
+  const panel = $("aiPanel");
+  if (!panel || panel.hidden) return false;
+  panel.hidden = true;
+  aiCtx = null;
+  $("aiThread").replaceChildren();
+  $("aiSetup").hidden = true;
+  $("aiAskInput").blur();
+  return true;
+}
+
+function aiShowSetup(question) {
+  aiCtx.pendingQ = question;
+  $("aiSetup").hidden = false;
+  $("aiAskForm").hidden = true;
+  $("aiSetupMsg").textContent = "";
+  try { $("aiSetupUrl").value = localStorage.getItem("cr_ai_url") || ""; } catch {}
+  $("aiSetupToken").value = "";
+}
+
+async function aiAsk(question) {
+  const ctx = aiCtx;
+  if (!ctx) return;
+  if (!aiConfig()) { aiShowSetup(question); return; }
+  $("aiSetup").hidden = true;
+  $("aiAskForm").hidden = false;
+  const whole = ctx.mode === "sentence";
+  const entry = document.createElement("div");
+  entry.className = "ai-entry";
+  if (question !== AI_DEFAULT_Q && question !== AI_SENTENCE_Q) {
+    const q = document.createElement("div");
+    q.className = "ai-q";
+    q.textContent = "❓ " + question;
+    entry.appendChild(q);
+  }
+  const ans = document.createElement("div");
+  ans.className = "ai-answer thinking";
+  ans.textContent = "🤖 กำลังคิด…";
+  entry.appendChild(ans);
+  $("aiThread").appendChild(entry);
+  const body = $("aiPanelBody");
+  body.scrollTop = entry.offsetTop - 8; // เลื่อนให้คำถามใหม่อยู่บนสุด อ่านคำตอบจากต้นได้เลย
+  let text;
+  try {
+    text = await askAi({
+      q: question,
+      word: whole ? "" : ctx.word,
+      pinyin: whole ? "" : ctx.py,
+      thai: whole ? "" : ctx.th,
+      sentence: ctx.sentence,
+      level: ctx.level,
+    });
+  } catch (e) {
+    text = "⚠️ " + e.message;
+    ans.classList.add("err");
+  }
+  if (ctx !== aiCtx) return; // ปิดหน้าต่างหรือเปิดคำอื่นไปแล้ว (คำถามหลายข้อพร้อมกันได้ แต่ละข้อมีช่องคำตอบของตัวเอง)
+  ans.classList.remove("thinking");
+  aiRenderAnswer(ans, text);
+}
+
+$("cpWordAiBtn").addEventListener("click", () => {
+  sfx.click();
+  aiPanelOpen("word");
+});
+$("cpWordAiSentBtn").addEventListener("click", () => {
+  sfx.click();
+  aiPanelOpen("sentence");
+});
+$("aiPanelClose").addEventListener("click", () => { sfx.click(); aiPanelClose(); });
+$("aiPanel").addEventListener("click", (e) => { if (e.target === e.currentTarget) aiPanelClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aiPanelClose()) e.preventDefault(); });
+$("aiSetup").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const url = $("aiSetupUrl").value.trim();
+  const token = $("aiSetupToken").value.trim();
+  if (!/^https:\/\//i.test(url) || !token) {
+    $("aiSetupMsg").textContent = "⚠️ ใส่ URL ที่ขึ้นต้นด้วย https:// และ APP_TOKEN ให้ครบ";
+    return;
+  }
+  try {
+    localStorage.setItem("cr_ai_url", url);
+    localStorage.setItem("cr_ai_token", token);
+  } catch {}
+  if (aiCtx) aiAsk(aiCtx.pendingQ || (aiCtx.mode === "sentence" ? AI_SENTENCE_Q : AI_DEFAULT_Q));
+});
+$("aiAskForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const inp = $("aiAskInput");
+  const q = inp.value.trim();
+  if (!q) return;
+  inp.value = "";
+  inp.blur(); // หุบคีย์บอร์ดมือถือ ให้เห็นคำตอบเต็มจอ
+  aiAsk(q);
+});
 // ปิดป๊อปอัปเมื่อแตะที่อื่น เลื่อนจอ หรือกลับไปโหมดอื่น (ป๊อปอัปเป็น position:fixed จึงไม่ตามจอ)
 document.addEventListener("pointerdown", (e) => {
   const pop = $("cpWordPopup");
@@ -324,7 +556,14 @@ document.addEventListener("pointerdown", (e) => {
   if (pop.contains(e.target) || (e.target.closest && e.target.closest(".cp-zh-tok"))) return;
   cpHideWordPopup();
 });
-window.addEventListener("scroll", cpHideWordPopup, true);
+// ...ยกเว้นการเลื่อนภายในป๊อปอัปเอง (คำตอบ AI ยาว ๆ เลื่อนอ่านได้)
+window.addEventListener("scroll", (e) => {
+  const pop = $("cpWordPopup");
+  if (pop && e.target instanceof Node && pop.contains(e.target)) return;
+  // คีย์บอร์ดมือถือเด้งขึ้นตอนพิมพ์คำถาม → เบราว์เซอร์เลื่อนจอเอง ห้ามปิดป๊อปอัป
+  if (pop && pop.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;
+  cpHideWordPopup();
+}, true);
 // หมุนจอ/เปลี่ยนขนาด → ย้ายกล่องไปเกาะคำเดิมต่อ ถ้าคำนั้นยังอยู่
 window.addEventListener("resize", () => {
   if ($("cpWordPopup").hidden) return;

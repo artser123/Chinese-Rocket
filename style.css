@@ -5790,3 +5790,125 @@ button.fill-blank {
 }
 .pack-progress { font-size: 13px; color: var(--fg-dim); margin: 4px 0 0; word-break: break-word; }
 #packPanel .ms-actions .big-btn:disabled { opacity: .55; cursor: progress; }
+
+/* ===== หน้าต่าง AI เกือบเต็มจอ (#aiPanel) — เปิดจากปุ่ม 🤖/📖 ในฟองคำศัพท์ =====
+   อยู่นอกทุก .screen (z-index เท่า #imgLightbox) ปิดด้วย ✕ / พื้นหลัง / Escape / Back */
+.ai-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 10px) calc(var(--safe-right) + 10px) calc(var(--safe-bottom) + 10px) calc(var(--safe-left) + 10px);
+  background: rgba(4, 7, 20, .86);
+  animation: imgLightboxIn .16s var(--ease-out, ease) both;
+}
+.ai-panel[hidden] { display: none; }
+.ai-card {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, #182247 0%, #101633 100%);
+  border: 1.5px solid #334185;
+  border-radius: 16px;
+  box-shadow: var(--sh-3);
+}
+.ai-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px 10px 16px;
+  border-bottom: 1px solid rgba(139, 149, 201, .3);
+}
+.ai-head-text { flex: 1; min-width: 0; }
+.ai-kind { color: #ffd76a; font-size: 13px; font-weight: 700; }
+.ai-title {
+  margin-top: 2px;
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: clamp(26px, 7vw, 34px);
+  font-weight: 700;
+  line-height: 1.3;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+.ai-title.is-sentence { font-size: clamp(19px, 5vw, 24px); font-weight: 600; }
+.ai-sub { color: #8fd3ff; font-size: clamp(13px, 3.6vw, 15px); }
+.ai-sub:empty { display: none; }
+.ai-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid #496482;
+  background: #131a3d;
+  color: #c8d4ff;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-close:active { transform: scale(.92); }
+.ai-body {
+  position: relative; /* offsetTop ของ .ai-entry อ้างอิงกล่องนี้ (เลื่อนคำถามใหม่ขึ้นบนสุด) */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px 20px;
+}
+.ai-thread { display: flex; flex-direction: column; gap: 18px; }
+.ai-entry + .ai-entry { padding-top: 16px; border-top: 1px dashed rgba(139, 149, 201, .3); }
+.ai-q {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(91, 106, 214, .22);
+  color: #e8ecff;
+  font-family: var(--font-ui);
+  font-size: clamp(14px, 3.8vw, 16px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ai-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.75;
+  font-family: var(--font-ui);
+  font-size: clamp(15px, 4.1vw, 17px);
+  color: #e8ecff;
+}
+.ai-answer b { color: #ffd76a; font-weight: 700; }
+.ai-answer.thinking { color: #8fd3ff; animation: aiThinking 1.2s ease-in-out infinite; }
+.ai-answer.err { color: #ff9a9a; }
+@keyframes aiThinking { 50% { opacity: .45; } }
+.ai-setup[hidden], .ai-ask[hidden] { display: none; }
+.ai-setup { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.ai-note { color: #ffd76a; font-size: 14px; }
+.ai-note-warn { color: #ff9a9a; font-size: 13px; }
+.ai-note-warn:empty { display: none; }
+.ai-ask {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(139, 149, 201, .3);
+  background: rgba(10, 14, 34, .6);
+}
+.ai-ask .cpw-btn { flex: 0 0 auto; min-width: 72px; padding: 8px 14px; }
+.ai-panel input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(139, 149, 201, .45);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .3);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 16px; /* ≥16px กัน iOS ซูมจอเองตอนแตะช่องพิมพ์ */
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-panel, .ai-answer.thinking { animation: none; }
+}
+#cpWordPopup .cpw-btn[hidden] { display: none; }

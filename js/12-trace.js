@@ -853,6 +853,8 @@ window.__handleAndroidBack = function () {
     crPackClose();
     return true;
   }
+  // หน้าต่างคำอธิบายจาก AI (เปิดจากฟองคำศัพท์ อยู่นอก .screen) — Back = ปิดหน้าต่างกลับไปเกมเดิม
+  if (aiPanelClose()) return true;
   const active = document.querySelector(".screen.active");
   if (!active || active === menuEl) return false;
 

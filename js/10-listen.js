@@ -528,10 +528,10 @@ function lisPreviousTrack() {
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
 // ประโยค: แตกเป็นปุ่มคำตาม s[4] เหมือนเกมทายประโยค — แตะคำ = ดูพินอิน/คำแปล (#cpWordPopup)
-// และพักการเล่นไว้ เพื่อไม่ให้ประโยคเปลี่ยน (ป๊อปอัปหาย) ระหว่างอ่าน • กด ▶ เล่นต่อ เพื่อฟังต่อ
+// และพักการเล่นไว้ เพื่อไม่ให้ประโยคเปลี่ยน (ป๊อปอัปหาย) ระหว่างอ่าน • ปิดป๊อปอัปแล้วเล่นต่อเอง (lisPopupCheck)
 function renderListenSentence(s) {
   const el = $("lisZh");
-  renderZhTokens(el, s, () => lisPausePlayback());
+  renderZhTokens(el, s, () => lisPopupPause());
   el.querySelectorAll(".cp-zh-tok").forEach((b) => b.classList.add("lis-zh-tok"));
 }
 
@@ -693,6 +693,7 @@ function startListenGame(level) {
 $("lisPlayBtn").addEventListener("click", () => {
   if (!lis) return;
   sfx.click();
+  lis.popupPaused = false; // ผู้ใช้กดเอง — ปิดป๊อปอัปทีหลังจะไม่สั่งเล่นต่อแทน
   if (lis.playing) lisPausePlayback();
   else lisReplayBtnClick();
 });
@@ -739,3 +740,42 @@ if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { if (lis) requestAnimationFrame(fitListenCard); });
 }
 
+// ป๊อปอัปที่เปิดระหว่างฝึกฟัง (ฟองคำศัพท์ / หน้าต่างดูเส้นขีด / หน้าต่างอธิบายจาก AI) → พักการเล่น
+// ไว้จนกว่าจะปิดป๊อปอัปทั้งหมด แล้วเล่นต่อเอง (เล่นตัวปัจจุบันซ้ำ) — เฉพาะเมื่อป๊อปอัปเป็นคนพัก
+// ถ้าผู้ใช้พักเองอยู่แล้ว ปิดป๊อปอัปก็ยังพักอยู่ • เฝ้าดู attribute hidden ทั้งสามอัน จึงครอบคลุมทุกทาง
+// ที่เปิด/ปิด (แตะคำ, แตะ #lisZh, ✕, แตะที่อื่น, เลื่อนจอ, Escape, ปุ่ม Back)
+const LIS_POPUPS = ["cpWordPopup", "voStrokePopup", "aiPanel"];
+let lisPopupResumeTimer = null;
+
+function lisPopupOpen() {
+  return LIS_POPUPS.some((id) => { const el = $(id); return el && !el.hidden; });
+}
+
+function lisPopupPause() {
+  if (!lis || !lis.playing) return;
+  lis.popupPaused = true;
+  lisPausePlayback();
+}
+
+function lisPopupCheck() {
+  if (!lis || !$("listen").classList.contains("active")) return;
+  clearTimeout(lisPopupResumeTimer);
+  if (lisPopupOpen()) { lisPopupPause(); return; }
+  if (!lis.popupPaused) return;
+  // หน่วงสั้น ๆ: ฟองคำ → หน้าต่างเส้นขีด/AI ปิดอันหนึ่งก่อนเปิดอีกอัน ไม่ให้เสียงเริ่มแล้วหยุดทันที
+  lisPopupResumeTimer = setTimeout(() => {
+    if (!lis || !lis.popupPaused || lisPopupOpen()) return;
+    lis.popupPaused = false;
+    // แอปถูกสลับไปเบื้องหลัง (ป๊อปอัปปิดเองตอนซ่อนแอป) หรือออกจากโหมดแล้ว → พักไว้ตามเดิม
+    if (lis.playing || document.hidden || !$("listen").classList.contains("active")) return;
+    lisReplayBtnClick();
+  }, 250);
+}
+
+{
+  const obs = new MutationObserver(lisPopupCheck);
+  for (const id of LIS_POPUPS) {
+    const el = $(id);
+    if (el) obs.observe(el, { attributes: true, attributeFilter: ["hidden"] });
+  }
+}
