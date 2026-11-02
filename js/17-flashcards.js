@@ -31,7 +31,9 @@ const FC_NEW_ON = !!window.CR_OFFLINE_APP ||
 
 // โหลดชุดใหม่ครั้งเดียวตอนเปิดแอป แล้วอ่านหมวดที่เลือกไว้ใหม่ (id n01… ยังไม่รู้จักก่อนโหลดเสร็จ)
 function fcLoadNewDeck() {
-  if (!FC_NEW_ON) return;
+  // APK: รูปของสองชุดนี้อยู่ในแพ็กเนื้อหาเสริม "flashcards" — ยังไม่ติดตั้งก็ไม่แสดงชุด (รูปจะเสีย)
+  // crPacksRefresh() เรียกฟังก์ชันนี้ซ้ำหลังรู้ผล/หลังนำเข้าแพ็ก
+  if (!FC_NEW_ON || !crPackOk("flashcards", true)) return;
   for (const [file, global] of [["data/flashcards_new.js", "FLASHCARD_CATS_NEW"], ["data/flashcards_hsk.js", "FLASHCARD_CATS_HSK"]]) {
     if (Array.isArray(window[global])) continue;
     const script = document.createElement("script");

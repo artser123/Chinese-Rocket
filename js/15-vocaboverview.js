@@ -1083,7 +1083,7 @@ function voPlayNextItem() {
 
   const items = [{ url: `audio/zh/${audioKey}.mp3`, tts: [spokenZh, "zh-CN"] }];
   if (item.th && String(item.th).trim()) {
-    items.push({ url: `audio/th/${audioKey}.mp3`, tts: [String(item.th).trim(), "th-TH"] });
+    items.push({ url: thWordUrl(audioKey, item.th), tts: [String(item.th).trim(), "th-TH"] });
   }
 
   wordAudio.play(items, () => {

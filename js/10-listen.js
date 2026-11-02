@@ -527,25 +527,12 @@ function lisPreviousTrack() {
 }
 
 // เล่นเสียงคำ/ประโยคปัจจุบัน แล้วตั้งตัวจับเวลาไปตัวถัดไปเมื่อเสียงจบ + ห่าง lisGap วิ
+// ประโยค: แตกเป็นปุ่มคำตาม s[4] เหมือนเกมทายประโยค — แตะคำ = ดูพินอิน/คำแปล (#cpWordPopup)
+// และพักการเล่นไว้ เพื่อไม่ให้ประโยคเปลี่ยน (ป๊อปอัปหาย) ระหว่างอ่าน • กด ▶ เล่นต่อ เพื่อฟังต่อ
 function renderListenSentence(s) {
-  const el = $("lisZh"), zh = s[0] || "";
-  el.replaceChildren();
-  let pos = 0;
-  const addText = (text) => { if (text) el.appendChild(document.createTextNode(text)); };
-  for (const token of s[4] || []) {
-    if (!token) continue;
-    const at = zh.indexOf(token, pos);
-    if (at < 0) continue;
-    addText(zh.slice(pos, at));
-    if (/[㐀-鿿豈-﫿]/.test(token)) {
-      const span = document.createElement("span");
-      span.className = "lis-zh-tok";
-      span.textContent = token;
-      el.appendChild(span);
-    } else addText(token);
-    pos = at + token.length;
-  }
-  addText(zh.slice(pos));
+  const el = $("lisZh");
+  renderZhTokens(el, s, () => lisPausePlayback());
+  el.querySelectorAll(".cp-zh-tok").forEach((b) => b.classList.add("lis-zh-tok"));
 }
 
 function updateListenKaraoke(s, progress) {
@@ -586,7 +573,7 @@ function lisPlayCurrent() {
     const key = wordAudioKey(it[0], it[1]); // 了 (คำช่วย le) ใช้ไฟล์ 了-le.mp3 ที่อ่านถูก
     lisPlayMediaItems([
       { url: `audio/zh/${key}.mp3`, tts: [key === "了-le" ? "le" : zh, "zh-CN"], ...LIS_EDGE_TTS_TRIM },
-      ...(m ? [{ url: `audio/th/${key}.mp3`, tts: [m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"], ...LIS_EDGE_TTS_TRIM }] : []),
+      ...(m ? [{ url: thWordUrl(key, m), tts: [m, /[\u0E00-\u0E7F]/.test(m) ? "th-TH" : "en-US"], ...LIS_EDGE_TTS_TRIM }] : []),
     ], done);
   }
   lisSetMediaMetadata(it);
@@ -622,6 +609,7 @@ function lisAdvance() {
   lis.done.add(lis.current[0]);
   $("lisProg").textContent = progPct(lis.done.size, lis.total);
   const it = lis.current;
+  cpHideWordPopup();
   if (lis.type === "sent") renderListenSentence(it);
   else $("lisZh").textContent = it[0];
   if (lis.type === "sent") crSetHskSentenceBadge($("lisHskBadge"), it);
@@ -735,6 +723,7 @@ $("lisQuitBtn").addEventListener("click", () => {
   lisSyncMediaButtons(); // ปิด MediaSession เนทีฟ (ปุ่มหูฟังเลิกควบคุมโหมดนี้)
   $("lisCard").classList.remove("playing");
   stopSpeech();
+  cpHideWordPopup();
   try {
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = null;

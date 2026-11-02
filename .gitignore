@@ -43,6 +43,7 @@ __pycache__/
 # Generated personal Android offline build
 offline-android/node_modules/
 offline-android/www/
+offline-android/packs/
 offline-android/android/.gradle/
 offline-android/android/local.properties
 offline-android/android/.idea/

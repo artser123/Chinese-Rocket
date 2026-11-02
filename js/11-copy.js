@@ -31,7 +31,7 @@ function startCopyGame(level) {
          current: null, seen: 0, chars: [], charIndex: 0, seq: 0,
          done: new Set(), writeChars: [], writeIndex: 0 };
   stopSpeech();
-  music.start("sentence");
+  music.start("copy"); // ชุดเพลงของตัวเอง (เดิมใช้ร่วมกับเกมเรียงประโยค)
   switchScreen($("copy"));
   $("cpCount").textContent = "0";
   $("cpProg").textContent = "0%";

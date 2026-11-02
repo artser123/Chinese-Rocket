@@ -388,9 +388,18 @@ function stopSpeech() {
   if (window.CR_OFFLINE_APP) crTtsCancelAll();
 }
 
+// ไฟล์เสียงไทยของคำศัพท์ — audio/th/<คำ>.mp3 อ่านคำแปลหลักได้แบบเดียว (ระดับ HSK ต่ำสุด)
+// คำเดียวกันที่แปลต่างไปในระดับอื่น/หมวดเฉพาะ (对 "ต่อ, กับ", 上班 หมวดโรงงาน "เข้างาน / ทำงาน")
+// มีไฟล์ของตัวเองใน audio/th_alt/<คำ>~<n>.mp3 ตาม window.TH_ALT (data/th_alt.js) — เลือกตามข้อความที่แสดง
+function thWordUrl(key, meaning) {
+  const alt = window.TH_ALT && window.TH_ALT[key];
+  const n = alt && alt[String(meaning || "").trim()];
+  return n ? `audio/th_alt/${key}~${n}.mp3` : `audio/th/${key}.mp3`;
+}
+
 function playWordAudio(word, parts, onDone) {
   const items = [{ url: `audio/zh/${word}.mp3`, tts: parts[0] }];
-  if (parts[1]) items.push({ url: `audio/th/${word}.mp3`, tts: parts[1], duck: parts[1][1].startsWith("th") });
+  if (parts[1]) items.push({ url: thWordUrl(word, parts[1][0]), tts: parts[1], duck: parts[1][1].startsWith("th") });
   wordAudio.play(items, onDone);
 }
 // เล่นเสียงคำศัพท์จีนแล้วตามด้วยคำแปล (ไฟล์ mp3 ถ้ามี, ไม่มีก็ TTS) — ใช้ตอนยิง/ตอบถูก
@@ -506,7 +515,7 @@ function speakChar(ch) {
 if ("speechSynthesis" in window) speechSynthesis.getVoices(); // warm up voice list
 
 /* ============== Background music (WebAudio synth + FX bus) ============== */
-// แต่ละโหมดมีเพลง 5 เพลงไม่ซ้ำกัน — music.start(mode) สับลำดับแล้วเล่นวนไม่รู้จบ
+// แต่ละโหมดมีเพลง 10 เพลงไม่ซ้ำกัน — music.start(mode) สับลำดับแล้วเล่นวนไม่รู้จบ
 // เพลงหนึ่ง = ลูปเมโลดี้ 32 สเต็ป (null = เงียบ) เล่นซ้ำ SONG_LOOPS รอบก่อนเปลี่ยนเพลง
 // ฟิลด์ต่อเพลง: bpm, wave/bassWave, melVol/bassVol/kickVol, mul=คูณระดับเสียง,
 // roots เบสต่อจังหวะ (8 ค่า), kickEvery=จังหวะเตะกลอง, snare/hats เปิดปิด
@@ -526,6 +535,9 @@ const _BOM = { wave: "square", bassWave: "sawtooth", melVol: 0.05, bassVol: 0.09
 const _TRA = { wave: "triangle", bassWave: "triangle", melVol: 0.05, bassVol: 0.075, kickVol: 0.14, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.08, pad: 0.034, arp: 0.026, detune: 4, base: 0.3 };
 const _FCD = { wave: "triangle", bassWave: "sine", melVol: 0.04, bassVol: 0.055, kickVol: 0.07, mul: 1, kickEvery: 8, snare: false, hats: false, swing: 0.1, pad: 0.038, arp: 0.02, detune: 3, base: 0.22 };
 const _SQUIZ = { wave: "sine", bassWave: "sine", melVol: 0.03, bassVol: 0.035, kickVol: 0.05, mul: 0.82, kickEvery: 0, snare: false, hats: false, swing: 0.1, pad: 0.026, arp: 0.014, detune: 2, base: 0.16 };
+// เกมเขียนเป็นประโยค: สงบแต่ไม่ง่วง — จังหวะกลาง 96–104 bpm, kick เบาๆ ทุกจังหวะ + hats บางๆ ให้มีชีพจร
+// ทำนองเดินเป็นขั้น (major pentatonic + #4 แบบ lydian ให้รู้สึกสว่าง) ไม่มี snare, arp เปิดเบาๆ ที่ base 0.34
+const _CPY = { wave: "triangle", bassWave: "sine", melVol: 0.042, bassVol: 0.06, kickVol: 0.08, mul: 1, kickEvery: 4, snare: false, hats: true, swing: 0.06, pad: 0.032, arp: 0.024, detune: 3, base: 0.34 };
 const MUSIC_THEMES = {
   meteor: [
     { ..._MET, bpm: 122,
@@ -548,6 +560,27 @@ const MUSIC_THEMES = {
       melody: [12, 10, 7, 3, 7, 10, 12, 15, 14, 12, 10, 7, 10, 12, 14, 15,
                12, 10, 7, 3, 7, 10, 12, 10, 7, 5, 7, 3, 2, 0, null, null],
       roots: [0, -4, 0, -2, -5, -2, -4, 0] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._MET, bpm: 120, wave: "sawtooth", mul: 0.85,
+      melody: [0, 7, 12, 7, 3, 7, 12, 7, 8, 12, 15, 12, 7, 12, 15, 12,
+               5, 8, 12, 8, 3, 7, 10, 7, 2, 5, 8, 5, 7, 11, 14, 11],
+      roots: [0, 0, -4, -4, -7, -9, -10, -5] },
+    { ..._MET, bpm: 130, kickEvery: 2,
+      melody: [12, null, 12, 10, null, 7, null, 10, 12, null, 15, null, 14, 12, 10, null,
+               7, null, 7, 5, null, 3, null, 5, 7, null, 10, null, 12, null, null, null],
+      roots: [0, -2, -4, -5, 0, -2, -4, -2] },
+    { ..._MET, bpm: 116, wave: "triangle", swing: 0.12,
+      melody: [0, 3, null, 5, 7, null, 5, 3, 10, null, 8, 7, null, 5, 3, null,
+               0, 3, null, 5, 7, null, 10, 12, 15, null, 12, 10, 8, 7, 5, null],
+      roots: [0, -4, -7, -5, 0, -4, -2, -5] },
+    { ..._MET, bpm: 124, bassWave: "square", detune: 9,
+      melody: [19, 17, 15, 12, 15, 14, 12, 10, 12, 10, 8, 7, 10, 8, 7, 3,
+               5, 7, 8, 10, 12, 14, 15, 17, 19, null, 17, 15, 12, null, null, null],
+      roots: [0, -2, -4, -5, -7, -5, -4, -2] },
+    { ..._MET, bpm: 132, wave: "square", pad: 0.04,
+      melody: [0, 12, 0, 12, 3, 15, 3, 15, 5, 17, 5, 17, 7, 19, 7, 19,
+               8, 20, 8, 20, 7, 19, 7, 19, 5, 17, 3, 15, 2, 14, null, null],
+      roots: [0, -4, -2, -5, 0, -4, -7, -5] },
   ],
   vocab: [
     { ..._VOC, bpm: 104,
@@ -570,6 +603,27 @@ const MUSIC_THEMES = {
       melody: [0, 4, 7, 9, 12, 9, 7, 4, 2, 4, 7, 9, 7, 4, 2, 0,
                0, 4, 7, 9, 12, 14, 16, 19, 16, 14, 12, 9, 7, 4, null, null],
       roots: [0, 0, -3, -3, -5, -5, -7, -3] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._VOC, bpm: 106, swing: 0.1,
+      melody: [0, null, 4, 7, null, 9, 7, null, 12, null, 9, 7, 4, null, 2, null,
+               0, null, 4, 7, null, 9, 12, null, 14, null, 12, 9, 7, null, null, null],
+      roots: [0, 0, -7, -7, -3, -3, -5, -5] },
+    { ..._VOC, bpm: 114, wave: "triangle",
+      melody: [7, 7, null, 4, 7, 7, null, 9, 12, 12, null, 9, 7, null, 4, null,
+               5, 5, null, 2, 5, 5, null, 7, 9, 9, 7, 5, 4, null, null, null],
+      roots: [0, -5, -7, -5, 0, -5, -3, -5] },
+    { ..._VOC, bpm: 98, bassWave: "sine", pad: 0.036,
+      melody: [9, 7, 4, 7, 9, null, 12, null, 11, 9, 7, 9, 11, null, 14, null,
+               12, 11, 9, 7, 4, null, 7, 9, 7, 4, 2, 4, 0, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -7, -5] },
+    { ..._VOC, bpm: 110, snare: true, detune: 7,
+      melody: [0, 4, 7, 12, null, null, 11, null, 9, null, 7, null, null, null, null, null,
+               2, 5, 9, 14, null, null, 12, null, 11, null, 7, null, null, null, null, null],
+      roots: [0, 0, -3, -3, -7, -7, -5, -5] },
+    { ..._VOC, bpm: 116, bassWave: "sawtooth", mul: 0.9,
+      melody: [12, 14, 16, 14, 12, 9, 7, 9, 12, 14, 16, 19, 16, 14, 12, null,
+               9, 7, 4, 7, 9, 12, 14, 12, 9, 7, 4, 2, 0, null, null, null],
+      roots: [-3, -7, 0, -5, -3, -7, -5, -5] },
   ],
   sentence: [
     { ..._SEN, bpm: 110,
@@ -592,6 +646,27 @@ const MUSIC_THEMES = {
       melody: [0, null, 5, null, 7, null, 10, null, 12, null, 10, null, 7, null, 5, null,
                0, null, 5, null, 7, null, 10, null, 7, 5, 3, 2, 0, null, null, null],
        roots: [0, -5, -3, -5, 0, -5, -4, -2] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._SEN, bpm: 104, swing: 0.1,
+      melody: [0, null, null, 3, null, 5, null, 7, null, null, 10, null, 7, null, 5, null,
+               3, null, null, 5, null, 7, null, 10, null, 12, null, 10, 7, null, null, null],
+      roots: [0, -4, -2, -5, 0, -4, -7, -5] },
+    { ..._SEN, bpm: 112, wave: "sine", hats: false,
+      melody: [12, null, 10, null, 7, null, 10, 12, null, null, 15, null, 12, null, null, null,
+               10, null, 8, null, 7, null, 5, 7, null, null, 3, null, 0, null, null, null],
+      roots: [0, -2, -4, -2, -7, -5, -4, -5] },
+    { ..._SEN, bpm: 108, bassWave: "sawtooth", kickEvery: 8,
+      melody: [7, null, 3, null, 0, null, 3, 5, 7, null, 8, null, 7, null, 5, null,
+               3, null, 0, null, 3, null, 5, 7, 10, null, 8, 7, 5, null, null, null],
+      roots: [0, 0, -4, -4, -2, -2, -5, -5] },
+    { ..._SEN, bpm: 116, wave: "square", detune: 8,
+      melody: [0, 3, 7, 3, null, 10, null, 7, 0, 3, 7, 3, null, 12, null, 10,
+               0, 3, 8, 3, null, 12, null, 8, 7, 5, 3, 2, 0, null, null, null],
+      roots: [0, 0, -4, -4, 0, 0, -5, -5] },
+    { ..._SEN, bpm: 102, pad: 0.04, arp: 0.034,
+      melody: [15, null, null, 12, null, null, 10, null, 12, null, null, 10, null, null, 7, null,
+               8, null, null, 7, null, 5, null, 3, 5, null, 7, null, null, null, null, null],
+      roots: [0, -4, -7, -5, 0, -4, -2, -5] },
   ],
   sentencequiz: [
     { ..._SQUIZ, bpm: 72,
@@ -614,6 +689,27 @@ const MUSIC_THEMES = {
       melody: [0, null, 3, null, 7, null, null, 5, 3, null, null, 0, null, 2, null, null,
                0, null, 3, null, 5, null, 7, null, 10, null, 7, null, 5, null, 3, null],
       roots: [0, -4, -5, -4, 0, -4, -2, -5] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._SQUIZ, bpm: 72, wave: "triangle",
+      melody: [4, null, null, null, 7, null, 9, null, 7, null, null, null, 4, null, 2, null,
+               0, null, null, null, 2, null, 4, null, 7, null, null, null, null, null, null, null],
+      roots: [0, 0, -3, -3, -7, -7, -5, -5] },
+    { ..._SQUIZ, bpm: 76, swing: 0.14,
+      melody: [0, null, 2, null, 4, null, null, 7, null, null, 4, null, 2, null, null, null,
+               9, null, 7, null, 4, null, null, 2, null, null, 0, null, null, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -7, -5] },
+    { ..._SQUIZ, bpm: 68, mul: 0.9, pad: 0.032,
+      melody: [12, null, null, null, null, null, 9, null, null, null, 7, null, null, null, null, null,
+               9, null, null, null, null, null, 7, null, null, null, 4, null, null, null, null, null],
+      roots: [0, 0, -5, -5, -3, -3, -7, -7] },
+    { ..._SQUIZ, bpm: 74, melVol: 0.028,
+      melody: [3, null, 5, null, 7, null, null, null, 10, null, 7, null, 5, null, null, null,
+               3, null, 2, null, 0, null, null, null, 2, null, 3, null, null, null, null, null],
+      roots: [0, -2, -4, -5, 0, -2, -5, -5] },
+    { ..._SQUIZ, bpm: 80, arp: 0.018,
+      melody: [7, null, 9, null, 11, null, 12, null, null, null, 11, null, 9, null, 7, null,
+               4, null, 5, null, 7, null, 9, null, null, null, 7, null, null, null, null, null],
+      roots: [0, -7, -3, -5, 0, -7, -5, -5] },
   ],
   trace: [
     { ..._TRA, bpm: 96,
@@ -636,6 +732,27 @@ const MUSIC_THEMES = {
       melody: [0, 4, 7, 4, 9, 7, 4, 0, 5, 9, 12, 9, 7, 5, 4, 2,
                0, 4, 7, 4, 9, 7, 12, 9, 7, 5, 4, 2, 0, null, null, null],
       roots: [0, -3, -5, -3, 0, -5, -4, -2] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._TRA, bpm: 94, swing: 0.1,
+      melody: [0, null, 4, null, null, 5, null, 7, null, null, 9, null, 7, null, null, null,
+               5, null, 4, null, null, 2, null, 4, null, null, 0, null, null, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -5, -5] },
+    { ..._TRA, bpm: 88, wave: "sine", bassWave: "sine",
+      melody: [9, null, null, 7, null, null, 4, null, 7, null, null, 4, null, null, 2, null,
+               4, null, null, 2, null, null, 0, null, 2, null, 4, null, null, null, null, null],
+      roots: [-3, -3, -7, -7, 0, 0, -5, -5] },
+    { ..._TRA, bpm: 102, kickEvery: 8, arp: 0.03,
+      melody: [0, 2, 4, 7, null, 4, 7, 9, null, 7, 9, 12, null, 9, 7, 4,
+               2, 4, 5, 9, null, 5, 9, 12, null, 9, 7, 4, 2, null, null, null],
+      roots: [0, -5, -3, -7, -5, -3, -7, -5] },
+    { ..._TRA, bpm: 92, pad: 0.04, detune: 5,
+      melody: [12, null, null, null, 11, null, 9, null, 7, null, null, null, 9, null, 11, null,
+               12, null, null, null, 14, null, 12, null, 11, null, 9, null, 7, null, null, null],
+      roots: [0, -4, -3, -5, 0, -4, -7, -5] },
+    { ..._TRA, bpm: 96, bassWave: "sawtooth", bassVol: 0.06,
+      melody: [4, null, 7, null, 4, null, 2, 0, null, null, 2, null, 4, null, null, null,
+               7, null, 9, null, 7, null, 4, 2, null, null, 4, null, 0, null, null, null],
+      roots: [0, 0, -7, -7, -5, -5, -3, -5] },
   ],
   fillblank: [
     { ..._FIL, bpm: 112,
@@ -657,6 +774,27 @@ const MUSIC_THEMES = {
       melody: [7, 7, 7, 10, 9, 9, 9, 12, 10, 10, 10, 14, 12, 10, 9, 7,
                14, 14, 14, 12, 10, 10, 10, 9, 7, 9, 10, 12, 10, 9, 7, null],
       roots: [0, 0, -5, -5, -4, -4, -2, 0] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._FIL, bpm: 114, swing: 0.08,
+      melody: [7, null, 10, 12, 10, null, 7, 5, 7, null, 10, 12, 14, null, 12, 10,
+               9, null, 12, 14, 12, null, 9, 7, 5, 7, 9, 10, 9, null, null, null],
+      roots: [0, -2, -5, -4, 0, -2, -4, -5] },
+    { ..._FIL, bpm: 120, wave: "sawtooth", mul: 0.8,
+      melody: [12, 10, 12, 15, 12, 10, 7, null, 12, 10, 12, 17, 15, 12, 10, null,
+               9, 7, 9, 12, 10, 9, 7, 5, 7, 9, 10, 12, 14, null, null, null],
+      roots: [0, 0, -2, -2, -5, -5, -4, -4] },
+    { ..._FIL, bpm: 106, snare: false, bassWave: "sine",
+      melody: [5, null, 9, null, 12, null, 9, 5, 7, null, 10, null, 14, null, 10, 7,
+               9, null, 12, null, 15, null, 12, 9, 10, 9, 7, 5, 3, null, null, null],
+      roots: [-4, -4, -2, -2, 0, 0, -5, -5] },
+    { ..._FIL, bpm: 116, kickEvery: 2,
+      melody: [7, 7, null, 10, null, 12, null, 10, 9, 9, null, 12, null, 14, null, 12,
+               10, 10, null, 14, null, 15, null, 14, 12, null, 10, null, 9, null, 7, null],
+      roots: [0, -4, -2, -5, 0, -4, -2, -2] },
+    { ..._FIL, bpm: 110, wave: "square", detune: 8,
+      melody: [14, 12, 10, 9, 7, 9, 10, 12, 10, 9, 7, 5, 3, 5, 7, 9,
+               10, null, 9, null, 7, null, 5, null, 7, 9, 10, 12, 7, null, null, null],
+      roots: [0, -5, -4, -2, 0, -5, -7, -5] },
   ],
   zombie: [
     { ..._ZOM, bpm: 122, kickEvery: 4,
@@ -679,6 +817,27 @@ const MUSIC_THEMES = {
       melody: [5, 3, 2, 0, 3, 5, 7, 8, 10, 8, 7, 5, 7, 5, 3, 2,
                5, 3, 2, 0, 3, 5, 7, 8, 12, 10, 8, 7, 5, 3, 2, 0],
       roots: [-2, -2, 0, 0, -5, -5, -4, -2] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._ZOM, bpm: 120, kickEvery: 4,
+      melody: [0, 1, 0, null, 0, 1, 3, null, 0, 1, 0, null, 6, 5, 3, 1,
+               0, 1, 0, null, 0, 1, 3, null, 7, 6, 5, 3, 1, 0, null, null],
+      roots: [0, 0, 1, 1, 0, 0, -2, -1] },
+    { ..._ZOM, bpm: 128, kickEvery: 4, wave: "square",
+      melody: [7, null, 7, 8, 7, null, 5, 3, 7, null, 7, 8, 10, 8, 7, null,
+               3, null, 3, 5, 3, null, 2, 0, 2, 3, 5, 7, 8, 7, 5, null],
+      roots: [0, -4, -2, -5, 0, -4, -7, -5] },
+    { ..._ZOM, bpm: 112, kickEvery: 4, swing: 0.08,
+      melody: [0, null, null, 3, null, null, 6, null, 5, null, null, 3, null, null, 1, null,
+               0, null, null, 3, null, null, 7, null, 8, null, 6, null, 5, null, null, null],
+      roots: [0, 0, 0, 0, -4, -4, -6, -5] },
+    { ..._ZOM, bpm: 132, mul: 0.6,
+      melody: [12, 11, 10, 9, 8, 7, 6, 5, 7, 8, 10, 12, 15, 12, 10, 8,
+               12, 11, 10, 9, 8, 7, 5, 3, 5, 7, 8, 7, 5, 3, 2, 0],
+      roots: [0, -1, -2, -4, 0, -1, -5, -4] },
+    { ..._ZOM, bpm: 124, kickEvery: 4, bassWave: "square",
+      melody: [0, 3, 7, 3, 0, 3, 8, 3, 0, 3, 7, 3, 0, 2, 6, 2,
+               0, 3, 7, 3, 0, 3, 8, 3, 10, 8, 7, 6, 7, null, null, null],
+      roots: [0, 0, -4, -4, 0, 0, -6, -5] },
   ],
   matching: [
     { ..._MAT, bpm: 92,
@@ -701,6 +860,27 @@ const MUSIC_THEMES = {
       melody: [12, null, null, null, 10, null, 9, null, 7, null, null, null, 5, null, null, null,
                9, null, null, null, 7, null, 5, null, 4, null, 2, null, 0, null, null, null],
       roots: [-5, -5, 0, 0, -4, -4, -5, -7] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._MAT, bpm: 90, swing: 0.1,
+      melody: [4, null, null, 7, null, 9, null, null, 7, null, null, 4, null, 2, null, null,
+               0, null, null, 2, null, 4, null, null, 7, null, null, null, null, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -5, -5] },
+    { ..._MAT, bpm: 94, wave: "triangle", kickEvery: 8,
+      melody: [12, null, 9, null, 7, null, 9, null, 12, null, 14, null, 12, null, null, null,
+               9, null, 7, null, 4, null, 7, null, 9, null, 7, null, null, null, null, null],
+      roots: [0, -5, -7, -5, -3, -5, -7, -5] },
+    { ..._MAT, bpm: 84, pad: 0.036,
+      melody: [0, null, null, null, 4, null, null, null, 7, null, null, null, 11, null, null, null,
+               9, null, null, null, 7, null, null, null, 4, null, null, null, 2, null, null, null],
+      roots: [0, 0, -3, -3, -7, -7, -5, -5] },
+    { ..._MAT, bpm: 98, detune: 6,
+      melody: [7, 9, null, 7, 4, null, 2, null, 4, 7, null, 4, 2, null, 0, null,
+               2, 4, null, 7, 9, null, 7, null, 4, 2, null, 0, null, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -7, 0] },
+    { ..._MAT, bpm: 88, bassWave: "triangle",
+      melody: [5, null, null, 4, null, null, 2, null, 0, null, null, null, 2, null, 4, null,
+               7, null, null, 5, null, null, 4, null, 2, null, null, null, null, null, null, null],
+      roots: [-7, -7, 0, 0, -5, -5, 0, 0] },
   ],
   bomb: [
     { ..._BOM, bpm: 134,
@@ -723,10 +903,74 @@ const MUSIC_THEMES = {
       melody: [12, 12, 12, 15, 14, 14, 14, 17, 15, 15, 15, 19, 17, 15, 14, 12,
                19, 19, 19, 17, 15, 15, 15, 14, 12, 14, 15, 17, 15, 14, 12, 10],
       roots: [0, 0, -2, -2, 0, 0, -4, -5] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._BOM, bpm: 136, kickEvery: 4,
+      melody: [12, null, 12, null, 13, null, 12, null, 15, null, 13, 12, 10, null, 8, null,
+               12, null, 12, null, 13, null, 15, null, 17, 15, 13, 12, 10, 8, 7, null],
+      roots: [0, 0, 1, 1, 0, 0, -2, -1] },
+    { ..._BOM, bpm: 142, wave: "sawtooth", kickEvery: 2,
+      melody: [7, 10, 12, 7, 10, 12, 15, 10, 12, 15, 17, 12, 15, 14, 12, 10,
+               7, 10, 12, 7, 10, 12, 15, 10, 17, 15, 14, 12, 10, 9, 7, null],
+      roots: [0, -2, -4, -5, 0, -2, -5, -4] },
+    { ..._BOM, bpm: 128, swing: 0.06,
+      melody: [0, null, 0, 3, null, 0, 5, null, 0, null, 0, 6, null, 5, 3, null,
+               0, null, 0, 3, null, 0, 7, null, 8, 7, 6, 5, 3, null, null, null],
+      roots: [0, 0, 0, 0, -4, -4, -2, -1] },
+    { ..._BOM, bpm: 146, kickEvery: 4, detune: 10,
+      melody: [19, 17, 15, 14, 15, 14, 12, 10, 12, 10, 8, 7, 8, 7, 5, 3,
+               5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 19, 17, 15, null, null, null],
+      roots: [0, -4, -5, -7, -5, -4, -2, 0] },
+    { ..._BOM, bpm: 132, kickEvery: 4, pad: 0.04,
+      melody: [12, 15, 12, 15, 12, 15, 12, 15, 13, 17, 13, 17, 13, 17, 13, 17,
+               15, 19, 15, 19, 14, 17, 14, 17, 12, 15, 12, 15, 11, 14, 11, null],
+      roots: [0, 0, 1, 1, 3, 2, 0, -1] },
   ],
   // เกมทายแฟลชการ์ด — นุ่มเบาแบบเพลงเด็ก (โทนเดียวกับ _MAT) เมโลดี้ pentatonic
   // เกมทายแฟลชการ์ด: เพลงสบาย ๆ แนวโลไฟ — ช้า (78–88 bpm) โน้ตห่าง สเกลเพนทาโทนิก A เมเจอร์
   // คอร์ดหลัก I / IV / V / vi / ii, กลองเบามาก ไม่มีไฮแฮต/สแนร์, ความเข้มฐานต่ำ (arp ไม่โผล่ตอนเล่นปกติ)
+  copy: [
+    { ..._CPY, bpm: 98,
+      melody: [0, null, 2, 4, null, 7, null, 4, 2, null, 4, 7, 9, null, 7, null,
+               4, null, 7, 9, null, 12, null, 9, 7, null, 4, 2, 4, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -4, -7] },
+    { ..._CPY, bpm: 102, wave: "sine", melVol: 0.046,
+      melody: [7, null, 9, null, 7, 4, null, 2, 4, null, null, 7, null, 9, null, null,
+               12, null, 11, null, 9, null, 7, null, 9, null, 7, 4, null, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -8, -5] },
+    { ..._CPY, bpm: 96, kickEvery: 8, kickVol: 0.07,
+      melody: [4, null, null, 2, 0, null, 2, null, 4, null, 7, null, 6, null, 7, null,
+               9, null, null, 7, 4, null, 2, null, 4, null, null, null, null, null, null, null],
+      roots: [0, 0, 2, 2, -3, -3, -5, -5] },
+    { ..._CPY, bpm: 104, bassWave: "triangle",
+      melody: [0, 4, 7, null, 9, null, 7, 4, 5, null, 4, 2, null, 2, 4, null,
+               7, null, 9, 11, 12, null, 11, 9, 7, null, 4, null, 2, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -7, -2] },
+    { ..._CPY, bpm: 100, arp: 0.028,
+      melody: [9, null, 7, null, 4, null, 7, 9, 12, null, null, 9, 7, null, null, null,
+               9, null, 7, null, 4, null, 2, 4, 0, null, 2, null, 4, null, null, null],
+      roots: [-3, -3, -7, -7, 0, 0, -5, -5] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._CPY, bpm: 100, swing: 0.08,
+      melody: [2, null, 4, null, 7, null, null, 9, null, 7, 4, null, 2, null, null, null,
+               4, null, 7, null, 9, null, null, 12, null, 9, 7, null, 4, null, null, null],
+      roots: [-5, -5, 0, 0, -3, -3, -7, -5] },
+    { ..._CPY, bpm: 96, wave: "sine", kickEvery: 8,
+      melody: [12, null, 9, 7, null, 9, null, null, 7, null, 4, 2, null, 4, null, null,
+               9, null, 7, 4, null, 2, null, null, 0, null, 2, null, 4, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -5, -5] },
+    { ..._CPY, bpm: 104, arp: 0.03, bassWave: "triangle",
+      melody: [0, 4, 7, 9, null, 7, null, 4, 2, 4, 7, 9, null, 11, null, 9,
+               7, 9, 11, 12, null, 11, null, 9, 7, null, 4, null, 2, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -7, -7] },
+    { ..._CPY, bpm: 98, pad: 0.038, detune: 4,
+      melody: [4, null, null, 6, null, 7, null, null, 9, null, null, 7, null, 6, null, null,
+               4, null, null, 2, null, 0, null, null, 2, null, null, 4, null, null, null, null],
+      roots: [0, 2, 0, 2, -3, -5, 0, 0] },
+    { ..._CPY, bpm: 102, wave: "sine", melVol: 0.046,
+      melody: [7, null, 7, 9, null, 7, 4, null, 5, null, 5, 7, null, 5, 2, null,
+               4, null, 4, 5, null, 4, 0, null, 2, null, 4, null, 0, null, null, null],
+      roots: [0, -7, -5, 0, -3, -7, -5, 0] },
+  ],
   flashcards: [
     { ..._FCD, bpm: 84,
       melody: [4, null, 7, null, 9, null, 7, 4, 2, null, 4, null, null, null, null, null,
@@ -748,6 +992,27 @@ const MUSIC_THEMES = {
       melody: [0, null, 4, null, 9, null, null, 7, 4, null, null, null, 2, null, 0, null,
                11, null, null, 7, null, 4, null, 2, 4, null, null, null, null, null, null, null],
       roots: [-3, -3, -3, -3, -5, -5, -5, -5] },
+    // — เพลง 6–10 (Nov 2026) —
+    { ..._FCD, bpm: 82, wave: "sine",
+      melody: [7, null, null, 4, null, null, 2, null, 4, null, null, null, null, null, null, null,
+               9, null, null, 7, null, null, 4, null, 7, null, null, null, null, null, null, null],
+      roots: [0, 0, -5, -5, -3, -3, -7, -7] },
+    { ..._FCD, bpm: 86, kickEvery: 4, kickVol: 0.05,
+      melody: [0, null, 2, null, 4, null, null, 7, null, null, null, null, 4, null, 2, null,
+               0, null, 2, null, 4, null, null, 9, null, null, 7, null, null, null, null, null],
+      roots: [0, -3, -7, -5, 0, -3, -5, -5] },
+    { ..._FCD, bpm: 78, pad: 0.044, melVol: 0.034,
+      melody: [11, null, null, null, 9, null, null, null, 7, null, null, null, 4, null, null, null,
+               9, null, null, null, 7, null, null, null, 4, null, 2, null, null, null, null, null],
+      roots: [-7, -7, -5, -5, 0, 0, -3, -3] },
+    { ..._FCD, bpm: 84, swing: 0.14, arp: 0.024,
+      melody: [4, null, 7, 9, null, null, 7, null, 4, null, 2, null, null, null, 0, null,
+               2, null, 4, 7, null, null, 9, null, 7, null, 4, null, null, null, null, null],
+      roots: [0, 0, -3, -3, -5, -5, -7, -5] },
+    { ..._FCD, bpm: 80, wave: "triangle", bassWave: "triangle",
+      melody: [12, null, null, 9, null, null, null, 7, null, null, 4, null, null, null, null, null,
+               7, null, null, 9, null, null, null, 12, null, null, 14, null, null, null, null, null],
+      roots: [0, -5, -3, -7, 0, -5, -7, -7] },
   ],
 };
 // ปริมาณส่ง FX ของแต่ละ layer (โครงสร้างคงที่ — ตั้งครั้งเดียว ไม่ต้องแก้รายเพลง)

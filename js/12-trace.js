@@ -848,6 +848,11 @@ document.addEventListener("keydown", (e) => {
 // ask for confirmation (#backConfirm) before a game is left for the home
 // screen. The home screen returns false so Android exits.
 window.__handleAndroidBack = function () {
+  // หน้าแพ็กเนื้อหาเสริม (เปิดได้ทั้งจากหน้าหลักและจากพอดแคสต์/บทอ่าน) ปิดก่อนเสมอ
+  if (!$("packPanel").hidden) {
+    crPackClose();
+    return true;
+  }
   const active = document.querySelector(".screen.active");
   if (!active || active === menuEl) return false;
 

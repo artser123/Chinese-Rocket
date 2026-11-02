@@ -1245,7 +1245,14 @@ function podResumeIntro() {
   return true;
 }
 
+// แพ็กเนื้อหาเสริมของแต่ละแหล่ง (APK: เสียงไม่ได้อยู่ใน APK แล้ว — js/03-helpers.js crPackOk)
+const POD_PACK = { maomi: "podcast-maomi", hsk: "podcast-hsk", specialized: "podcast-special" };
+
 function podSelectEpisode(ep, options = {}) {
+  if (!crPackRequire(POD_PACK[podSourceOf(ep)])) {
+    $("podListStatus").textContent = `ต้องติดตั้งแพ็ก "${crPackTitle(POD_PACK[podSourceOf(ep)])}" ก่อน — กด 📦 แพ็กเนื้อหาเสริม ที่หน้าหลัก`;
+    return;
+  }
   // Articles whose narration has not been generated yet cannot be opened.
   if ((ep.src === "hsk" || ep.src === "specialized") && !ep.mp3Local) {
     $("podListStatus").textContent = "บทความนี้ยังไม่มีไฟล์เสียง — ไฟล์เสียงยังสร้างไม่ครบ";

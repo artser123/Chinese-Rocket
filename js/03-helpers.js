@@ -149,6 +149,8 @@ function crOpenCanvasTextBubble(zh, clientX, clientY) {
   cpShowWordPopup(zh.trim(), anchor);
 }
 document.addEventListener("click", (event) => {
+  // แตะปุ่มคำ (.cp-zh-tok) ในประโยค เช่น #lisZh — ปุ่มเปิดป๊อปอัปของคำนั้นเองแล้ว ไม่ต้องเปิดทั้งประโยคทับ
+  if (event.target.closest && event.target.closest(".cp-zh-tok, .pod-word, .reader-word")) return;
   const target = crStrokeTargetForEvent(event.target);
   if (target) crOpenTextBubble(target);
 });
@@ -454,6 +456,163 @@ document.addEventListener("click", (e) => {
   e.preventDefault();
   crOpenWeb(a.href || a.getAttribute("href"));
 });
+
+/* ---------- แพ็กเนื้อหาเสริม (APK) ---------- */
+// APK เป็น zip32: ใส่ได้ไม่เกิน 65,535 ไฟล์ / 4 GiB — สื่อก้อนใหญ่ (พอดแคสต์ บทความ เรื่องอ่าน
+// เสียงประโยคตัวอย่าง การ์ดรูป) จึงแยกเป็นไฟล์ ChineseRocket-pack-<ชื่อ>.zip ที่ผู้ใช้นำเข้าในแอป
+// (NativePacks.importPack) — แอปเสิร์ฟไฟล์ในแพ็กที่ URL เดิม (PackWebViewClient) โค้ดเกมจึงไม่ต้องเปลี่ยน
+// window.CR_PACK_INDEX (data/packs_index.js ที่ prepare_web.py สร้าง) = แพ็กที่ APK นี้คาดหวัง + เวอร์ชันล่าสุด
+let crPacksInstalled = null;   // {ชื่อ: pack.json} ของแพ็กที่ติดตั้งแล้ว — null = ยังไม่ได้ถามฝั่ง native
+const crPackIndex = () => window.CR_PACK_INDEX || [];
+const crPackPlugin = () => (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativePacks) || null;
+
+// strict = false: ยังไม่รู้ผล (เพิ่งเปิดแอป) ถือว่ามีไว้ก่อน เช่นตอนกู้เซสชันพอดแคสต์ที่ค้างไว้
+function crPackOk(name, strict = false) {
+  if (!window.CR_OFFLINE_APP || !crPackIndex().some((p) => p.name === name)) return true;
+  if (crPacksInstalled === null) return !strict;
+  return !!crPacksInstalled[name];
+}
+
+function crPackTitle(name) {
+  const p = crPackIndex().find((x) => x.name === name);
+  return p ? p.title : name;
+}
+
+// เปิดหน้าแพ็กพร้อมข้อความ แล้วคืน false เมื่อแพ็กที่ต้องใช้ยังไม่ได้ติดตั้ง
+function crPackRequire(name) {
+  if (crPackOk(name)) return true;
+  crPackOpen(`ต้องติดตั้งแพ็ก "${crPackTitle(name)}" ก่อนจึงจะเปิดส่วนนี้ได้`);
+  return false;
+}
+
+async function crPacksRefresh() {
+  const plugin = crPackPlugin();
+  if (!plugin) {
+    crPacksInstalled = crPacksInstalled || {};
+  } else {
+    try {
+      const res = await plugin.list();
+      crPacksInstalled = {};
+      for (const p of res.packs || []) crPacksInstalled[p.name] = p;
+      if (res.dir) $("packDir").textContent = res.dir.replace(/^.*?(Android\/data\/)/, "$1") + "/";
+    } catch (e) {
+      crPacksInstalled = crPacksInstalled || {};
+    }
+  }
+  crPacksSyncBadge();
+  if (!$("packPanel").hidden) crPackRenderList();
+  if (typeof fcLoadNewDeck === "function") fcLoadNewDeck();
+}
+
+function crPackState(p) {
+  const got = crPacksInstalled && crPacksInstalled[p.name];
+  if (!got) return { cls: "", label: "ยังไม่ได้ติดตั้ง" };
+  if (String(got.version || "") < String(p.version || "")) return { cls: "old", label: "มีรุ่นใหม่" };
+  return { cls: "done", label: "ติดตั้งแล้ว" };
+}
+
+function crPacksSyncBadge() {
+  const btn = $("packOpenBtn");
+  btn.hidden = !window.CR_OFFLINE_APP || !crPackIndex().length;
+  const todo = crPacksInstalled ? crPackIndex().filter((p) => crPackState(p).cls !== "done").length : 0;
+  $("packOpenBadge").hidden = !todo;
+  $("packOpenBadge").textContent = todo ? `ขาด ${todo}` : "";
+}
+
+function crPackRenderList() {
+  const list = $("packList");
+  list.innerHTML = "";
+  for (const p of crPackIndex()) {
+    const st = crPackState(p);
+    const got = crPacksInstalled && crPacksInstalled[p.name];
+    const row = document.createElement("div");
+    row.className = "ms-row pack-row " + st.cls;
+    const body = document.createElement("div");
+    body.className = "ms-row-body";
+    const name = document.createElement("div");
+    name.className = "ms-row-name";
+    name.textContent = p.title;
+    const desc = document.createElement("div");
+    desc.className = "ms-row-desc";
+    const ver = got ? (st.cls === "old" ? `รุ่น ${got.version} → ${p.version}` : `รุ่น ${got.version}`) : `รุ่น ${p.version}`;
+    desc.textContent = `${(p.bytes / 1e6).toFixed(0)} MB • ${p.files.toLocaleString()} ไฟล์ • ${ver}`;
+    body.append(name, desc);
+    const state = document.createElement("span");
+    state.className = "ms-row-state";
+    state.textContent = st.label;
+    row.append(body, state);
+    if (got) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "pack-del";
+      del.textContent = "ลบ";
+      del.setAttribute("aria-label", `ลบแพ็ก ${p.title}`);
+      del.addEventListener("click", () => crPackRemove(p));
+      row.append(del);
+    }
+    list.append(row);
+  }
+}
+
+function crPackOpen(message = "") {
+  $("packPanelMsg").textContent = message || "เนื้อหาขนาดใหญ่แยกเป็นแพ็ก ติดตั้งเฉพาะที่ต้องการได้";
+  crPackRenderList();
+  $("packPanel").hidden = false;
+  crPacksRefresh();
+}
+
+function crPackClose() {
+  if ($("packImportBtn").disabled) return; // กำลังนำเข้าอยู่ — ห้ามปิดกลางทาง
+  $("packPanel").hidden = true;
+}
+
+async function crPackImport() {
+  const plugin = crPackPlugin();
+  if (!plugin) return;
+  const btn = $("packImportBtn");
+  const prog = $("packProgress");
+  btn.disabled = true;
+  prog.hidden = false;
+  prog.textContent = "เลือกไฟล์แพ็ก (.zip)…";
+  let listener = null;
+  try {
+    listener = await plugin.addListener("packProgress", (e) => {
+      const pct = e.total ? Math.floor((e.done / e.total) * 100) : 0;
+      prog.textContent = `กำลังนำเข้า ${crPackTitle(e.name)} — ${e.done.toLocaleString()}/${(e.total || 0).toLocaleString()} ไฟล์ (${pct}%)`;
+    });
+    const info = await plugin.importPack();
+    prog.textContent = `✅ ติดตั้ง "${info.title || info.name}" รุ่น ${info.version} แล้ว`;
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    prog.textContent = /cancel/i.test(msg) ? "ยกเลิกแล้ว" : `❌ นำเข้าไม่สำเร็จ: ${msg}`;
+  } finally {
+    if (listener) listener.remove();
+    btn.disabled = false;
+    crPacksRefresh();
+  }
+}
+
+async function crPackRemove(p) {
+  const plugin = crPackPlugin();
+  if (!plugin || !confirm(`ลบแพ็ก "${p.title}" ออกจากเครื่อง?`)) return;
+  try {
+    await plugin.remove({ name: p.name });
+  } finally {
+    crPacksRefresh();
+  }
+}
+
+$("packOpenBtn").addEventListener("click", () => { sfx.click(); crPackOpen(); });
+$("packCloseBtn").addEventListener("click", crPackClose);
+$("packImportBtn").addEventListener("click", crPackImport);
+$("packPanel").addEventListener("click", (e) => { if (e.target === $("packPanel")) crPackClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("packPanel").hidden) crPackClose(); });
+if (window.CR_OFFLINE_APP) {
+  crPacksSyncBadge();
+  crPacksRefresh();
+  // ก๊อปแพ็กผ่าน USB ระหว่างที่แอปเปิดอยู่ — กลับมาที่แอปแล้วอ่านรายการใหม่
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) crPacksRefresh(); });
+}
 
 /* ---------- ช่วยตัวตรวจขีดของ HanziWriter กับขีดสั้น (จุด/ขีดเล็ก/ตะขอ) ---------- */
 // HanziWriter 3.7.3 quiz ตรวจขีดด้วย 5 เงื่อนไข และ "shapeFit" (Fréchet บนเส้นที่ถูก normalize ตามความยาวขีดเอง)

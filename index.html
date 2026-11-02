@@ -55,6 +55,8 @@
 
   <h1 class="title"><img class="title-logo" src="icons/app-logo.webp" alt="" width="192" height="192" decoding="async" draggable="false"> <span class="title-text">Chinese Rocket</span></h1>
   <p class="subtitle">เกมฝึกภาษาจีน — เลือกโหมดที่อยากเล่นได้เลย!</p>
+  <!-- แพ็กเนื้อหาเสริม (APK เท่านั้น) — js/03-helpers.js crPackOpen() -->
+  <button id="packOpenBtn" class="pack-open-btn" type="button" hidden>📦 แพ็กเนื้อหาเสริม <span id="packOpenBadge" class="pack-badge" hidden></span></button>
 
   <div class="cards" id="cards">
     <button class="card" data-mode="dict">
@@ -1258,6 +1260,21 @@
   </div>
 </div>
 
+<!-- แพ็กเนื้อหาเสริม (APK): สื่อขนาดใหญ่ที่ไม่ได้อยู่ใน APK — นำเข้าไฟล์ .zip / ดูสถานะ / ลบ -->
+<div id="packPanel" class="ms-overlay" role="dialog" aria-modal="true" aria-labelledby="packPanelTitle" hidden>
+  <div class="overlay-box ms-box">
+    <h2 id="packPanelTitle">📦 แพ็กเนื้อหาเสริม</h2>
+    <p class="ms-panel-sub" id="packPanelMsg"></p>
+    <div id="packList" class="ms-list"></div>
+    <p class="pack-progress" id="packProgress" hidden></p>
+    <p class="ms-panel-note">นำเข้าไฟล์ <b>ChineseRocket-pack-….zip</b> ทีละแพ็ก (ติดตั้งซ้ำ = อัปเดต) • หรือก๊อปโฟลเดอร์แพ็กผ่านสาย USB ไปที่ <span id="packDir">Android/data/com.chineserocket.offline/files/packs/</span> • ติดตั้งแล้วลบไฟล์ .zip ทิ้งได้</p>
+    <div class="ms-actions">
+      <button id="packCloseBtn" class="big-btn secondary" type="button">ปิด</button>
+      <button id="packImportBtn" class="big-btn" type="button">📥 นำเข้าแพ็ก (.zip)</button>
+    </div>
+  </div>
+</div>
+
 <!-- ยืนยันก่อนออกจากเกมเมื่อกดปุ่ม Back ของ Android (APK) — อยู่นอก .screen ทุกจอ -->
 <div id="backConfirm" class="ms-overlay" role="alertdialog" aria-modal="true" aria-labelledby="backConfirmTitle" hidden>
   <div class="overlay-box ms-box">
@@ -1272,6 +1289,7 @@
 
 <script src="data/vocab.js"></script>
 <script src="data/vocab_added.js"></script>
+<script src="data/th_alt.js"></script>
 <script src="data/vocab_extra.js"></script>
 <script src="data/sentences.js"></script>
 <script src="data/sentences_extra.js"></script>

@@ -99,6 +99,11 @@ async function readerLoadData() {
     throw new Error("บทอ่านชุดนี้เปิดได้ใน APK หรือหน้า localhost สำหรับทดสอบเท่านั้น");
   }
   if (readerDataPromise) return readerDataPromise;
+  // APK: บทอ่านทั้งชุด (reader_data/) อยู่ในแพ็กเนื้อหาเสริม "reader"
+  if (window.CR_OFFLINE_APP && crPacksInstalled === null) await crPacksRefresh();
+  if (!crPackRequire("reader")) {
+    throw new Error(`ต้องติดตั้งแพ็ก "${crPackTitle("reader")}" ก่อน — กด 📦 แพ็กเนื้อหาเสริม ที่หน้าหลัก`);
+  }
   readerDataPromise = fetch(readerAssetUrl("reader_runtime.json"), { cache: "no-store" })
     .then((response) => {
       if (!response.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${response.status})`);
