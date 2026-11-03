@@ -63,6 +63,11 @@
       <div class="card-icon" aria-hidden="true"><img src="icons/modes/dict.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
       <div class="card-title">พจนานุกรมจีน</div>
     </button>
+    <!-- ถามอาจารย์ AI (APK เท่านั้น — js/11-copy.js aiChatOpen(), ซ่อนด้วย AI_ON) -->
+    <button class="card" data-mode="aichat" hidden>
+      <div class="card-icon" aria-hidden="true"><img src="icons/modes/aichat.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
+      <div class="card-title">ถามอาจารย์ AI</div>
+    </button>
     <button class="card" data-mode="meteor">
       <div class="card-icon" aria-hidden="true"><img src="icons/modes/meteor.webp" alt="" width="256" height="256" decoding="async" draggable="false"></div>
       <div class="card-title">เกมยิงอุกกาบาต</div>
@@ -1196,9 +1201,9 @@
   </div>
 </div>
 
-<!-- AI PANEL — หน้าต่างเกือบเต็มจอของปุ่ม 🤖/📖 ในฟองคำศัพท์ (Cloudflare Worker → Gemini).
+<!-- AI PANEL — หน้าต่างเกือบเต็มจอของปุ่ม 🤖/📖 ในฟองคำศัพท์ (Cloudflare Worker → Gemini หรือ DeepSeek โดยตรง).
      อยู่นอกทุก .screen (เหมือน #imgLightbox) ปิดได้ด้วย ✕ / แตะพื้นหลัง / Escape / ปุ่ม Back ของ Android.
-     URL/token ของ Worker เก็บใน localStorage ของเครื่อง ไม่อยู่ใน repo -->
+     URL/token ของ Worker และ API key ของ DeepSeek เก็บใน localStorage ของเครื่อง ไม่อยู่ใน repo -->
 <div id="aiPanel" class="ai-panel" role="dialog" aria-modal="true" aria-labelledby="aiPanelTitle" hidden>
   <div class="ai-card">
     <div class="ai-head">
@@ -1207,22 +1212,61 @@
         <div id="aiPanelTitle" class="ai-title" lang="zh"></div>
         <div id="aiPanelSub" class="ai-sub"></div>
       </div>
+      <button id="aiHistoryBtn" class="ai-close" type="button" title="ประวัติการแชท" aria-label="ประวัติการแชท" aria-expanded="false" hidden>🕘</button>
+      <button id="aiPanelSettings" class="ai-close" type="button" title="ตั้งค่า AI / เปลี่ยนโมเดล" aria-label="ตั้งค่า AI">⚙️</button>
       <button id="aiPanelClose" class="ai-close" type="button" title="ปิด" aria-label="ปิด">✕</button>
     </div>
     <div id="aiPanelBody" class="ai-body">
       <form id="aiSetup" class="ai-setup" hidden>
-        <div class="ai-note">ตั้งค่า AI ครั้งแรก (เก็บไว้ในเครื่องนี้เท่านั้น)</div>
-        <input id="aiSetupUrl" type="url" placeholder="URL ของ Worker เช่น https://rocket-ai.xxx.workers.dev" autocomplete="off" spellcheck="false">
-        <input id="aiSetupToken" type="password" placeholder="APP_TOKEN" autocomplete="off" spellcheck="false">
+        <div class="ai-note">ตั้งค่า AI (เก็บไว้ในเครื่องนี้เท่านั้น)</div>
+        <div class="ai-prov" role="radiogroup" aria-label="ผู้ให้บริการ AI">
+          <button type="button" class="ai-prov-btn" data-prov="deepseek" role="radio">🐋 DeepSeek<small>ใช้ในจีนได้</small></button>
+          <button type="button" class="ai-prov-btn" data-prov="qwen" role="radio">🟣 Qwen<small>ใช้ในจีนได้</small></button>
+          <button type="button" class="ai-prov-btn" data-prov="gemini" role="radio">✨ Gemini<small>ผ่าน Worker</small></button>
+        </div>
+        <div id="aiSetupGemini" class="ai-setup-fields">
+          <input id="aiSetupUrl" type="url" placeholder="URL ของ Worker เช่น https://rocket-ai.xxx.workers.dev" autocomplete="off" spellcheck="false">
+          <input id="aiSetupToken" type="password" placeholder="APP_TOKEN (เว้นว่าง = ใช้ค่าเดิม)" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="aiSetupDeepseek" class="ai-setup-fields">
+          <input id="aiSetupDsKey" type="password" placeholder="DeepSeek API key (sk-…)" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="aiSetupQwen" class="ai-setup-fields">
+          <input id="aiSetupQwenKey" type="password" placeholder="Qwen API key จาก Model Studio (sk-…)" autocomplete="off" spellcheck="false">
+        </div>
         <button class="cpw-btn" type="submit">💾 บันทึก</button>
         <div id="aiSetupMsg" class="ai-note-warn"></div>
       </form>
+      <!-- ประวัติแชทของโหมดถามอาจารย์ AI (เก็บใน IndexedDB ของเครื่อง) -->
+      <div id="aiHistory" class="ai-history" hidden>
+        <div class="ai-hist-actions">
+          <button id="aiNewChatBtn" class="cpw-btn" type="button">➕ แชทใหม่</button>
+          <button id="aiClearChatsBtn" class="cpw-btn ai-hist-clear" type="button">🗑 ล้างทั้งหมด</button>
+        </div>
+        <input id="aiHistorySearch" type="search" placeholder="🔍 ค้นหาในแชทเก่า" autocomplete="off">
+        <div id="aiHistoryList" class="ai-hist-list"></div>
+      </div>
+      <div id="aiChatIntro" class="ai-chat-intro" hidden>
+        <p>ถามอะไรก็ได้เกี่ยวกับภาษาจีน — ความหมายคำ ไวยากรณ์ คำที่สับสนง่าย หรือจะพูดประโยคนี้ยังไง อาจารย์จะตอบพร้อมพินอิน วิธีใช้ และข้อควรระวัง</p>
+        <p>📷 ถ่ายรูปป้าย เมนู ฉลากสินค้า หรือหน้าหนังสือ แล้วอาจารย์จะอ่านตัวจีนในรูป แปล และสอนคำศัพท์ให้</p>
+        <div id="aiChatSuggest" class="ai-chat-suggest"></div>
+      </div>
       <div id="aiThread" class="ai-thread"></div>
     </div>
+    <!-- รูปที่แนบไว้ รอส่ง (โหมดถามอาจารย์ AI เท่านั้น) -->
+    <div id="aiPhotoBar" class="ai-photo-bar" hidden>
+      <img id="aiPhotoThumb" alt="รูปที่แนบ">
+      <span class="ai-photo-note">แนบรูปแล้ว — พิมพ์คำถามเพิ่มได้ หรือกด ส่ง เลย</span>
+      <button id="aiPhotoRemove" class="ai-close ai-photo-remove" type="button" title="เอารูปออก" aria-label="เอารูปออก">✕</button>
+    </div>
     <form id="aiAskForm" class="ai-ask" hidden>
+      <button id="aiCameraBtn" class="ai-icon-btn" type="button" title="ถ่ายรูป" aria-label="ถ่ายรูป" hidden>📷</button>
+      <button id="aiGalleryBtn" class="ai-icon-btn" type="button" title="เลือกรูปจากเครื่อง" aria-label="เลือกรูปจากเครื่อง" hidden>🖼️</button>
       <input id="aiAskInput" type="text" maxlength="300" placeholder="ถามต่อ เช่น ใช้ต่างจาก 已经 ยังไง?" autocomplete="off">
       <button class="cpw-btn" type="submit">ส่ง</button>
     </form>
+    <input id="aiCameraInput" type="file" accept="image/*" capture="environment" hidden>
+    <input id="aiGalleryInput" type="file" accept="image/*" hidden>
   </div>
 </div>
 

@@ -331,6 +331,9 @@ const AI_CACHE_LEGACY = "cr_ai_cache_v1";
 const AI_CACHE_MAX = 10000;
 const AI_DB = "cr_ai";
 const AI_STORE = "answers";
+const AI_CHAT_META = "chatMeta"; // {id, t, c, title, n, thumb, text}
+const AI_CHAT_MSGS = "chatMsgs"; // {id, msgs: [{q, a, img}]}
+const AI_CHAT_MAX = 300;         // เก็บแชทล่าสุดกี่บทสนทนา (เกินแล้วลบที่เก่าสุด)
 let aiDbPromise = null;
 const aiMemCache = new Map(); // สำรองเมื่อเปิด IndexedDB ไม่ได้ (โหมดส่วนตัวบางเบราว์เซอร์) — จำแค่ระหว่างเปิดแอป
 const AI_DEFAULT_Q = "อธิบายความหมายและการใช้คำนี้ในประโยคนี้";
@@ -360,18 +363,169 @@ const AI_CANNED_Q = new Map([
   [AI_DICT_TH_Q, "#dt"], [AI_DICT_ZH_Q, "#dz"], [AI_DICT_PY_Q, "#dp"],
 ]);
 
+// ผู้ให้บริการ: "gemini" = Cloudflare Worker → Gemini (workers.dev/Google เข้าไม่ได้ในจีนถ้าไม่มี VPN)
+// "deepseek" / "qwen" = เรียก API แบบ OpenAI ตรงจากแอป (ทั้งสองเจ้าเปิด CORS ให้แล้ว, ใช้ในจีนได้)
+// — key อยู่ใน localStorage ของเครื่องเท่านั้น
+// Qwen: key ของบัญชี Alibaba Cloud สากล (สิงคโปร์) ใช้ได้กับ dashscope-intl เท่านั้น ส่วนบัญชีจีนใช้ dashscope
+// — แอปลองทั้งสองที่แล้วจำที่ใช้ได้ไว้ใน cr_ai_qwen_region จึงไม่ต้องถามผู้ใช้
+const AI_COMPAT = {
+  deepseek: {
+    name: "DeepSeek",
+    keyLs: "cr_ai_ds_key",
+    // deepseek-flash = V4.1-Flash (ชื่อปัจจุบันในหน้าราคา พ.ย. 2026; ชื่อเก่า deepseek-chat ไม่อยู่ในเอกสารแล้ว)
+    // รับรูปได้ด้วย (image_url แบบ data URL, ≤ 384 token ต่อรูป)
+    model: "deepseek-flash",
+    maxOut: 8192,
+    urls: { main: "https://api.deepseek.com/chat/completions" },
+    topUp: "platform.deepseek.com",
+  },
+  qwen: {
+    name: "Qwen",
+    keyLs: "cr_ai_qwen_key",
+    model: "qwen-plus",
+    visionModel: "qwen-vl-plus", // qwen-plus อ่านรูปไม่ได้ — คำถามที่มีรูป (รวมรูปในบทสนทนาก่อนหน้า) ใช้รุ่น VL
+    maxOut: 8192,
+    urls: {
+      intl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+      cn: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    },
+    regionLs: "cr_ai_qwen_region",
+    topUp: "Alibaba Cloud Model Studio",
+  },
+};
+const AI_PROVIDER_LABEL = { gemini: "✨ Gemini", deepseek: "🐋 DeepSeek", qwen: "🟣 Qwen" };
+// คำสั่งระบบชุดเดียวกับใน Worker (tools/cloudflare_worker_ai.js) ให้คำตอบทุกเจ้าออกมาแนวเดียวกัน
+const AI_SYSTEM = `คุณคือครูสอนภาษาจีนให้คนไทย
+- ตอบเป็นภาษาไทย อ่านง่ายบนมือถือ
+- อธิบายความหมาย การใช้ และไวยากรณ์ ให้เหมาะกับระดับ HSK ที่ระบุ
+- ทุกครั้งที่เขียนตัวอักษรจีน ไม่ว่าคำเดียว วลี หรือทั้งประโยค ต้องมี pinyin พร้อมวรรณยุกต์กำกับในวงเล็บต่อท้ายทันที เช่น 学习 (xuéxí) ห้ามมีตัวจีนที่ไม่มี pinyin
+- ยกตัวอย่างประโยค 1–2 ประโยค พร้อม pinyin และคำแปลไทย
+- ถ้าคำมีหลายความหมาย/หลายเสียงอ่าน ให้ยึดความหมายตามประโยคที่ให้มา
+- ถ้าถูกขอให้อธิบายละเอียดหรือแยกทีละคำ ให้ตอบครบทุกข้อ ห้ามตัดจบกลางคัน
+- ห้ามใช้คำลงท้าย ครับ/ค่ะ
+- ไม่ต้องใช้หัวข้อใหญ่ ใช้ขีด - เป็นข้อ ๆ ได้`;
+
+// การ์ด "ถามอาจารย์ AI" บนหน้าแรก: คุยอิสระ ไม่ผูกกับคำ/ประโยคในเกม
+// (Worker ฝั่ง Gemini มีคำสั่งชุดเดียวกันใน tools/cloudflare_worker_ai.js — แก้ให้ตรงกันด้วย)
+const AI_CHAT_SYSTEM = `คุณคืออาจารย์สอนภาษาจีนที่ใจดี อธิบายเก่ง และแม่นยำ สอนผู้เรียนชาวไทย
+- ตอบเป็นภาษาไทย อ่านง่ายบนมือถือ
+- ทุกครั้งที่เขียนตัวอักษรจีน ไม่ว่าคำเดียวหรือทั้งประโยค ต้องมี pinyin พร้อมวรรณยุกต์กำกับในวงเล็บต่อท้ายทันที เช่น 学习 (xuéxí) ห้ามมีตัวจีนที่ไม่มี pinyin
+- ประโยคตัวอย่างทุกประโยคต้องมีคำแปลภาษาไทย
+- อธิบายความหมาย วิธีใช้ และโครงสร้างไวยากรณ์ พร้อมยกตัวอย่าง 2–3 ประโยค
+- ปิดท้ายทุกคำตอบด้วยหัวข้อ "ข้อควรระวัง" บอกจุดที่คนไทยมักใช้ผิด คำที่สับสนง่าย หรือความต่างด้านความสุภาพ/บริบท
+- ถ้าคำถามไม่เกี่ยวกับภาษาจีนหรือวัฒนธรรมจีน ให้ตอบสั้น ๆ แล้วชวนกลับมาเรื่องภาษาจีน
+- ห้ามใช้คำลงท้าย ครับ/ค่ะ
+- ไม่ต้องใช้หัวข้อใหญ่ ใช้ขีด - เป็นข้อ ๆ ได้`;
+// Worker เดิมที่ยังไม่รู้จัก chat: ส่งกฎย่อติดไปกับคำถาม ให้ Gemini ตอบแบบอาจารย์ด้วย
+const AI_CHAT_HINT = "[ตอบแบบอาจารย์สอนภาษาจีน: ตัวจีนทุกตัวต้องมี pinyin กำกับในวงเล็บ อธิบายวิธีใช้ ยกตัวอย่างพร้อมคำแปล และปิดท้ายด้วยข้อควรระวัง]\n";
+// ปุ่มอธิบายคำ/ประโยค: Worker ที่ยังไม่ได้ deploy คำสั่งระบบรุ่นใหม่ก็ยังใส่ pinyin ให้ทุกตัวจีน
+const AI_PINYIN_HINT = "[ตัวอักษรจีนทุกตัวในคำตอบต้องมี pinyin พร้อมวรรณยุกต์กำกับในวงเล็บต่อท้าย เช่น 学习 (xuéxí)]\n";
+const AI_CHAT_HISTORY = 6; // ส่งคำถาม-คำตอบย้อนหลังไปกี่คู่
+// ส่งรูปโดยไม่พิมพ์คำถาม (ปุ่ม 📷/🖼️ ในโหมดถามอาจารย์)
+const AI_PHOTO_Q = `อ่านตัวอักษรจีนทั้งหมดในรูปนี้ แล้วสอนแบบอาจารย์:
+1) ข้อความจีนที่เห็นในรูป เรียงตามตำแหน่ง พร้อม pinyin
+2) แปลเป็นภาษาไทยที่เป็นธรรมชาติ และบอกว่ารูปนี้น่าจะเป็นอะไร (ป้าย เมนู ฉลาก ฯลฯ)
+3) คำศัพท์สำคัญ พร้อม pinyin และความหมาย
+4) ไวยากรณ์หรือรูปประโยคที่น่าสนใจ
+5) ข้อควรระวัง
+ถ้าอ่านบางตัวไม่ชัดให้บอกตรง ๆ ห้ามเดา ถ้าในรูปไม่มีตัวจีน ให้บอกว่าเห็นอะไร แล้วสอนคำศัพท์ภาษาจีนของสิ่งที่เห็น`;
+const AI_PHOTO_MAX = 1280; // ย่อด้านยาวของรูปก่อนส่ง (อัปโหลดเร็ว, token น้อย, ตัวจีนเล็ก ๆ ยังอ่านออก)
+const AI_CHAT_SUGGEST = [
+  "了 กับ 过 ใช้ต่างกันยังไง",
+  "就 กับ 才 ต่างกันอย่างไร",
+  "把 ใช้ยังไง ยกตัวอย่างหน่อย",
+  "สอนประโยคสั่งอาหารในร้านอาหาร",
+  "พูดขอบคุณแบบสุภาพมีแบบไหนบ้าง",
+  "的 地 得 ต่างกันยังไง",
+];
+
+function aiLs(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } }
+
+function aiProvider() {
+  const p = aiLs("cr_ai_provider");
+  if (p === "gemini" || AI_COMPAT[p]) return p;
+  return aiLs("cr_ai_url") ? "gemini" : "deepseek"; // ผู้ที่ตั้ง Worker ไว้ก่อนมีตัวเลือกนี้ ใช้ Gemini ต่อ
+}
+
 function aiConfig() {
-  try {
-    const url = localStorage.getItem("cr_ai_url") || "";
-    const token = localStorage.getItem("cr_ai_token") || "";
-    return url && token ? { url, token } : null;
-  } catch { return null; }
+  const provider = aiProvider();
+  if (AI_COMPAT[provider]) {
+    const key = aiLs(AI_COMPAT[provider].keyLs);
+    return key ? { provider, key } : null;
+  }
+  const url = aiLs("cr_ai_url");
+  const token = aiLs("cr_ai_token");
+  return url && token ? { provider: "gemini", url, token } : null;
+}
+
+async function askCompat(cfg, payload) {
+  const p = AI_COMPAT[cfg.provider];
+  const ctx = [
+    payload.word && `คำ: ${payload.word}`,
+    payload.pinyin && `pinyin: ${payload.pinyin}`,
+    payload.thai && `คำแปลในแอป: ${payload.thai}`,
+    payload.sentence && `ประโยค: ${payload.sentence}`,
+    payload.level && `ระดับผู้เรียน: HSK ${payload.level}`,
+  ].filter(Boolean).join("\n");
+  // โหมดถามอาจารย์: ใช้คำสั่งระบบของอาจารย์ + ส่งบทสนทนาก่อนหน้าไปด้วย (ถามต่อแบบ "แล้วคำนี้ล่ะ" ได้)
+  // รูป (data URL) ส่งเป็น content แบบ array ตามรูปแบบ OpenAI — ใส่ได้เฉพาะข้อความของ user
+  const userContent = (text, img) => img
+    ? [{ type: "text", text }, { type: "image_url", image_url: { url: img } }]
+    : text;
+  const history = (payload.history || []).flatMap((h) => [
+    { role: "user", content: userContent(h.q, h.img) },
+    { role: "assistant", content: h.a },
+  ]);
+  const hasImage = !!payload.image || (payload.history || []).some((h) => h.img);
+  const body = JSON.stringify({
+    model: hasImage && p.visionModel ? p.visionModel : p.model,
+    temperature: 0.4,
+    max_tokens: p.maxOut,
+    messages: [
+      { role: "system", content: payload.chat ? AI_CHAT_SYSTEM : AI_SYSTEM },
+      ...history,
+      { role: "user", content: userContent(payload.chat ? payload.q : (ctx ? ctx + "\n\n" : "") + "คำถาม: " + payload.q, payload.image) },
+    ],
+  });
+  // ภูมิภาคที่เคยใช้ได้มาก่อน ไม่งั้นลองทุกที่ตามลำดับ (401 = key ไม่ใช่ของที่นี่ → ลองที่ถัดไป)
+  const saved = p.regionLs && aiLs(p.regionLs);
+  const regions = Object.keys(p.urls).sort((a, b) => (b === saved) - (a === saved));
+  let r, data, region;
+  for (region of regions) {
+    try {
+      r = await fetch(p.urls[region], {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.key },
+        body,
+      });
+    } catch {
+      throw new Error(`เชื่อมต่อ ${p.name} ไม่ได้ — ตรวจอินเทอร์เน็ต`);
+    }
+    data = await r.json().catch(() => ({}));
+    if (r.status !== 401) break;
+  }
+  if (r.status === 401) {
+    try { localStorage.removeItem(p.keyLs); } catch {}
+    throw new Error(`API key ของ ${p.name} ไม่ถูกต้อง — กด ⚙️ เพื่อใส่ใหม่`);
+  }
+  if (p.regionLs && r.ok) { try { localStorage.setItem(p.regionLs, region); } catch {} }
+  const msg = (data.error && data.error.message) || "";
+  if (r.status === 402 || /arrearage|insufficient.?balance/i.test(msg + " " + (data.error && data.error.code || ""))) {
+    throw new Error(`ยอดเงินใน ${p.name} หมด — เติมเงินที่ ${p.topUp}`);
+  }
+  if (!r.ok) throw new Error(msg || `${p.name} HTTP ${r.status}`);
+  const choice = (data.choices && data.choices[0]) || {};
+  const text = String((choice.message && choice.message.content) || "").trim();
+  return { answer: text || `(ไม่มีคำตอบ: ${choice.finish_reason || "unknown"})`, truncated: choice.finish_reason === "length" };
 }
 
 // คำถามสำเร็จรูปสองแบบยาวหลายร้อยตัวอักษร — ใช้รหัสสั้นในคีย์แทน (คำถามพิมพ์เองใช้ข้อความเต็ม)
+// AI_CACHE_VER: เปลี่ยนเมื่อรูปแบบคำตอบเปลี่ยน (2 = บังคับ pinyin กำกับทุกตัวจีน) ให้ถามใหม่แทนคำตอบเก่าในแคช
+// — คีย์รุ่นเก่าไม่ถูกใช้อีก และค่อย ๆ ถูกลบโดย aiCachePrune (ใช้นานที่สุดก่อน)
+const AI_CACHE_VER = 2;
 function aiCacheKey(word, sentence, q) {
   const qid = AI_CANNED_Q.get(q) || q;
-  return JSON.stringify([word || "", sentence || "", qid]);
+  return JSON.stringify([word || "", sentence || "", qid, AI_CACHE_VER]);
 }
 
 function aiReq(req) {
@@ -385,10 +539,19 @@ function aiDb() {
   if (aiDbPromise) return aiDbPromise;
   aiDbPromise = new Promise((resolve) => {
     let req;
-    try { req = indexedDB.open(AI_DB, 1); } catch { resolve(null); return; }
+    // v2 = เพิ่มประวัติแชทของโหมดถามอาจารย์ AI (คำตอบที่แคชไว้ในรุ่น 1 ยังอยู่ครบ)
+    try { req = indexedDB.open(AI_DB, 2); } catch { resolve(null); return; }
     req.onupgradeneeded = () => {
-      const store = req.result.createObjectStore(AI_STORE, { keyPath: "k" });
-      store.createIndex("t", "t");
+      const db = req.result;
+      if (!db.objectStoreNames.contains(AI_STORE)) {
+        db.createObjectStore(AI_STORE, { keyPath: "k" }).createIndex("t", "t");
+      }
+      // แยกเป็นสองที่: รายการ (ชื่อ/วันที่/รูปย่อ/ข้อความไว้ค้นหา — โหลดทั้งหมดได้เร็ว)
+      // กับเนื้อหาเต็ม (รูปขนาดที่ส่งให้ AI — โหลดเฉพาะแชทที่เปิด)
+      if (!db.objectStoreNames.contains(AI_CHAT_META)) {
+        db.createObjectStore(AI_CHAT_META, { keyPath: "id" }).createIndex("t", "t");
+      }
+      if (!db.objectStoreNames.contains(AI_CHAT_MSGS)) db.createObjectStore(AI_CHAT_MSGS, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
@@ -461,20 +624,30 @@ function aiCachePrune(db, extra) {
 }
 
 async function askAi(payload) {
-  const key = aiCacheKey(payload.word, payload.sentence, payload.q);
-  const hit = await aiCacheGet(key);
+  // โหมดถามอาจารย์: แคชเฉพาะคำถามแรกของบทสนทนา (คำถามต่อขึ้นกับคำตอบก่อนหน้า ใช้ซ้ำไม่ได้)
+  // คำถามที่มีรูปไม่แคช (คำถามเดียวกันใช้กับรูปคนละรูป)
+  const chat = !!payload.chat;
+  const key = chat ? (payload.image || (payload.history && payload.history.length) ? null : aiCacheKey("", "#chat", payload.q))
+    : aiCacheKey(payload.word, payload.sentence, payload.q);
+  const hit = key && await aiCacheGet(key);
   if (hit) return hit;
   const cfg = aiConfig();
   if (!cfg) throw new Error("ยังไม่ได้ตั้งค่า AI");
+  if (AI_COMPAT[cfg.provider]) {
+    const ds = await askCompat(cfg, payload);
+    if (ds.truncated) return ds.answer + "…\n\n✂️ คำตอบถูกตัด (ยาวเกินเพดานของโมเดล)";
+    if (key) aiCacheSet(key, ds.answer);
+    return ds.answer;
+  }
   let r;
   try {
     r = await fetch(cfg.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-App-Token": cfg.token },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, q: (chat ? AI_CHAT_HINT : AI_PINYIN_HINT) + payload.q }),
     });
   } catch {
-    throw new Error("เชื่อมต่อ AI ไม่ได้ — ตรวจอินเทอร์เน็ตหรือ URL ของ Worker");
+    throw new Error("เชื่อมต่อ AI ไม่ได้ — ตรวจอินเทอร์เน็ตหรือ URL ของ Worker (อยู่ในจีน: กด ⚙️ แล้วเลือก DeepSeek)");
   }
   const data = await r.json().catch(() => ({}));
   if (r.status === 401) {
@@ -482,6 +655,10 @@ async function askAi(payload) {
     throw new Error("APP_TOKEN ไม่ถูกต้อง — กด 🤖 อีกครั้งเพื่อตั้งค่าใหม่");
   }
   if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  // Worker รุ่นเก่าไม่รู้จักช่อง image: ตอบได้แต่ไม่เห็นรูป (Worker รุ่นใหม่ส่ง vision: true กลับมา)
+  if (payload.image && !data.vision) {
+    return data.answer + "\n\n⚠️ Worker ของ Gemini ยังเป็นรุ่นเก่าที่ไม่ส่งรูปต่อ — deploy tools/cloudflare_worker_ai.js ใหม่ หรือกด ⚙️ แล้วเลือก DeepSeek/Qwen";
+  }
   // Worker ส่ง truncated/finishReason มา: หยุดเพราะชน maxOutputTokens หรือเหตุอื่นที่ไม่ใช่จบปกติ
   // (SAFETY, RECITATION…) — ไม่แคช จะได้ถามใหม่ได้
   if (data.truncated || data.finishReason === "MAX_TOKENS") {
@@ -490,7 +667,7 @@ async function askAi(payload) {
   if (data.finishReason && data.finishReason !== "STOP") {
     return data.answer + `\n\n⚠️ AI หยุดตอบก่อนจบ (${data.finishReason})`;
   }
-  aiCacheSet(key, data.answer);
+  if (key) aiCacheSet(key, data.answer);
   return data.answer;
 }
 
@@ -570,16 +747,58 @@ function aiOpenWith(ctx) {
     level: ctx.level || "",
     firstQ: ctx.firstQ || "",
     pendingQ: null,
+    history: [], // โหมด chat: [{q, a}] ที่ตอบสำเร็จแล้ว
   };
+  const chat = ctx.mode === "chat";
   $("aiPanelKind").textContent = ctx.kind || (whole ? "📖 อธิบายทั้งประโยค" : "🤖 อธิบายคำนี้");
-  $("aiPanelTitle").textContent = whole ? aiCtx.shown : aiCtx.word;
+  $("aiPanelTitle").textContent = ctx.title || (whole ? aiCtx.shown : aiCtx.word);
   $("aiPanelSub").textContent = ctx.sub != null ? ctx.sub
     : whole ? "" : [aiCtx.py, aiCtx.th].filter(Boolean).join(" · ");
-  $("aiPanelTitle").classList.toggle("is-sentence", whole);
+  $("aiPanelTitle").classList.toggle("is-sentence", whole || chat);
   $("aiThread").replaceChildren();
+  $("aiChatIntro").hidden = !chat;
+  $("aiAskInput").placeholder = chat ? AI_CHAT_PLACEHOLDER : AI_ASK_PLACEHOLDER;
+  $("aiCameraBtn").hidden = !chat;
+  $("aiGalleryBtn").hidden = !chat;
+  $("aiHistoryBtn").hidden = !chat;
+  $("aiHistoryBtn").classList.remove("on");
+  $("aiHistoryBtn").setAttribute("aria-expanded", "false");
+  $("aiHistory").hidden = true;
+  $("aiThread").hidden = false;
+  aiPhotoSet(null);
   $("aiPanelBody").scrollTop = 0;
   $("aiPanel").hidden = false;
-  aiAsk(aiFirstQuestion());
+  if (!chat) { aiAsk(aiFirstQuestion()); return; }
+  // โหมดถามอาจารย์ไม่มีคำถามแรก: รอผู้ใช้พิมพ์หรือแตะคำถามตัวอย่าง
+  if (!aiConfig()) { aiShowSetup(null); return; }
+  $("aiSetup").hidden = true;
+  $("aiAskForm").hidden = false;
+}
+
+const AI_ASK_PLACEHOLDER = $("aiAskInput").placeholder;
+const AI_CHAT_PLACEHOLDER = "พิมพ์คำถามเกี่ยวกับภาษาจีน…";
+
+// การ์ด "ถามอาจารย์ AI" บนหน้าแรก (APK เท่านั้น)
+function aiChatOpen() {
+  aiOpenWith({
+    mode: "chat",
+    kind: "🧑‍🏫 ถามอาจารย์ AI",
+    title: "อาจารย์ภาษาจีน AI",
+    sub: "ทุกคำจีนมีพินอิน · อธิบายวิธีใช้ · ข้อควรระวัง",
+  });
+}
+
+AI_CHAT_SUGGEST.forEach((s) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "ai-chat-chip";
+  b.textContent = s;
+  b.addEventListener("click", () => { sfx.click(); aiAsk(s); });
+  $("aiChatSuggest").appendChild(b);
+});
+{
+  const card = document.querySelector('.card[data-mode="aichat"]');
+  if (card) card.hidden = !AI_ON;
 }
 
 // คำถามแรกตามโหมด: ทั้งประโยค / คำในประโยค / คำเดี่ยว
@@ -596,59 +815,406 @@ function aiPanelClose() {
   panel.hidden = true;
   aiCtx = null;
   $("aiThread").replaceChildren();
+  $("aiChatIntro").hidden = true;
   $("aiSetup").hidden = true;
+  $("aiHistory").hidden = true;
+  $("aiThread").hidden = false;
+  aiPhotoSet(null);
   $("aiAskInput").blur();
   return true;
 }
 
+// ----- รูปในโหมดถามอาจารย์ AI: ถ่าย/เลือก → ย่อในเครื่อง → แนบรอส่ง -----
+let aiPhoto = null; // data URL (JPEG) ของรูปที่แนบไว้ รอกด ส่ง
+
+function aiPhotoSet(url) {
+  aiPhoto = url;
+  $("aiPhotoBar").hidden = !url;
+  if (url) $("aiPhotoThumb").src = url;
+  else $("aiPhotoThumb").removeAttribute("src");
+  if (aiCtx && aiCtx.mode === "chat") {
+    $("aiAskInput").placeholder = url ? "ถามเกี่ยวกับรูปนี้ (เว้นว่างได้)" : AI_CHAT_PLACEHOLDER;
+  }
+}
+
+// ย่อด้านยาวเหลือ AI_PHOTO_MAX แล้วเข้ารหัส JPEG — รูปจากกล้องมือถือ 4–12 MB จะเหลือราว 150–400 KB
+// (createImageBitmap หมุนรูปตาม EXIF ให้ด้วย: รูปถ่ายแนวตั้งไม่กลายเป็นแนวนอน)
+async function aiLoadPhoto(file) {
+  let src;
+  try {
+    src = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    src = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("เปิดรูปนี้ไม่ได้"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w = src.width || src.naturalWidth;
+  const h = src.height || src.naturalHeight;
+  const k = Math.min(1, AI_PHOTO_MAX / Math.max(w, h));
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.round(w * k));
+  cv.height = Math.max(1, Math.round(h * k));
+  const g = cv.getContext("2d");
+  g.fillStyle = "#fff"; // PNG โปร่งใส → พื้นขาว (JPEG ไม่มีช่องโปร่งใส)
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.drawImage(src, 0, 0, cv.width, cv.height);
+  if (src.close) src.close();
+  else if (src.src && src.src.startsWith("blob:")) URL.revokeObjectURL(src.src);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+
+async function aiPhotoPicked(input) {
+  const file = input.files && input.files[0];
+  input.value = ""; // เลือกรูปเดิมซ้ำได้
+  if (!file || !aiCtx) return;
+  const btns = [$("aiCameraBtn"), $("aiGalleryBtn")];
+  btns.forEach((b) => { b.disabled = true; });
+  try {
+    aiPhotoSet(await aiLoadPhoto(file));
+  } catch (e) {
+    aiPhotoSet(null);
+    $("aiAskInput").placeholder = "⚠️ " + (e.message || "เปิดรูปไม่ได้");
+  } finally {
+    btns.forEach((b) => { b.disabled = false; });
+  }
+}
+
+let aiSetupProv = "deepseek"; // ตัวที่เลือกอยู่ในฟอร์มตั้งค่า (บันทึกจริงตอนกด 💾)
+
+function aiSetupPick(prov) {
+  aiSetupProv = prov;
+  document.querySelectorAll("#aiSetup .ai-prov-btn").forEach((b) => {
+    const on = b.dataset.prov === prov;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on ? "true" : "false");
+  });
+  $("aiSetupGemini").hidden = prov !== "gemini";
+  $("aiSetupDeepseek").hidden = prov !== "deepseek";
+  $("aiSetupQwen").hidden = prov !== "qwen";
+  $("aiSetupMsg").textContent = "";
+}
+
+// question = คำถามที่จะถามต่อหลังบันทึก (null = เปิดจากปุ่ม ⚙️ ไม่ถามอะไรใหม่)
 function aiShowSetup(question) {
   aiCtx.pendingQ = question;
   $("aiSetup").hidden = false;
   $("aiAskForm").hidden = true;
-  $("aiSetupMsg").textContent = "";
-  try { $("aiSetupUrl").value = localStorage.getItem("cr_ai_url") || ""; } catch {}
+  $("aiPhotoBar").hidden = true;
+  $("aiHistory").hidden = true;
+  $("aiThread").hidden = false;
+  $("aiHistoryBtn").classList.remove("on");
+  $("aiSetupUrl").value = aiLs("cr_ai_url");
   $("aiSetupToken").value = "";
+  $("aiSetupDsKey").value = "";
+  $("aiSetupQwenKey").value = "";
+  aiSetupPick(aiProvider());
+  $("aiPanelBody").scrollTop = 0;
 }
 
-async function aiAsk(question) {
+// image = data URL ของรูปที่แนบ (โหมดถามอาจารย์เท่านั้น)
+async function aiAsk(question, image) {
   const ctx = aiCtx;
   if (!ctx) return;
-  if (!aiConfig()) { aiShowSetup(question); return; }
+  if (!aiConfig()) { aiShowSetup(question); return; } // รูปที่แนบยังค้างอยู่ใน aiPhoto ส่งใหม่หลังตั้งค่าได้
   $("aiSetup").hidden = true;
   $("aiAskForm").hidden = false;
   const whole = ctx.mode === "sentence";
-  const entry = document.createElement("div");
-  entry.className = "ai-entry";
-  if (!AI_CANNED_Q.has(question)) {
-    const q = document.createElement("div");
-    q.className = "ai-q";
-    q.textContent = "❓ " + question;
-    entry.appendChild(q);
-  }
-  const ans = document.createElement("div");
-  ans.className = "ai-answer thinking";
-  ans.textContent = "🤖 กำลังคิด…";
-  entry.appendChild(ans);
-  $("aiThread").appendChild(entry);
-  const body = $("aiPanelBody");
-  body.scrollTop = entry.offsetTop - 8; // เลื่อนให้คำถามใหม่อยู่บนสุด อ่านคำตอบจากต้นได้เลย
+  const chat = ctx.mode === "chat";
+  if (chat) $("aiChatIntro").hidden = true;
+  const { entry, ans } = aiMakeEntry(question, image);
+  ans.classList.add("thinking");
+  ans.textContent = AI_PROVIDER_LABEL[aiProvider()] + " กำลังคิด…";
+  $("aiPanelBody").scrollTop = entry.offsetTop - 8; // เลื่อนให้คำถามใหม่อยู่บนสุด อ่านคำตอบจากต้นได้เลย
   let text;
+  let ok = false;
   try {
-    text = await askAi({
-      q: question,
-      word: whole ? "" : ctx.word,
-      pinyin: whole ? "" : ctx.py,
-      thai: whole ? "" : ctx.th,
-      sentence: ctx.sentence,
-      level: ctx.level,
-    });
+    text = await askAi(chat
+      ? { q: question, chat: true, image: image || "", history: aiChatHistory(ctx) }
+      : {
+        q: question,
+        word: whole ? "" : ctx.word,
+        pinyin: whole ? "" : ctx.py,
+        thai: whole ? "" : ctx.th,
+        sentence: ctx.sentence,
+        level: ctx.level,
+      });
+    ok = true;
   } catch (e) {
     text = "⚠️ " + e.message;
     ans.classList.add("err");
   }
+  if (chat && ok) {
+    ctx.history.push({ q: question, a: text, img: image || "" });
+    aiChatSave(ctx); // บันทึกลงประวัติทุกครั้งที่ตอบสำเร็จ (คำตอบที่ error ไม่บันทึก)
+  }
   if (ctx !== aiCtx) return; // ปิดหน้าต่างหรือเปิดคำอื่นไปแล้ว (คำถามหลายข้อพร้อมกันได้ แต่ละข้อมีช่องคำตอบของตัวเอง)
   ans.classList.remove("thinking");
   aiRenderAnswer(ans, text);
+}
+
+// กล่องคำถาม (+รูป) และช่องคำตอบหนึ่งชุดต่อท้าย #aiThread — ใช้ทั้งตอนถามใหม่และตอนเปิดแชทเก่า
+function aiMakeEntry(question, image) {
+  const entry = document.createElement("div");
+  entry.className = "ai-entry";
+  if (image || !AI_CANNED_Q.has(question)) {
+    const q = document.createElement("div");
+    q.className = "ai-q";
+    q.textContent = question === AI_PHOTO_Q ? "📷 อ่านและอธิบายรูปนี้" : "❓ " + question;
+    if (image) {
+      const img = document.createElement("img");
+      img.className = "ai-q-photo";
+      img.src = image;
+      img.alt = "รูปที่ส่ง";
+      img.addEventListener("click", () => crOpenImageLightbox(image, "รูปที่ส่ง"));
+      q.appendChild(img);
+    }
+    entry.appendChild(q);
+  }
+  const ans = document.createElement("div");
+  ans.className = "ai-answer";
+  entry.appendChild(ans);
+  $("aiThread").appendChild(entry);
+  return { entry, ans };
+}
+
+// ----- ประวัติแชทของโหมดถามอาจารย์ AI (IndexedDB: AI_CHAT_META + AI_CHAT_MSGS) -----
+function aiChatTitle(msgs) {
+  const first = msgs.find((m) => m.q !== AI_PHOTO_Q);
+  const t = first ? first.q : "📷 อ่านและอธิบายรูป";
+  return t.length > 120 ? t.slice(0, 120) + "…" : t;
+}
+
+// รูปย่อสี่เหลี่ยม 120 px สำหรับรายการประวัติ (รูปเต็มอยู่ใน AI_CHAT_MSGS)
+async function aiThumb(url) {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const s = Math.min(img.naturalWidth, img.naturalHeight);
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 120;
+  cv.getContext("2d").drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 120, 120);
+  return cv.toDataURL("image/jpeg", 0.7);
+}
+
+function aiTxDone(tx) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+async function aiChatSave(ctx) {
+  const db = await aiDb();
+  if (!db || !db.objectStoreNames.contains(AI_CHAT_META) || !ctx.history.length) return;
+  if (!ctx.chatId) {
+    ctx.chatId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    ctx.chatCreated = Date.now();
+  }
+  if (!ctx.chatThumb) {
+    const withImg = ctx.history.find((m) => m.img);
+    if (withImg) { try { ctx.chatThumb = await aiThumb(withImg.img); } catch {} }
+  }
+  const msgs = ctx.history.slice();
+  const meta = {
+    id: ctx.chatId,
+    t: Date.now(),
+    c: ctx.chatCreated || Date.now(),
+    title: aiChatTitle(msgs),
+    n: msgs.length,
+    thumb: ctx.chatThumb || "",
+    text: msgs.map((m) => (m.q === AI_PHOTO_Q ? "" : m.q) + "\n" + m.a).join("\n").slice(0, 8000), // ไว้ค้นหา
+  };
+  try {
+    const tx = db.transaction([AI_CHAT_META, AI_CHAT_MSGS], "readwrite");
+    tx.objectStore(AI_CHAT_META).put(meta);
+    tx.objectStore(AI_CHAT_MSGS).put({ id: ctx.chatId, msgs });
+    await aiTxDone(tx);
+    await aiChatPrune(db);
+  } catch {}
+  if (!$("aiHistory").hidden) aiHistoryRender(); // รายการเปิดอยู่: อัปเดตทันที
+}
+
+// เกิน AI_CHAT_MAX: ลบแชทที่ไม่ได้คุยนานที่สุด
+async function aiChatPrune(db) {
+  const tx = db.transaction([AI_CHAT_META, AI_CHAT_MSGS], "readwrite");
+  const meta = tx.objectStore(AI_CHAT_META);
+  let extra = (await aiReq(meta.count())) - AI_CHAT_MAX;
+  if (extra <= 0) return;
+  const req = meta.index("t").openCursor();
+  req.onsuccess = () => {
+    const cur = req.result;
+    if (!cur || extra <= 0) return;
+    tx.objectStore(AI_CHAT_MSGS).delete(cur.value.id);
+    cur.delete();
+    extra--;
+    cur.continue();
+  };
+  await aiTxDone(tx);
+}
+
+async function aiChatList() {
+  const db = await aiDb();
+  if (!db || !db.objectStoreNames.contains(AI_CHAT_META)) return null;
+  try {
+    const all = await aiReq(db.transaction(AI_CHAT_META).objectStore(AI_CHAT_META).getAll());
+    return all.sort((a, b) => b.t - a.t);
+  } catch { return []; }
+}
+
+async function aiChatDelete(id) {
+  const db = await aiDb();
+  if (!db) return;
+  const tx = db.transaction([AI_CHAT_META, AI_CHAT_MSGS], "readwrite");
+  if (id) {
+    tx.objectStore(AI_CHAT_META).delete(id);
+    tx.objectStore(AI_CHAT_MSGS).delete(id);
+  } else {
+    tx.objectStore(AI_CHAT_META).clear();
+    tx.objectStore(AI_CHAT_MSGS).clear();
+  }
+  await aiTxDone(tx).catch(() => {});
+}
+
+let aiHistoryItems = [];
+
+// เปิด/ปิดหน้ารายการประวัติ (แทนที่บทสนทนาในหน้าต่างเดิม ไม่ใช่หน้าต่างใหม่)
+async function aiHistoryShow(on) {
+  if (!aiCtx || aiCtx.mode !== "chat") return;
+  $("aiHistory").hidden = !on;
+  $("aiThread").hidden = on;
+  $("aiHistoryBtn").setAttribute("aria-expanded", on ? "true" : "false");
+  $("aiHistoryBtn").classList.toggle("on", on);
+  if (on) {
+    $("aiSetup").hidden = true;
+    $("aiChatIntro").hidden = true;
+    $("aiAskForm").hidden = true;
+    $("aiPhotoBar").hidden = true;
+    $("aiHistorySearch").value = "";
+    $("aiPanelBody").scrollTop = 0;
+    $("aiHistoryList").replaceChildren();
+    const list = await aiChatList();
+    if (!aiCtx || $("aiHistory").hidden) return;
+    aiHistoryItems = list || [];
+    aiHistoryRender(list === null ? "บันทึกประวัติไม่ได้ในเบราว์เซอร์นี้" : "");
+  } else {
+    const empty = !$("aiThread").children.length;
+    $("aiChatIntro").hidden = !empty;
+    if (aiConfig()) {
+      $("aiAskForm").hidden = false;
+      $("aiPhotoBar").hidden = !aiPhoto;
+    } else {
+      aiShowSetup(null);
+    }
+  }
+}
+
+async function aiHistoryRender(note) {
+  if (note == null) aiHistoryItems = (await aiChatList()) || [];
+  const box = $("aiHistoryList");
+  const q = $("aiHistorySearch").value.trim().toLowerCase();
+  const items = q ? aiHistoryItems.filter((m) => (m.title + "\n" + m.text).toLowerCase().includes(q)) : aiHistoryItems;
+  box.replaceChildren();
+  $("aiClearChatsBtn").disabled = !aiHistoryItems.length;
+  if (!items.length) {
+    const p = document.createElement("div");
+    p.className = "ai-hist-empty";
+    p.textContent = note || (q ? "ไม่พบแชทที่มีคำนี้" : "ยังไม่มีประวัติการแชท — ถามอาจารย์ได้เลย แชทจะถูกบันทึกให้อัตโนมัติ");
+    box.appendChild(p);
+    return;
+  }
+  const fmt = { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" };
+  for (const m of items) {
+    const row = document.createElement("div");
+    row.className = "ai-hist-item" + (aiCtx && aiCtx.chatId === m.id ? " current" : "");
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "ai-hist-open";
+    let pic;
+    if (m.thumb) {
+      pic = document.createElement("img");
+      pic.className = "ai-hist-thumb";
+      pic.src = m.thumb;
+      pic.alt = "";
+    } else {
+      pic = document.createElement("span");
+      pic.className = "ai-hist-icon";
+      pic.textContent = "💬";
+    }
+    const txt = document.createElement("span");
+    txt.className = "ai-hist-text";
+    const title = document.createElement("span");
+    title.className = "ai-hist-title";
+    title.textContent = m.title;
+    const meta = document.createElement("span");
+    meta.className = "ai-hist-meta";
+    meta.textContent = new Date(m.t).toLocaleString("th-TH", fmt) + " · " + m.n + " คำถาม";
+    txt.append(title, meta);
+    open.append(pic, txt);
+    open.addEventListener("click", () => { sfx.click(); aiChatResume(m); });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "ai-close ai-hist-del";
+    del.textContent = "🗑";
+    del.title = "ลบแชทนี้";
+    del.setAttribute("aria-label", "ลบแชทนี้");
+    del.addEventListener("click", async () => {
+      sfx.click();
+      if (!confirm(`ลบแชท "${m.title.slice(0, 40)}" ?`)) return;
+      await aiChatDelete(m.id);
+      if (aiCtx && aiCtx.chatId === m.id) aiChatResetCurrent();
+      aiHistoryRender();
+    });
+    row.append(open, del);
+    box.appendChild(row);
+  }
+}
+
+// Back / Escape ระหว่างดูรายการประวัติ: กลับไปที่แชท (ไม่ปิดหน้าต่าง AI)
+function aiHistoryBack() {
+  if ($("aiPanel").hidden || $("aiHistory").hidden) return false;
+  aiHistoryShow(false);
+  return true;
+}
+
+// แชทที่เปิดอยู่ถูกลบ: เริ่มบทสนทนาใหม่ในหน้าต่างเดิม
+function aiChatResetCurrent() {
+  aiCtx.chatId = null;
+  aiCtx.chatCreated = 0;
+  aiCtx.chatThumb = "";
+  aiCtx.history = [];
+  $("aiThread").replaceChildren();
+}
+
+// เปิดแชทเก่า: แสดงคำถาม/คำตอบเดิมทั้งหมด แล้วถามต่อได้โดย AI ยังเห็นบริบทเดิม (aiCtx.history)
+async function aiChatResume(meta) {
+  const db = await aiDb();
+  if (!db) return;
+  let rec;
+  try { rec = await aiReq(db.transaction(AI_CHAT_MSGS).objectStore(AI_CHAT_MSGS).get(meta.id)); } catch {}
+  if (!rec || !rec.msgs || !aiCtx) return;
+  aiChatOpen();
+  Object.assign(aiCtx, { chatId: meta.id, chatCreated: meta.c, chatThumb: meta.thumb, history: rec.msgs.slice() });
+  $("aiChatIntro").hidden = true;
+  let last = null;
+  for (const m of rec.msgs) {
+    const { entry, ans } = aiMakeEntry(m.q, m.img);
+    aiRenderAnswer(ans, m.a);
+    last = entry;
+  }
+  // เลื่อนไปคำถามล่าสุด (อ่านต่อจากที่คุยค้างไว้)
+  requestAnimationFrame(() => { if (last) $("aiPanelBody").scrollTop = last.offsetTop - 8; });
+}
+
+// บทสนทนาที่ส่งไปกับคำถามต่อ: แนบรูปเฉพาะรูปล่าสุด (ถามต่อเรื่องรูปเดิมได้ แต่ไม่ส่งรูปเก่าทุกรูปซ้ำทุกครั้ง)
+function aiChatHistory(ctx) {
+  const hist = ctx.history.slice(-AI_CHAT_HISTORY);
+  let lastImg = -1;
+  hist.forEach((h, i) => { if (h.img) lastImg = i; });
+  return hist.map((h, i) => (i === lastImg ? h : { q: h.q, a: h.a }));
 }
 
 $("cpWordAiBtn").hidden = !AI_ON;
@@ -671,30 +1237,94 @@ $("aiPanel").addEventListener("click", (e) => {
   if (sel && !sel.isCollapsed) return; // กำลังเลือกข้อความอยู่
   aiPanelClose();
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aiPanelClose()) e.preventDefault(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !e.defaultPrevented && (aiHistoryBack() || aiPanelClose())) e.preventDefault();
+});
+document.querySelectorAll("#aiSetup .ai-prov-btn").forEach((b) => {
+  b.addEventListener("click", () => { sfx.click(); aiSetupPick(b.dataset.prov); });
+});
+$("aiPanelSettings").addEventListener("click", () => {
+  sfx.click();
+  if (!aiCtx) return;
+  if ($("aiSetup").hidden) aiShowSetup(null);
+  else { $("aiSetup").hidden = true; $("aiAskForm").hidden = false; $("aiPhotoBar").hidden = !aiPhoto; }
+});
 $("aiSetup").addEventListener("submit", (e) => {
   e.preventDefault();
-  const url = $("aiSetupUrl").value.trim();
-  const token = $("aiSetupToken").value.trim();
-  if (!/^https:\/\//i.test(url) || !token) {
-    $("aiSetupMsg").textContent = "⚠️ ใส่ URL ที่ขึ้นต้นด้วย https:// และ APP_TOKEN ให้ครบ";
+  // ช่อง key/token เว้นว่างได้เมื่อเคยบันทึกไว้แล้ว (สลับผู้ให้บริการไปมาโดยไม่ต้องพิมพ์ใหม่)
+  if (AI_COMPAT[aiSetupProv]) {
+    const p = AI_COMPAT[aiSetupProv];
+    const typed = $(aiSetupProv === "qwen" ? "aiSetupQwenKey" : "aiSetupDsKey").value.trim();
+    const key = typed || aiLs(p.keyLs);
+    if (!/^sk-\S{8,}$/.test(key)) {
+      $("aiSetupMsg").textContent = `⚠️ ใส่ API key ของ ${p.name} (ขึ้นต้นด้วย sk-)`;
+      return;
+    }
+    try {
+      localStorage.setItem(p.keyLs, key);
+      if (typed && p.regionLs) localStorage.removeItem(p.regionLs); // key ใหม่ อาจเป็นบัญชีคนละภูมิภาค
+    } catch {}
+  } else {
+    const url = $("aiSetupUrl").value.trim();
+    const token = $("aiSetupToken").value.trim() || aiLs("cr_ai_token");
+    if (!/^https:\/\//i.test(url) || !token) {
+      $("aiSetupMsg").textContent = "⚠️ ใส่ URL ที่ขึ้นต้นด้วย https:// และ APP_TOKEN ให้ครบ";
+      return;
+    }
+    try {
+      localStorage.setItem("cr_ai_url", url);
+      localStorage.setItem("cr_ai_token", token);
+    } catch {}
+  }
+  try { localStorage.setItem("cr_ai_provider", aiSetupProv); } catch {}
+  if (!aiCtx) return;
+  const q = aiCtx.pendingQ;
+  $("aiSetup").hidden = true;
+  $("aiAskForm").hidden = false;
+  $("aiPhotoBar").hidden = !aiPhoto;
+  // ส่งรูปไปตอนยังไม่ได้ตั้งค่า: รูปยังแนบรออยู่ ส่งพร้อมคำถามเดิมเลย
+  if (q && aiPhoto && aiCtx.mode === "chat") {
+    const image = aiPhoto;
+    aiPhotoSet(null);
+    aiAsk(q, image);
     return;
   }
-  try {
-    localStorage.setItem("cr_ai_url", url);
-    localStorage.setItem("cr_ai_token", token);
-  } catch {}
-  if (aiCtx) aiAsk(aiCtx.pendingQ || aiFirstQuestion());
+  // เปิดจาก ⚙️ ระหว่างมีคำตอบอยู่แล้ว: ไม่ถามซ้ำ / ยังไม่มีคำตอบเลย: ถามคำถามแรก
+  // (โหมดถามอาจารย์ไม่มีคำถามแรก — รอผู้ใช้พิมพ์)
+  if (q) aiAsk(q);
+  else if (aiCtx.mode !== "chat" && !$("aiThread").children.length) aiAsk(aiFirstQuestion());
 });
 $("aiAskForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const inp = $("aiAskInput");
   const q = inp.value.trim();
-  if (!q) return;
+  const image = aiPhoto;
+  if (!q && !image) return;
   inp.value = "";
   inp.blur(); // หุบคีย์บอร์ดมือถือ ให้เห็นคำตอบเต็มจอ
-  aiAsk(q);
+  if (image && aiConfig()) aiPhotoSet(null); // ยังไม่ได้ตั้งค่า AI: เก็บรูปไว้ส่งหลังบันทึก
+  aiAsk(q || AI_PHOTO_Q, image);
 });
+$("aiHistoryBtn").addEventListener("click", () => { sfx.click(); aiHistoryShow($("aiHistory").hidden); });
+$("aiNewChatBtn").addEventListener("click", () => { sfx.click(); aiChatOpen(); });
+$("aiClearChatsBtn").addEventListener("click", async () => {
+  sfx.click();
+  if (!aiHistoryItems.length || !confirm(`ลบประวัติแชททั้งหมด ${aiHistoryItems.length} รายการ? ลบแล้วกู้คืนไม่ได้`)) return;
+  await aiChatDelete(null);
+  if (aiCtx && aiCtx.chatId) aiChatResetCurrent();
+  aiHistoryRender();
+});
+let aiHistorySearchTimer = 0;
+$("aiHistorySearch").addEventListener("input", () => {
+  clearTimeout(aiHistorySearchTimer);
+  aiHistorySearchTimer = setTimeout(() => aiHistoryRender(""), 200); // กรองจากรายการที่โหลดไว้แล้ว
+});
+$("aiCameraBtn").addEventListener("click", () => { sfx.click(); $("aiCameraInput").click(); });
+$("aiGalleryBtn").addEventListener("click", () => { sfx.click(); $("aiGalleryInput").click(); });
+$("aiCameraInput").addEventListener("change", (e) => aiPhotoPicked(e.target));
+$("aiGalleryInput").addEventListener("change", (e) => aiPhotoPicked(e.target));
+$("aiPhotoRemove").addEventListener("click", () => { sfx.click(); aiPhotoSet(null); });
+$("aiPhotoThumb").addEventListener("click", () => { if (aiPhoto) crOpenImageLightbox(aiPhoto, "รูปที่แนบ"); });
 // ปิดป๊อปอัปเมื่อแตะที่อื่น เลื่อนจอ หรือกลับไปโหมดอื่น (ป๊อปอัปเป็น position:fixed จึงไม่ตามจอ)
 document.addEventListener("pointerdown", (e) => {
   const pop = $("cpWordPopup");

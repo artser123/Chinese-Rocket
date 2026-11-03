@@ -4255,6 +4255,7 @@ button.fill-blank {
 .card[data-mode="trace"]         { --c: 160, 255, 90; }
 .card[data-mode="flashcards"]    { --c: 255, 170, 60; }
 .card[data-mode="flashview"]     { --c: 255, 110, 150; }
+.card[data-mode="aichat"]        { --c: 160, 130, 255; }
 .card {
   background:
     linear-gradient(165deg, rgba(var(--c), .22) 0%, rgba(var(--c), .05) 38%, transparent 60%),
@@ -5851,6 +5852,12 @@ button.fill-blank {
   cursor: pointer;
 }
 .ai-close:active { transform: scale(.92); }
+.ai-close[hidden] { display: none; }
+.ai-close.on { border-color: #ffd76a; background: #2a2a4a; }
+@media (max-width: 420px) {
+  .ai-head { gap: 6px; }
+  .ai-head .ai-close { width: 40px; height: 40px; font-size: 16px; }
+}
 .ai-body {
   position: relative; /* offsetTop ของ .ai-entry อ้างอิงกล่องนี้ (เลื่อนคำถามใหม่ขึ้นบนสุด) */
   flex: 1;
@@ -5886,6 +5893,43 @@ button.fill-blank {
 @keyframes aiThinking { 50% { opacity: .45; } }
 .ai-setup[hidden], .ai-ask[hidden] { display: none; }
 .ai-setup { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.ai-setup-fields { display: flex; flex-direction: column; gap: 8px; }
+.ai-setup-fields[hidden] { display: none; }
+.ai-prov { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ai-prov-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  border: 1.5px solid #496482;
+  background: #131a3d;
+  color: #c8d4ff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-prov-btn small { font-size: 12px; font-weight: 400; opacity: .75; }
+.ai-prov-btn.on { border-color: #ffd76a; background: #2a2a4a; color: #fff; box-shadow: 0 0 0 1px #ffd76a inset; }
+/* โหมดถามอาจารย์ AI (การ์ด aichat บนหน้าแรก): คำแนะนำ + ปุ่มคำถามตัวอย่าง ก่อนเริ่มคุย */
+.ai-chat-intro[hidden] { display: none; }
+.ai-chat-intro { margin-bottom: 14px; color: #c8d4ff; font-size: clamp(14px, 3.8vw, 16px); line-height: 1.6; }
+.ai-chat-intro p { margin: 0 0 12px; }
+.ai-chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-chat-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(160, 130, 255, .55);
+  background: rgba(160, 130, 255, .14);
+  color: #e8ecff;
+  font: inherit;
+  font-size: clamp(13px, 3.6vw, 15px);
+  text-align: left;
+  cursor: pointer;
+}
+.ai-chat-chip:active { transform: scale(.96); }
 .ai-note { color: #ffd76a; font-size: 14px; }
 .ai-note-warn { color: #ff9a9a; font-size: 13px; }
 .ai-note-warn:empty { display: none; }
@@ -5897,6 +5941,87 @@ button.fill-blank {
   background: rgba(10, 14, 34, .6);
 }
 .ai-ask .cpw-btn { flex: 0 0 auto; min-width: 72px; padding: 8px 14px; }
+/* ถ่ายรูป/เลือกรูปในโหมดถามอาจารย์ AI */
+.ai-icon-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(160, 130, 255, .55);
+  background: rgba(160, 130, 255, .14);
+  font-size: 20px;
+  cursor: pointer;
+}
+.ai-icon-btn[hidden] { display: none; }
+.ai-icon-btn:active { transform: scale(.92); }
+.ai-icon-btn:disabled { opacity: .5; cursor: progress; }
+.ai-photo-bar[hidden] { display: none; }
+.ai-photo-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(139, 149, 201, .3);
+  background: rgba(10, 14, 34, .6);
+}
+.ai-photo-bar img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1.5px solid #496482; }
+.ai-photo-note { flex: 1; min-width: 0; color: #c8d4ff; font-size: 13px; line-height: 1.4; }
+.ai-photo-remove { width: 36px; height: 36px; font-size: 15px; }
+/* ประวัติแชท (#aiHistory) */
+.ai-history[hidden], .ai-thread[hidden] { display: none; }
+.ai-history { display: flex; flex-direction: column; gap: 10px; }
+.ai-hist-actions { display: flex; gap: 8px; }
+.ai-hist-actions .cpw-btn { flex: 1; }
+.ai-hist-clear { opacity: .85; }
+.ai-hist-list { display: flex; flex-direction: column; gap: 8px; }
+.ai-hist-empty { color: #8fa0d8; text-align: center; padding: 24px 0; font-size: 14px; }
+.ai-hist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(139, 149, 201, .35);
+  background: rgba(19, 26, 61, .8);
+}
+.ai-hist-item.current { border-color: #ffd76a; }
+.ai-hist-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ai-hist-thumb { flex: 0 0 auto; width: 48px; height: 48px; border-radius: 8px; object-fit: cover; }
+.ai-hist-icon { flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 8px; background: rgba(160, 130, 255, .16); font-size: 22px; }
+.ai-hist-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ai-hist-title {
+  color: #e8ecff;
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.ai-hist-meta { color: #8fa0d8; font-size: 12px; }
+.ai-hist-del { width: 36px; height: 36px; font-size: 15px; }
+.ai-q-photo {
+  display: block;
+  max-width: min(260px, 70%);
+  max-height: 220px;
+  margin-top: 6px;
+  border-radius: 10px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
 .ai-panel input {
   flex: 1;
   min-width: 0;

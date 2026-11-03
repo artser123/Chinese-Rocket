@@ -430,7 +430,11 @@ if ($("imgLightbox")) {
     if (event.target === $("imgLightbox")) crCloseImageLightbox();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") crCloseImageLightbox();
+    // preventDefault: ตัวจัดการ Escape อื่น (เช่น #aiPanel ที่เปิดรูปนี้) จะได้ไม่ปิดตามไปด้วย
+    if (event.key === "Escape" && !$("imgLightbox").hidden) {
+      crCloseImageLightbox();
+      event.preventDefault();
+    }
   });
 }
 
