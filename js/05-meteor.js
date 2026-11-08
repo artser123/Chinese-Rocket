@@ -37,21 +37,37 @@ function pickMeteorType() {
   return M_TYPES[0];
 }
 
+// อุกกาบาตตกทีละก้อน: ก้อนใหม่เกิดได้เมื่อก้อนบนสุดตกลงมาไกลพอ (ไม่เกิดซ้อน/ติดกัน)
+const meteorGap = () => Math.max(150, groundY() * 0.3);
+function meteorSpawnClear() {
+  if (meteors.length >= maxOnScreen()) return false;
+  let top = Infinity;
+  for (const m of meteors) top = Math.min(top, m.y - m.r);
+  return top >= meteorGap();
+}
+
 function spawnMeteor() {
-  if (meteors.length >= maxOnScreen()) return;
+  if (!meteorSpawnClear()) return false;
   const w = pick(pool);
   ctx.font = `700 16px sans-serif`;
   const tw = Math.max(ctx.measureText(w[1]).width, 28);
   const r = Math.max(26, tw / 2 + 12);
+  // ก้อนใหม่ห้ามเร็วกว่าก้อนก่อนหน้า ไม่อย่างนั้นจะไล่ทันจนระยะห่างหายไป
+  let speed = fallSpeed() * rand(0.9, 1.1);
+  for (const o of meteors) speed = Math.min(speed, o.speed);
+  // เลี่ยงตำแหน่งแนวนอนเดียวกับก้อนล่าสุด
+  const last = meteors[meteors.length - 1];
+  let x = rand(r + 6, W - r - 6);
+  for (let k = 0; k < 6 && last && Math.abs(x - last.x) < Math.min(W * 0.25, 140); k++) x = rand(r + 6, W - r - 6);
   const m = {
     word: w,
     type: pickMeteorType(),
     seed: Math.floor(Math.random() * 1e9),
-    x: rand(r + 6, W - r - 6),
+    x,
     y: -r - 20,
     r: r,
     verts: Array.from({ length: 11 }, () => rand(0.74, 1.12)),
-    speed: fallSpeed() * rand(0.85, 1.2),
+    speed,
     wobble: rand(0, 6.28),
     rot: rand(0, 6.28),
     ember: rand(0, 0.08),
@@ -61,6 +77,7 @@ function spawnMeteor() {
   m.rock = makeMeteorRockSprite(m);
   m.label = makeMeteorLabelSprite(w[1], Math.max(15, r * 0.52));
   meteors.push(m);
+  return true;
 }
 
 // path หินแบบมน (quadratic ผ่านจุดกึ่งกลาง) จากรัศมีสุ่มรอบวง
@@ -275,7 +292,7 @@ function fireOption(i) {
     explosion(baseX(), baseY() - 46, "#9fd0ff", 6);   // muzzle flash
     mRecoil = 1;
     floaters.push({ x: m.x, y: m.y, text: "+" + pts, age: 0, life: 0.9, color: "#ffd76a" });
-    showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`);
+    showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> <span class="toast-eq">=</span> <span class="toast-th">${w[2]}</span>`);
     speakWordHit(w);
     optBtns[i].classList.add("flash-right");
     setTimeout(() => optBtns[i].classList.remove("flash-right"), 250);
@@ -989,9 +1006,9 @@ function loop(t) {
   if (!paused) {
     spawnTimer += dt;
     const interval = spawnInterval();
-    if (spawnTimer >= interval) {
+    // ครบเวลาแล้วแต่ก้อนก่อนหน้ายังอยู่ใกล้ขอบบน → รอ (ไม่รีเซ็ตเวลา) จนมีระยะห่างพอ
+    if (spawnTimer >= interval && spawnMeteor()) {
       spawnTimer = 0;
-      spawnMeteor();
       ensurePlayable();
     }
 

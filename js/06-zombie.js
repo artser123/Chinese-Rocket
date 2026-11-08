@@ -618,7 +618,7 @@ function fireZOption(i) {
                           life: rand(0.3, 0.6), age: 0, r: rand(2, 4), color: "rgba(120,100,80,0.6)", gravity: true });
     }
     zb.floaters.push({ x: target.x, y: zGroundY() - 135, text: "+" + pts, age: 0, life: 0.9 });
-    if (!zb.upgradeFlash) showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> = <span class="toast-th">${w[2]}</span>`, "ztoast", 3000);
+    if (!zb.upgradeFlash) showToast(`<span class="toast-zh">${w[0]}</span> <span class="toast-py">${w[1]}</span> <span class="toast-eq">=</span> <span class="toast-th">${w[2]}</span>`, "ztoast", 3000);
     speakWordHit(w);
     zoptBtns[i].classList.add("flash-right");
     setTimeout(() => zoptBtns[i].classList.remove("flash-right"), 250);

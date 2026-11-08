@@ -889,7 +889,28 @@ function readerSelectStory(story, resume = false, withIntro = true) {
   readerSaveSession();
 }
 
+// ป๊อปอัปคำศัพท์เปิด → พักเสียง • ถ้ากำลังอ่านคำแปลไทยอยู่ เล่นต่อจะเริ่มคลิปไทยนั้นใหม่
+function readerPopupHold() {
+  if (!readerState || !readerWantPlay) return null;
+  const story = readerState.story;
+  const thai = readerState.playback;
+  crPopupFreezeScroll($("readerPlayer"));
+  readerPause();
+  return () => {
+    if (!readerState || readerState.story !== story) return;
+    if (!thai) { readerPlay(); return; }
+    readerState.playback = thai;
+    readerWantPlay = true;
+    readerSyncBackgroundAudio();
+    $("readerPlayBtn").textContent = "⏸ พัก";
+    readerSetMediaState("playing");
+    readerPlayThaiClip();
+  };
+}
+crPopupHoldRegister("reader", readerPopupHold);
+
 function readerPlay(attempt = 0) {
+  crPopupHoldClear();
   if (!readerState) return;
   readerWantPlay = true;
   readerEndedFor = null;
@@ -920,6 +941,7 @@ function readerPlay(attempt = 0) {
 }
 
 function readerPause(keepAlive = false) {
+  crPopupHoldClear();
   readerSeekSequence++;
   readerWantPlay = false;
   if (readerState) readerState.playback = null;
@@ -1052,7 +1074,7 @@ function readerUpdateProgress() {
 }
 
 function readerKeepTurnVisible(active, word) {
-  if (!active) return;
+  if (!active || crPopupHeld) return; // timeupdate ตัวสุดท้ายหลังพัก ต้องไม่เลื่อนจอจนฟองคำปิด
   const player = $("readerPlayer");
   const viewport = player.getBoundingClientRect();
   const sticky = $("reader").querySelector(".reader-sticky-controls");

@@ -1314,7 +1314,25 @@ function podSelectEpisode(ep, options = {}) {
   requestAnimationFrame(() => $("podPlayer").scrollTop = 0);
 }
 
+// ป๊อปอัปคำศัพท์เปิด → พักเสียง • ถ้ากำลังอ่านคำแปลไทยอยู่ เล่นต่อจะเริ่มประโยคไทยนั้นใหม่
+function podPopupHold() {
+  if (!podcastState || !(podWantPlay || podThaiVoicePlayback)) return null;
+  const ep = podcastState.episode;
+  const thaiIndex = podThaiVoicePlayback ? podThaiVoicePlayback.index : -1;
+  crPopupFreezeScroll($("podPlayer"));
+  podPause();
+  return () => {
+    if (!podcastState || podcastState.episode !== ep) return;
+    if (thaiIndex < 0) { podPlay(); return; }
+    podWantPlay = true;
+    podSyncNativeBackgroundAudio();
+    podStartThaiVoice(thaiIndex);
+  };
+}
+crPopupHoldRegister("podcast", podPopupHold);
+
 function podPlay() {
+  crPopupHoldClear();
   podSeekSequence++;
   podInterruptThaiVoice();
   if (podIntroPlayback) {
@@ -1358,6 +1376,7 @@ function podPlayMainAudio(attempt = 0) {
 }
 
 function podPause() {
+  crPopupHoldClear();
   podSeekSequence++;
   podWantPlay = false;
   podInterruptThaiVoice();
@@ -1379,6 +1398,7 @@ function podPause() {
 }
 
 function podKeepSentenceAndThaiVisible(word) {
+  if (crPopupHeld) return; // timeupdate ตัวสุดท้ายหลังพัก ต้องไม่เลื่อนจอจนฟองคำปิด
   const player = $("podPlayer");
   const sentence = word.closest(".pod-para");
   if (!player || !sentence) return;

@@ -1203,3 +1203,25 @@ function updateBestLine() {
   $("bestScoreLine").textContent = best ? `สถิติ ${levelDisplayName(selectedLevel)}: ${best} คะแนน` : "";
 }
 
+// เลขเวอร์ชันท้ายหน้าแรก: APK ได้เลข + เวลา build จาก prepare_web.py (window.CR_BUILD)
+// เว็บอ่านจาก cache ของ service worker ที่เครื่องนี้ใช้อยู่จริง จึงเห็นว่ายังเป็นรุ่นเก่าหรือไม่
+// ระหว่างอัปเดตมี cache สองรุ่น หน้าที่เปิดอยู่มาจากรุ่นเก่า จึงเลือกเลขน้อยสุด
+async function appVersionLabel() {
+  if (window.CR_BUILD) return `v${window.CR_BUILD.version} · APK ${window.CR_BUILD.time}`;
+  try {
+    const nums = (await caches.keys())
+      .map((key) => /^cr-v(\d+)$/.exec(key))
+      .filter(Boolean)
+      .map((match) => Number(match[1]));
+    if (nums.length) return `v${Math.min(...nums)}`;
+  } catch (e) { /* ไม่มี Cache API (เช่น http ผ่าน LAN) → อ่านจาก sw.js */ }
+  try {
+    const text = await (await fetch("sw.js", { cache: "no-store" })).text();
+    const match = /"cr-v(\d+)"/.exec(text);
+    if (match) return `v${match[1]}`;
+  } catch (e) {}
+  return "";
+}
+appVersionLabel().then((label) => {
+  if (label) $("appVersion").textContent = `เวอร์ชัน ${label}`;
+});

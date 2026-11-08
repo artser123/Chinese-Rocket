@@ -536,10 +536,14 @@ html, body {
   opacity: 0;
   transition: opacity .2s, transform .2s;
   pointer-events: none;
-  white-space: nowrap;
+  /* คำแปลยาวต้องขึ้นบรรทัดใหม่ ไม่ใช่ถูกตัดเป็น "…" (มือถือมองไม่เห็นคำแปล) */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.3;
+  width: max-content;
   max-width: 94vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-sizing: border-box;
   z-index: 5;
   box-shadow: 0 0 24px rgba(106, 122, 240, .45), 0 12px 30px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .12);
 }
@@ -548,6 +552,12 @@ html, body {
 #toast .toast-py, .toast .toast-py { color: #8fd3ff; font-weight: 400; }
 #toast .toast-th, .toast .toast-th { color: #9dff9d; }
 #toast.show, .toast.show { opacity: 1; }
+/* จอแคบ: คำจีน+พินอินบรรทัดแรก คำแปลไทยแยกบรรทัดล่าง (ยาวก็ตัดบรรทัดต่อได้) */
+@media (max-width: 700px) {
+  #toast, .toast { padding: 10px 16px; }
+  #toast .toast-th, .toast .toast-th { display: block; font-size: .8em; margin-top: 2px; }
+  #toast .toast-eq, .toast .toast-eq { display: none; }
+}
 
 #wrongFlash, .wrong-flash {
   position: absolute; inset: 0;
@@ -4345,8 +4355,10 @@ button.fill-blank {
 }
 /* หน้าตั้งค่ายืมไอคอนจากการ์ดที่กด (js/12-trace.js คัดลอก SVG + --c มาให้) */
 #setupIcon.card-icon { width: clamp(84px, 22vw, 104px); height: clamp(84px, 22vw, 104px); }
-/* เว้นที่ท้ายรายการไม่ให้การ์ดแถวสุดท้ายจมใต้บับเบิ้ลภารกิจ 📖 (#missionFab มุมซ้ายล่าง) */
-#menu { padding-bottom: calc(92px + var(--safe-bottom)); }
+/* ท้ายหน้าจบที่เลขเวอร์ชันเลย • margin-top ของ .app-version กันป้าย 0/4 ของ #missionFab ไม่ให้ทับชื่อการ์ดแถวสุดท้าย */
+#menu { padding-bottom: calc(10px + var(--safe-bottom)); }
+/* เลขเวอร์ชันท้ายหน้าแรก (js/07-menu.js) — ไว้เช็กว่าเว็บ/APK ที่ใช้อัปเดตแล้วหรือยัง */
+.app-version { margin-top: 32px; font-size: 12px; color: var(--fg-mute); }
 @media (max-width: 380px) {
   .cards { gap: 10px; }
   .card { padding: 14px 8px 16px; }

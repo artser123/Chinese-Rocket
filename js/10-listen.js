@@ -772,8 +772,63 @@ function lisPopupCheck() {
   }, 250);
 }
 
+// พอดแคสต์ + เกมอ่านบทความ: พักเสียงตอนเปิดป๊อปอัปชุดเดียวกัน แล้วเล่นต่อเมื่อปิดครบทุกอัน
+// แต่ละโหมดลงทะเบียน hold() ที่พักเสียงแล้วคืนฟังก์ชันเล่นต่อ (คืน null = ไม่ได้เล่นอยู่ ไม่ต้องเล่นต่อ)
+// podPlay/podPause/readerPlay/readerPause เรียก crPopupHoldClear() — ผู้ใช้สั่งเอง (เช่น ปุ่มหูฟัง) จะไม่ถูกเล่นทับ
+const CR_POPUP_HOLD_MODES = [];
+let crPopupHeld = null;       // { screen, resume } ระหว่างที่ป๊อปอัปเป็นคนพักเสียง
+let crPopupHeldAway = false;  // ออกไปหน้าเว็บ Bing: รอกลับเข้าแอปก่อนค่อยเล่นต่อ
+let crPopupHoldTimer = null;
+let crPopupScrollGuard = 0;   // เวลาที่เหตุการณ์ scroll ค้างจะไม่ปิดฟองคำ (js/11-copy.js)
+
+function crPopupHoldRegister(screen, hold) {
+  CR_POPUP_HOLD_MODES.push({ screen, hold });
+}
+
+function crPopupHoldClear() {
+  clearTimeout(crPopupHoldTimer);
+  crPopupHeld = null;
+  crPopupHeldAway = false;
+}
+
+function crPopupHoldAway() {
+  if (crPopupHeld) crPopupHeldAway = true;
+}
+
+// หยุดการเลื่อนตามเสียงที่ค้างอยู่ — ถ้าเลื่อนต่อ เหตุการณ์ scroll จะปิดฟองคำที่เพิ่งเปิด
+function crPopupFreezeScroll(box) {
+  box.scrollTo({ top: box.scrollTop, behavior: "auto" });
+  crPopupScrollGuard = performance.now() + 200;
+}
+
+function crPopupHoldCheck() {
+  clearTimeout(crPopupHoldTimer);
+  if (lisPopupOpen()) {
+    if (crPopupHeld) return;
+    const mode = CR_POPUP_HOLD_MODES.find((m) => $(m.screen).classList.contains("active"));
+    const resume = mode && mode.hold();
+    if (resume) crPopupHeld = { screen: mode.screen, resume };
+    return;
+  }
+  if (!crPopupHeld) return;
+  // หน่วงสั้น ๆ: ฟองคำ → หน้าต่างเส้นขีด/AI ปิดอันหนึ่งก่อนเปิดอีกอัน ไม่ให้เสียงเริ่มแล้วหยุดทันที
+  crPopupHoldTimer = setTimeout(() => {
+    const held = crPopupHeld;
+    // แอปอยู่เบื้องหลัง → รอ visibilitychange ด้านล่าง ไม่แย่งเสียงจากแอปอื่น
+    if (!held || lisPopupOpen() || document.hidden || crPopupHeldAway) return;
+    crPopupHeld = null;
+    if ($(held.screen).classList.contains("active")) held.resume();
+  }, 250);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  crPopupHeldAway = false;
+  crPopupHoldCheck();
+});
+
 {
-  const obs = new MutationObserver(lisPopupCheck);
+  const obs = new MutationObserver(() => { lisPopupCheck(); crPopupHoldCheck(); });
   for (const id of LIS_POPUPS) {
     const el = $(id);
     if (el) obs.observe(el, { attributes: true, attributeFilter: ["hidden"] });

@@ -317,6 +317,7 @@ $("cpWordStrokeBtn").addEventListener("click", () => {
 $("cpWordBingBtn").addEventListener("click", () => {
   sfx.click();
   const word = cpPopupWord;
+  if (word) crPopupHoldAway();
   cpHideWordPopup();
   if (word) crOpenWeb(dictBingUrl(word));
 });
@@ -1334,6 +1335,7 @@ document.addEventListener("pointerdown", (e) => {
 });
 // ...ยกเว้นการเลื่อนภายในป๊อปอัปเอง (คำตอบ AI ยาว ๆ เลื่อนอ่านได้)
 window.addEventListener("scroll", (e) => {
+  if (performance.now() < crPopupScrollGuard) return;
   const pop = $("cpWordPopup");
   if (pop && e.target instanceof Node && pop.contains(e.target)) return;
   // คีย์บอร์ดมือถือเด้งขึ้นตอนพิมพ์คำถาม → เบราว์เซอร์เลื่อนจอเอง ห้ามปิดป๊อปอัป

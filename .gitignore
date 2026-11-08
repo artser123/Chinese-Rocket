@@ -91,3 +91,12 @@ mixamo/
 # Private example sentences from the Mookmpp HSK 3.0 cards (personal use only; APK-only)
 data/vocab_examples.js
 audio/ex/
+
+# แอปแว่น: ไฟล์ที่ prepare_assets.py / Gradle สร้าง
+glasses-android/.audio_cache/
+glasses-android/.th_short/
+glasses-android/.gradle/
+glasses-android/local.properties
+glasses-android/**/build/
+glasses-android/app/src/*/assets/
+glasses-android/
