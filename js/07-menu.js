@@ -297,12 +297,13 @@ function flipMatchingCard(i) {
       const gain = 10 + Math.min(4, combo - 1) * 5;
       s.score += gain;
       s.done.add(a.word[0]);
-      sfx.hit();
+      const done = s.deck.every((c) => c.matched);
+      // จับคู่ครบทั้งชุด = เสียงตอบถูก + พลุ เหมือนเกมทายประโยค
+      if (done) { sfx.correct(); confettiScreen($("matching"), 28); } else sfx.hit();
       music.nudge(0.05); // จับคู่ถูก = เพลงเข้มข้นขึ้น (ค่อยๆ กลับลงเอง)
       matchFx(s.open.map((idx) => $("matchBoard").querySelectorAll(".match-card")[idx]), combo > 1 ? `+${gain} • คอมโบ x${combo}` : `+${gain}`);
       matchFeedbackPulse("fb-pop");
       setTimeout(() => { if (matching === s) speakWordHit(a.word); }, 150);
-      const done = s.deck.every((c) => c.matched);
       $("matchFeedback").innerHTML =
         `<span class="fb-zh">${a.word[0]}</span>` +
         `<span class="fb-py">${a.word[1]}</span>` +

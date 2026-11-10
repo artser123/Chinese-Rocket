@@ -375,6 +375,17 @@ function meteorBurst(x, y, type) {
   meteorDebris(x, y, type, 6);
 }
 
+// พลุบนหน้าจอที่เลื่อนได้ (เช่น เกมเขียนเป็นประโยค): ชั้น fixed เต็มจอ พลุจึงอยู่กลางจอที่มองเห็นเสมอ
+// ไม่ว่าเลื่อนหน้าไปถึงไหน — ชั้นนี้ไม่รับการแตะ และลบตัวเองหลังพลุจบ
+function confettiScreen(screen, n = 28) {
+  if (!screen) return;
+  const layer = document.createElement("div");
+  layer.className = "confetti-layer";
+  screen.appendChild(layer);
+  confettiBurst(layer, n);
+  setTimeout(() => layer.remove(), 1600);
+}
+
 function confettiBurst(container, n = 28) {
   const colors = ["#ffd23c", "#58ff88", "#6a7af0", "#ff6a9d", "#8fd3ff"];
   for (let i = 0; i < n; i++) {

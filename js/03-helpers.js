@@ -280,7 +280,12 @@ const baseY = () => groundY() - 24;
 function fallSpeed() {
   // px/s scaled by height; the ramp and cap depend on the chosen difficulty
   const d = DIFF[difficulty];
-  const base = Math.min(d.base + destroyed * d.ramp, d.cap);
+  let base = Math.min(d.base + destroyed * d.ramp, d.cap);
+  // พ.ย. 2026: ถึงเพดานแล้วไม่หยุดนิ่ง — เร็วขึ้นแบบทบต้นทีละ d.over ต่อการทำลาย 1 ลูก
+  // (น้อยกว่าอัตราเร่งช่วงก่อนถึงเพดาน จึงไม่กระชาก) ไปเรื่อย ๆ จนกดไม่ทัน
+  // over = จำนวนลูกที่ทำลายเกินจุดถึงเพดาน (ค่าทศนิยมได้ → ต่อเนื่องตรงรอยต่อ)
+  const over = destroyed - (d.cap - d.base) / d.ramp;
+  if (over > 0) base = d.cap * Math.pow(1 + d.over, over);
   return base * (H / 700);
 }
 function spawnInterval() {

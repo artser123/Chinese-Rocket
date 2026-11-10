@@ -790,9 +790,10 @@ function renderLevelSelect() {
 }
 const DIFF = {
   // ต.ค. 2026: ลดความเร็วการตกลง ~30% ทุกระดับ (base/ramp/cap ปรับตามสัดส่วน) ให้เล่นได้นานขึ้น
-  easy:   { label: "ง่าย",     base: 5,  cap: 20, ramp: 0.3,  spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
-  medium: { label: "ปานกลาง", base: 13, cap: 34, ramp: 0.75, spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
-  hard:   { label: "ยากมาก",  base: 21, cap: 55, ramp: 1.25, spawn0: 2.3, spawnDecay: 0.028, spawnMin: 0.75 },
+  // over = อัตราเร่งทบต้นต่อการทำลาย 1 ลูก หลังความเร็วถึง cap แล้ว (ดู fallSpeed) — ไม่มีเพดานบน
+  easy:   { label: "ง่าย",     base: 5,  cap: 20, ramp: 0.3,  over: 0.012, spawn0: 3.0, spawnDecay: 0.008, spawnMin: 1.6  },
+  medium: { label: "ปานกลาง", base: 13, cap: 34, ramp: 0.75, over: 0.015, spawn0: 2.7, spawnDecay: 0.016, spawnMin: 1.05 },
+  hard:   { label: "ยากมาก",  base: 21, cap: 55, ramp: 1.25, over: 0.018, spawn0: 2.3, spawnDecay: 0.028, spawnMin: 0.75 },
 };
 
 

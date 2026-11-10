@@ -269,6 +269,7 @@ function cpShowWordPopup(word, chip) {
   const pop = $("cpWordPopup");
   pop.hidden = false;
   cpPlaceWordPopup(chip); // วัดขนาดหลัง unhide เพื่อวางกล่องให้พ้นขอบจอ
+  cpSpeakPopupWord(); // แตะคำแล้วอ่านออกเสียงภาษาจีนทันที
 }
 
 function cpPlaceWordPopup(chip) {
@@ -293,13 +294,16 @@ function cpHideWordPopup() {
 }
 
 $("cpWordCloseBtn").addEventListener("click", () => { sfx.click(); cpHideWordPopup(); });
+// อ่านคำในป๊อปอัปเป็นภาษาจีน (ไฟล์ mp3 ก่อน, TTS เป็นสำรอง) — ใช้ทั้งตอนเปิดป๊อปอัปและปุ่ม 🔊
+function cpSpeakPopupWord() {
+  if (!cpPopupWord) return;
+  const audioKey = wordAudioKey(cpPopupWord, cpPopupWord === "了" ? "le" : "");
+  const spoken = audioKey === "了-le" ? "le" : cpPopupWord;
+  playWordAudio(audioKey, [[spoken, "zh-CN"]]);
+}
 $("cpWordSpeakBtn").addEventListener("click", () => {
   sfx.click();
-  if (cpPopupWord) {
-    const audioKey = wordAudioKey(cpPopupWord, cpPopupWord === "了" ? "le" : "");
-    const spoken = audioKey === "了-le" ? "le" : cpPopupWord;
-    playWordAudio(audioKey, [[spoken, "zh-CN"]]);
-  }
+  cpSpeakPopupWord();
 });
 $("cpWordStrokeBtn").addEventListener("click", () => {
   sfx.click();
@@ -1503,6 +1507,9 @@ function cpWriteCompleteChar() {
   renderCpWriteChips();
   if (cp.writeIndex >= cp.writeChars.length) {
     $("cpWriteStatus").textContent = "🎉 เขียนครบทุกตัวแล้ว! กดปุ่ม 'เขียนเสร็จ — ประโยคถัดไป' ด้านบนได้เลย";
+    // เขียนครบทั้งประโยค = เสียงตอบถูก + พลุ เหมือนเกมทายประโยค
+    sfx.correct();
+    confettiScreen($("copy"), 26);
     return;
   }
   cpWriteChar();
@@ -2104,7 +2111,7 @@ function cpFreeShowResult(results, pct, skipped) {
   box.hidden = false;
   cpFreeNextEnabled(pass);
   cpFreeStatus(pass ? "เยี่ยม! ไปประโยคถัดไปได้เลย" : "แก้ตัวที่ยังไม่ผ่าน แล้วกด “ตรวจ” อีกครั้งได้");
-  if (pass) sfx.correct(); else sfx.wrong();
+  if (pass) { sfx.correct(); confettiScreen($("copy"), 26); } else sfx.wrong();
 }
 
 // ยางลบเปิดอยู่ = ไม่มีเสียงดินสอ และไม่วาดเส้นใหม่ (ดู cpFreeDown/Move)
